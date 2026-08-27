@@ -1,0 +1,11 @@
+[package]
+name = "desk0"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+clap = "4.6.6"
+tokio = "1.53.1"
+tokio-utils = "0.1.2"
+windows = "0.62.2"
+windows-service = "0.8.1"
