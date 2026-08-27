@@ -4,8 +4,10 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-clap = "4.6.6"
-tokio = "1.53.1"
+anyhow = "1.0.104"
+clap = { version = "4.6.6", features = ["derive"] }
+rust-i18n = "4.2.1"
+tokio = { version="1.53.1", features = ["rt-multi-thread", "signal"] }
 tokio-utils = "0.1.2"
-windows = "0.62.2"
+windows = { version = "0.62.2",  features = ["Win32_Globalization", "Win32_System_SystemServices"] }
 windows-service = "0.8.1"
