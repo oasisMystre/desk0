@@ -49,10 +49,16 @@ pub async fn run_service() -> Result<()> {
     process_id: None,
   })?;
 
-  let server_handle = tokio::spawn(async move {
-    if let Err(err) = crate::client::run_server("0.0.0.0:3389").await {
-      eprintln!("RDP server error in service: {:?}", err);
-    }
+  let _server_thread = std::thread::spawn(|| {
+    let rt = tokio::runtime::Builder::new_current_thread()
+      .enable_all()
+      .build()
+      .expect("failed to build single-threaded runtime");
+    rt.block_on(async {
+      if let Err(err) = crate::client::run_server("0.0.0.0:3389").await {
+        eprintln!("RDP server error in service: {:?}", err);
+      }
+    });
   });
 
   loop {
@@ -63,7 +69,6 @@ pub async fn run_service() -> Result<()> {
     tokio::time::sleep(Duration::from_secs(1)).await;
   }
 
-  server_handle.abort();
 
   status_handle.set_service_status(ServiceStatus {
     service_type: ServiceType::OWN_PROCESS,

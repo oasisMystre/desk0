@@ -21,7 +21,7 @@ struct Args {
 
 pub fn main() {
   #[cfg(target_os = "windows")]
-  let locale = crate::platform::windows::get_system_locale();
+  let locale = crate::platform::windows::locale::get_system_locale();
   #[cfg(not(target_os = "windows"))]
   let locale = "en-US";
 
@@ -29,6 +29,7 @@ pub fn main() {
 
   let args = Args::parse();
 
+  #[cfg(target_os = "windows")]
   if args.service {
     if args.install {
       if let Err(error) = crate::platform::windows::service::install() {
@@ -40,17 +41,28 @@ pub fn main() {
       }
     } else {
       if let Err(error) = crate::platform::windows::service::start() {
-        eprintln!("{}: start error", error)
+        eprintln!("{}: service start error", error)
       }
     }
-  } else {
-    let rt = tokio::runtime::Runtime::new().expect("failed to build tokio runtime");
-    rt.block_on(async {
-      let addr = format!("{}:{}", args.bind_addr, args.port);
-      println!("Starting Desk0 RDP Agent standalone on RDP://{}", addr);
-      if let Err(error) = crate::client::run_server(&addr).await {
-        eprintln!("RDP server error: {}", error);
-      }
-    });
   }
+
+  #[cfg(not(target_os = "windows"))]
+  if args.service {
+    eprintln!("Service mode is only supported on Windows.");
+  }
+
+  if let Err(error) = run_app() {
+    eprintln!("{}: run app error", error);
+  }
+}
+
+async fn run_app() {
+  let rt = tokio::runtime::Runtime::new().expect("failed to build tokio runtime");
+  rt.block_on(async {
+    let addr = format!("{}:{}", args.bind_addr, args.port);
+    println!("Starting Desk0 RDP Agent standalone on RDP://{}", addr);
+    if let Err(error) = crate::client::run_server(&addr).await {
+      eprintln!("RDP server error: {}", error);
+    }
+  });
 }
