@@ -1,10 +1,13 @@
 use ironrdp::server::{
   DesktopSize, DisplayUpdate, KeyboardEvent, MouseEvent, RdpServer, RdpServerDisplay,
-  RdpServerDisplayUpdates, RdpServerInputHandler,
+  RdpServerDisplayUpdates, RdpServerInputHandler, ServerEvent, SoundServerFactory,
+  RdpsndServerHandler, RdpsndServerMessage,
 };
 use rustls_pki_types::{CertificateDer, PrivateKeyDer};
 use std::sync::Arc;
-use tokio::{net::TcpListener, sync::mpsc::Sender};
+use tokio::net::TcpListener;
+use tokio::sync::mpsc::{Sender, UnboundedSender};
+use tokio::sync::Mutex;
 use tokio_rustls::rustls::ServerConfig;
 
 use crate::platform::traits::Display as _;
@@ -39,6 +42,89 @@ struct Display {
 
 struct DisplayUpdates {
   rx: tokio::sync::mpsc::Receiver<DisplayUpdate>,
+}
+
+#[derive(Clone, Debug)]
+pub struct AudioBackend {
+  sender: Arc<Mutex<Option<UnboundedSender<ServerEvent>>>>,
+}
+
+impl AudioBackend {
+  pub fn new() -> Self {
+    Self {
+      sender: Arc::new(Mutex::new(None)),
+    }
+  }
+
+  pub fn get_sender(&self) -> Option<UnboundedSender<ServerEvent>> {
+    self.sender.blocking_lock().clone()
+  }
+}
+
+impl ironrdp::server::ServerEventSender for AudioBackend {
+  fn set_sender(&mut self, sender: UnboundedSender<ServerEvent>) {
+    *self.sender.blocking_lock() = Some(sender);
+  }
+}
+
+impl SoundServerFactory for AudioBackend {
+  fn build_backend(&self) -> Box<dyn RdpsndServerHandler> {
+    Box::new(AudioHandler::new(self.clone()))
+  }
+}
+
+#[derive(Debug)]
+struct AudioHandler {
+  backend: AudioBackend,
+  negotiated: Option<ironrdp_rdpsnd::server::NegotiatedFormat>,
+}
+
+impl AudioHandler {
+  fn new(backend: AudioBackend) -> Self {
+    Self {
+      backend,
+      negotiated: None,
+    }
+  }
+}
+
+impl RdpsndServerHandler for AudioHandler {
+  fn get_formats(&self) -> &[ironrdp_rdpsnd::pdu::AudioFormat] {
+    static FORMATS: [ironrdp_rdpsnd::pdu::AudioFormat; 2] = [
+      ironrdp_rdpsnd::pdu::AudioFormat {
+        format: ironrdp_rdpsnd::pdu::WaveFormat::PCM,
+        n_channels: 2,
+        n_samples_per_sec: 48000,
+        n_avg_bytes_per_sec: 48000 * 2 * 2,
+        n_block_align: 4,
+        bits_per_sample: 16,
+        data: None,
+      },
+      ironrdp_rdpsnd::pdu::AudioFormat {
+        format: ironrdp_rdpsnd::pdu::WaveFormat::PCM,
+        n_channels: 2,
+        n_samples_per_sec: 44100,
+        n_avg_bytes_per_sec: 44100 * 2 * 2,
+        n_block_align: 4,
+        bits_per_sample: 16,
+        data: None,
+      }
+    ];
+    &FORMATS
+  }
+
+  fn choose_format<'a>(&mut self, common: &'a [ironrdp_rdpsnd::server::NegotiatedFormat]) -> Option<&'a ironrdp_rdpsnd::server::NegotiatedFormat> {
+    common.first()
+  }
+
+  fn start(&mut self, format: &ironrdp_rdpsnd::server::NegotiatedFormat) -> Result<(), Box<dyn ironrdp_rdpsnd::server::RdpsndError>> {
+    self.negotiated = Some(format.clone());
+    Ok(())
+  }
+
+  fn stop(&mut self) {
+    self.negotiated = None;
+  }
 }
 
 impl InputHandler {
@@ -116,7 +202,7 @@ pub async fn run_server(addr: &str) -> anyhow::Result<()> {
           }
         });
       }
-      
+
       #[allow(unreachable_code)]
       Ok::<(), anyhow::Error>(())
     })
@@ -125,9 +211,13 @@ pub async fn run_server(addr: &str) -> anyhow::Result<()> {
   Ok(())
 }
 
-async fn run_capture_loop(width: u16, height: u16, sender: Sender<DisplayUpdate>) {
-  #[cfg(target_os = "windows")]
-  crate::platform::windows::display::Display::capture(width, height, sender).await;
+async fn run_capture_loop(
+  width: u16,
+  height: u16,
+  sender: Sender<DisplayUpdate>,
+  audio_sender: Option<UnboundedSender<ServerEvent>>,
+) {
+  crate::platform::display::Display::capture(width, height, sender, audio_sender).await;
 }
 
 async fn handle_connection(
@@ -136,24 +226,34 @@ async fn handle_connection(
 ) -> anyhow::Result<()> {
   let peer_addr = stream.peer_addr()?;
 
-  #[cfg(target_os = "windows")]
-  let (width, height) = crate::platform::windows::display::Display::get_desktop_size();
-  #[cfg(not(target_os = "windows"))]
-  let (width, height) = (1280, 720);
+  let (width, height) = crate::platform::display::Display::get_desktop_size();
 
   let (tx, rx) = tokio::sync::mpsc::channel::<DisplayUpdate>(16);
 
   let input_handler = InputHandler::new(width, height);
   let display_handler = Display::new(width, height, rx);
+  let audio_backend = AudioBackend::new();
 
   let mut server = RdpServer::builder()
     .with_addr(peer_addr)
     .with_tls(tls_acceptor)
     .with_input_handler(input_handler)
     .with_display_handler(display_handler)
+    .with_sound_factory(Some(Box::new(audio_backend.clone())))
     .build();
 
-  let _capture_task = tokio::task::spawn_local(run_capture_loop(width, height, tx));
+  let (audio_tx, mut audio_rx) = tokio::sync::mpsc::unbounded_channel::<ServerEvent>();
+  
+  let audio_backend_clone = audio_backend.clone();
+  tokio::task::spawn_local(async move {
+    while let Some(event) = audio_rx.recv().await {
+      if let Some(sender) = audio_backend_clone.get_sender() {
+        let _ = sender.send(event);
+      }
+    }
+  });
+
+  let _capture_task = tokio::task::spawn_local(run_capture_loop(width, height, tx, Some(audio_tx)));
 
   println!("Running RDP connection for {}...", peer_addr);
   server.run_connection(stream).await?;
