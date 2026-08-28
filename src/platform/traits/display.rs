@@ -1,4 +1,4 @@
-use ironrdp::server::{DisplayUpdate, ServerEvent};
+use ironrdp::server::DisplayUpdate;
 use tokio::sync::mpsc::UnboundedSender;
 
 pub trait Display {

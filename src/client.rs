@@ -103,18 +103,27 @@ pub async fn run_server(addr: &str) -> anyhow::Result<()> {
   let tls_config = create_tls_config()?;
   let tls_acceptor = tokio_rustls::TlsAcceptor::from(tls_config);
 
-  loop {
-    let (stream, peer_addr) = listener.accept().await?;
-    println!("Accepted connection from {}", peer_addr);
+  tokio::task::LocalSet::new()
+    .run_until(async move {
+      loop {
+        let (stream, peer_addr) = listener.accept().await?;
+        println!("Accepted connection from {}", peer_addr);
 
-    let tls_acceptor = tls_acceptor.clone();
+        let tls_acceptor = tls_acceptor.clone();
 
-    tokio::spawn(async move {
-      if let Err(err) = handle_connection(stream, tls_acceptor).await {
-        eprintln!("Connection handler error for {}: {:?}", peer_addr, err);
+        tokio::task::spawn_local(async move {
+          if let Err(err) = handle_connection(stream, tls_acceptor).await {
+            eprintln!("Connection handler error for {}: {:?}", peer_addr, err);
+          }
+        });
       }
-    });
-  }
+
+      #[allow(unreachable_code)]
+      Ok::<(), anyhow::Error>(())
+    })
+    .await?;
+
+  Ok(())
 }
 
 async fn run_capture_loop(width: u16, height: u16, sender: UnboundedSender<DisplayUpdate>) {
@@ -144,7 +153,7 @@ async fn handle_connection(
     .with_display_handler(display_handler)
     .build();
 
-  let _capture_task = tokio::spawn(run_capture_loop(width, height, tx));
+  let _capture_task = tokio::task::spawn_local(run_capture_loop(width, height, tx));
 
   println!("Running RDP connection for {}...", peer_addr);
   server.run_connection(stream).await?;
