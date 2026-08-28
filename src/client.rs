@@ -7,7 +7,7 @@ use rustls_pki_types::{CertificateDer, PrivateKeyDer};
 use std::sync::Arc;
 use std::sync::Mutex;
 use tokio::net::TcpListener;
-use tokio::sync::mpsc::{Sender, UnboundedSender};
+use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tokio_rustls::rustls::ServerConfig;
 
 use crate::platform::traits::Display as _;
@@ -37,11 +37,11 @@ struct InputHandler {
 struct Display {
   width: u16,
   height: u16,
-  rx: Option<tokio::sync::mpsc::Receiver<DisplayUpdate>>,
+  rx: Option<UnboundedReceiver<DisplayUpdate>>,
 }
 
 struct DisplayUpdates {
-  rx: tokio::sync::mpsc::Receiver<DisplayUpdate>,
+  rx: UnboundedReceiver<DisplayUpdate>,
 }
 
 #[derive(Clone, Debug)]
@@ -153,7 +153,7 @@ impl RdpServerDisplayUpdates for DisplayUpdates {
 }
 
 impl Display {
-  fn new(width: u16, height: u16, rx: tokio::sync::mpsc::Receiver<DisplayUpdate>) -> Self {
+  fn new(width: u16, height: u16, rx: tokio::sync::mpsc::UnboundedReceiver<DisplayUpdate>) -> Self {
     Self {
       width,
       height,
@@ -214,7 +214,7 @@ pub async fn run_server(addr: &str) -> anyhow::Result<()> {
 async fn run_capture_loop(
   width: u16,
   height: u16,
-  sender: Sender<DisplayUpdate>,
+  sender: UnboundedSender<DisplayUpdate>,
   audio_sender: Option<UnboundedSender<ServerEvent>>,
 ) {
   crate::platform::display::Display::capture(width, height, sender, audio_sender).await;
@@ -228,7 +228,7 @@ async fn handle_connection(
 
   let (width, height) = crate::platform::display::Display::get_desktop_size();
 
-  let (tx, rx) = tokio::sync::mpsc::channel::<DisplayUpdate>(16);
+  let (tx, rx) = tokio::sync::mpsc::unbounded_channel::<DisplayUpdate>();
 
   let input_handler = InputHandler::new(width, height);
   let display_handler = Display::new(width, height, rx);

@@ -3,10 +3,31 @@ use std::time::Duration;
 
 use ironrdp::server::{BitmapUpdate, DisplayUpdate, PixelFormat, ServerEvent, RdpsndServerMessage};
 use pinray::{CaptureSession, FrameData, AudioCapture, VideoCaptureTarget, SourceId, CaptureEvent};
-use tokio::sync::mpsc::{Sender, UnboundedSender};
+use tokio::sync::mpsc::UnboundedSender;
 
 #[cfg(target_os = "windows")]
 use windows::Win32::UI::WindowsAndMessaging::{GetSystemMetrics, SM_CXSCREEN, SM_CYSCREEN};
+
+// Define constants to avoid magic numbers and make the code legible
+const BYTES_PER_F32_SAMPLE: usize = 4;
+const BYTES_PER_I16_SAMPLE: usize = 2;
+const BYTES_PER_I32_SAMPLE: usize = 4;
+const BYTES_PER_F64_SAMPLE: usize = 8;
+const BYTES_PER_PIXEL: usize = 4; // BgrX32/RgbX32 uses 4 bytes per pixel
+
+const MAX_I16_VALUE_AS_FLOAT: f32 = 32768.0;
+const MAX_I32_VALUE_AS_FLOAT: f32 = 2147483648.0;
+
+const AUDIO_SAMPLE_MULTIPLIER: f32 = 32767.0;
+const AUDIO_SAMPLE_CLAMP_MIN: f32 = -1.0;
+const AUDIO_SAMPLE_CLAMP_MAX: f32 = 1.0;
+
+const DEFAULT_RDP_AUDIO_SAMPLE_RATE: u32 = 44100;
+const NANOSECONDS_PER_MILLISECOND: i64 = 1_000_000;
+const CAPTURE_TIMEOUT_SECONDS: u64 = 5;
+
+const FALLBACK_DESKTOP_WIDTH: u16 = 1280;
+const FALLBACK_DESKTOP_HEIGHT: u16 = 720;
 
 pub struct Display;
 
@@ -17,31 +38,30 @@ fn audio_frame_to_pcm_i16(frame: &pinray::AudioFrame) -> Vec<i16> {
     pinray::AudioData::Interleaved(bytes) => {
       match frame.sample_format {
         pinray::SampleFormat::F32 => {
-          bytes.chunks_exact(4)
+          bytes.chunks_exact(BYTES_PER_F32_SAMPLE)
             .map(|chunk| f32::from_ne_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]))
             .collect()
         }
         pinray::SampleFormat::I16 => {
-          bytes.chunks_exact(2)
+          bytes.chunks_exact(BYTES_PER_I16_SAMPLE)
             .map(|chunk| {
               let val = i16::from_ne_bytes([chunk[0], chunk[1]]) as f32;
-              val / 32768.0
+              val / MAX_I16_VALUE_AS_FLOAT
             })
             .collect()
         }
         pinray::SampleFormat::I32 => {
-          bytes.chunks_exact(4)
+          bytes.chunks_exact(BYTES_PER_I32_SAMPLE)
             .map(|chunk| {
               let val = i32::from_ne_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]) as f32;
-              val / 2147483648.0
+              val / MAX_I32_VALUE_AS_FLOAT
             })
             .collect()
         }
         pinray::SampleFormat::F64 => {
-          bytes.chunks_exact(8)
+          bytes.chunks_exact(BYTES_PER_F64_SAMPLE)
             .map(|chunk| {
-              let val = f64::from_ne_bytes([chunk[0], chunk[1], chunk[2], chunk[3], chunk[4], chunk[5], chunk[6], chunk[7]]) as f32;
-              val
+              f64::from_ne_bytes([chunk[0], chunk[1], chunk[2], chunk[3], chunk[4], chunk[5], chunk[6], chunk[7]]) as f32
             })
             .collect()
         }
@@ -49,18 +69,18 @@ fn audio_frame_to_pcm_i16(frame: &pinray::AudioFrame) -> Vec<i16> {
     }
     pinray::AudioData::Planar(planes) => {
       let sample_size = match frame.sample_format {
-        pinray::SampleFormat::I16 => 2,
-        pinray::SampleFormat::F32 | pinray::SampleFormat::I32 => 4,
-        pinray::SampleFormat::F64 => 8,
+        pinray::SampleFormat::I16 => BYTES_PER_I16_SAMPLE,
+        pinray::SampleFormat::F32 | pinray::SampleFormat::I32 => BYTES_PER_F32_SAMPLE,
+        pinray::SampleFormat::F64 => BYTES_PER_F64_SAMPLE,
       };
       
       let num_samples = if planes.is_empty() { 0 } else { planes[0].len() / sample_size };
       let mut interleaved = Vec::with_capacity(num_samples * channels);
       
-      for s in 0..num_samples {
-        for c in 0..channels {
-          if let Some(plane) = planes.get(c) {
-            let offset = s * sample_size;
+      for sample_index in 0..num_samples {
+        for channel_index in 0..channels {
+          if let Some(plane) = planes.get(channel_index) {
+            let offset = sample_index * sample_size;
             if offset + sample_size <= plane.len() {
               let val = match frame.sample_format {
                 pinray::SampleFormat::F32 => {
@@ -68,11 +88,11 @@ fn audio_frame_to_pcm_i16(frame: &pinray::AudioFrame) -> Vec<i16> {
                 }
                 pinray::SampleFormat::I16 => {
                   let i_val = i16::from_ne_bytes([plane[offset], plane[offset+1]]) as f32;
-                  i_val / 32768.0
+                  i_val / MAX_I16_VALUE_AS_FLOAT
                 }
                 pinray::SampleFormat::I32 => {
                   let i_val = i32::from_ne_bytes([plane[offset], plane[offset+1], plane[offset+2], plane[offset+3]]) as f32;
-                  i_val / 2147483648.0
+                  i_val / MAX_I32_VALUE_AS_FLOAT
                 }
                 pinray::SampleFormat::F64 => {
                   f64::from_ne_bytes([plane[offset], plane[offset+1], plane[offset+2], plane[offset+3], plane[offset+4], plane[offset+5], plane[offset+6], plane[offset+7]]) as f32
@@ -107,41 +127,41 @@ fn audio_frame_to_pcm_i16(frame: &pinray::AudioFrame) -> Vec<i16> {
   };
   
   stereo_f32.into_iter()
-    .map(|s| {
-      let clamped = s.clamp(-1.0, 1.0);
-      (clamped * 32767.0) as i16
+    .map(|sample| {
+      let clamped = sample.clamp(AUDIO_SAMPLE_CLAMP_MIN, AUDIO_SAMPLE_CLAMP_MAX);
+      (clamped * AUDIO_SAMPLE_MULTIPLIER) as i16
     })
     .collect()
 }
 
-fn resample_stereo_i16(input: &[i16], in_rate: u32, out_rate: u32) -> Vec<i16> {
-  if in_rate == out_rate {
+fn resample_stereo_i16(input: &[i16], input_sample_rate: u32, output_sample_rate: u32) -> Vec<i16> {
+  if input_sample_rate == output_sample_rate {
     return input.to_vec();
   }
   
   let num_input_frames = input.len() / 2;
-  let num_output_frames = (num_input_frames as u64 * out_rate as u64 / in_rate as u64) as usize;
+  let num_output_frames = (num_input_frames as u64 * output_sample_rate as u64 / input_sample_rate as u64) as usize;
   
   let mut output = Vec::with_capacity(num_output_frames * 2);
   for i in 0..num_output_frames {
-    let pos = i as f64 * (in_rate as f64) / (out_rate as f64);
-    let idx = pos.floor() as usize;
-    let frac = pos - idx as f64;
+    let position = i as f64 * (input_sample_rate as f64) / (output_sample_rate as f64);
+    let index = position.floor() as usize;
+    let fractional = position - index as f64;
     
-    if idx + 1 < num_input_frames {
-      let l0 = input[idx * 2];
-      let l1 = input[(idx + 1) * 2];
-      let r0 = input[idx * 2 + 1];
-      let r1 = input[(idx + 1) * 2 + 1];
+    if index + 1 < num_input_frames {
+      let left_sample_0 = input[index * 2];
+      let left_sample_1 = input[(index + 1) * 2];
+      let right_sample_0 = input[index * 2 + 1];
+      let right_sample_1 = input[(index + 1) * 2 + 1];
       
-      let l = l0 as f64 * (1.0 - frac) + l1 as f64 * frac;
-      let r = r0 as f64 * (1.0 - frac) + r1 as f64 * frac;
+      let left = left_sample_0 as f64 * (1.0 - fractional) + left_sample_1 as f64 * fractional;
+      let right = right_sample_0 as f64 * (1.0 - fractional) + right_sample_1 as f64 * fractional;
       
-      output.push(l as i16);
-      output.push(r as i16);
-    } else if idx < num_input_frames {
-      output.push(input[idx * 2]);
-      output.push(input[idx * 2 + 1]);
+      output.push(left as i16);
+      output.push(right as i16);
+    } else if index < num_input_frames {
+      output.push(input[index * 2]);
+      output.push(input[index * 2 + 1]);
     }
   }
   output
@@ -150,15 +170,15 @@ fn resample_stereo_i16(input: &[i16], in_rate: u32, out_rate: u32) -> Vec<i16> {
 fn crop_rect(
   data: &[u8],
   stride: usize,
-  rx: i32,
-  ry: i32,
-  rw: u32,
-  rh: u32,
+  rect_x: i32,
+  rect_y: i32,
+  rect_width: u32,
+  rect_height: u32,
 ) -> Vec<u8> {
-  let mut cropped = Vec::with_capacity((rw * rh * 4) as usize);
-  for y in ry..(ry + rh as i32) {
-    let start_offset = y as usize * stride + rx as usize * 4;
-    let end_offset = start_offset + rw as usize * 4;
+  let mut cropped = Vec::with_capacity((rect_width * rect_height * BYTES_PER_PIXEL as u32) as usize);
+  for y in rect_y..(rect_y + rect_height as i32) {
+    let start_offset = y as usize * stride + rect_x as usize * BYTES_PER_PIXEL;
+    let end_offset = start_offset + rect_width as usize * BYTES_PER_PIXEL;
     if end_offset <= data.len() {
       cropped.extend_from_slice(&data[start_offset..end_offset]);
     }
@@ -166,123 +186,11 @@ fn crop_rect(
   cropped
 }
 
-#[cfg(target_os = "windows")]
-fn capture_screen_gdi(width: u16, height: u16) -> anyhow::Result<Vec<u8>> {
-  use windows::Win32::Graphics::Gdi::*;
-  use windows::Win32::UI::WindowsAndMessaging::*;
-
-  unsafe {
-    let hdc_screen = GetDC(None);
-    if hdc_screen.0.is_null() {
-      anyhow::bail!("Failed to get screen device context");
-    }
-
-    let hdc_screen_mem = CreateCompatibleDC(Some(hdc_screen));
-    if hdc_screen_mem.0.is_null() {
-      ReleaseDC(None, hdc_screen);
-      anyhow::bail!("Failed to create compatible device context");
-    }
-
-    let hbitmap = CreateCompatibleBitmap(hdc_screen, width as i32, height as i32);
-    if hbitmap.0.is_null() {
-      DeleteDC(hdc_screen_mem);
-      ReleaseDC(None, hdc_screen);
-      anyhow::bail!("Failed to create compatible bitmap");
-    }
-
-    let old_object = SelectObject(hdc_screen_mem, hbitmap.into());
-    if let Err(error) = BitBlt(
-      hdc_screen_mem,
-      0,
-      0,
-      width as i32,
-      height as i32,
-      Some(hdc_screen),
-      0,
-      0,
-      SRCCOPY,
-    ) {
-      SelectObject(hdc_screen_mem, old_object);
-      DeleteObject(hbitmap.into());
-      DeleteDC(hdc_screen_mem);
-      ReleaseDC(None, hdc_screen);
-      return Err(error.into());
-    }
-
-    SelectObject(hdc_screen_mem, old_object);
-
-    let mut bmi = BITMAPINFO {
-      bmiHeader: BITMAPINFOHEADER {
-        biPlanes: 1,
-        biBitCount: 32,
-        biWidth: width as i32,
-        biHeight: -(height as i32),
-        biCompression: BI_RGB.0 as u32,
-        biSize: std::mem::size_of::<BITMAPINFOHEADER>() as u32,
-        ..Default::default()
-      },
-      ..Default::default()
-    };
-
-    let buffer_size = width as usize * height as usize * 4;
-    let mut buffer = vec![0u8; buffer_size];
-
-    let result = GetDIBits(
-      hdc_screen_mem,
-      hbitmap,
-      0,
-      height as u32,
-      Some(buffer.as_mut_ptr() as *mut _),
-      &mut bmi,
-      DIB_RGB_COLORS,
-    );
-
-    DeleteObject(hbitmap.into());
-    DeleteDC(hdc_screen_mem);
-    ReleaseDC(None, hdc_screen);
-
-    if result == 0 {
-      anyhow::bail!("GetDIBits failed to copy display buffer");
-    }
-
-    Ok(buffer)
-  }
-}
-
-#[cfg(target_os = "windows")]
-async fn run_gdi_capture_loop(width: u16, height: u16, sender: Sender<DisplayUpdate>) {
-  let mut ticker = tokio::time::interval(Duration::from_millis(100));
-  loop {
-    ticker.tick().await;
-    let frame_data = match capture_screen_gdi(width, height) {
-      Ok(data) => data,
-      Err(error) => {
-        eprintln!("GDI capture error: {}", error);
-        continue;
-      }
-    };
-
-    let bitmap = BitmapUpdate {
-      x: 0,
-      y: 0,
-      format: PixelFormat::BgrX32,
-      data: bytes::Bytes::from(frame_data),
-      width: std::num::NonZeroU16::new(width).unwrap(),
-      height: std::num::NonZeroU16::new(height).unwrap(),
-      stride: std::num::NonZeroUsize::new(width as usize * 4).unwrap(),
-    };
-
-    if sender.send(DisplayUpdate::Bitmap(bitmap)).await.is_err() {
-      break;
-    }
-  }
-}
-
 impl crate::platform::traits::Display for Display {
   async fn capture(
     _width: u16,
     _height: u16,
-    sender: Sender<DisplayUpdate>,
+    display_update_sender: UnboundedSender<DisplayUpdate>,
     audio_sender: Option<UnboundedSender<ServerEvent>>,
   ) {
     let mut builder = CaptureSession::builder()
@@ -296,12 +204,12 @@ impl crate::platform::traits::Display for Display {
       dxgi_builder.build()
     });
 
-    if let Ok(mut s) = session {
-      if s.start().is_ok() {
+    if let Ok(mut active_session) = session {
+      if active_session.start().is_ok() {
         println!("Successfully started pinray capture session.");
         
         loop {
-          match s.next_event(Some(Duration::from_secs(5))) {
+          match active_session.next_event(Some(Duration::from_secs(CAPTURE_TIMEOUT_SECONDS))) {
             Ok(event) => match event {
               CaptureEvent::Video(frame) => {
                 let damage_rects = frame.damage.clone().unwrap_or_else(|| {
@@ -332,10 +240,10 @@ impl crate::platform::traits::Display for Display {
                         data: bytes::Bytes::from(cropped_data),
                         width: unsafe { NonZeroU16::new_unchecked(rect.width as u16) },
                         height: unsafe { NonZeroU16::new_unchecked(rect.height as u16) },
-                        stride: unsafe { NonZeroUsize::new_unchecked(rect.width as usize * 4) },
+                        stride: unsafe { NonZeroUsize::new_unchecked(rect.width as usize * BYTES_PER_PIXEL) },
                       });
                       
-                      if sender.send(update).await.is_err() {
+                      if display_update_sender.send(update).is_err() {
                         break;
                       }
                     }
@@ -346,15 +254,14 @@ impl crate::platform::traits::Display for Display {
               CaptureEvent::Audio(ref frame) => {
                 if let Some(ref ref_audio_sender) = audio_sender {
                   let pcm_i16 = audio_frame_to_pcm_i16(frame);
-                  let target_rate = 44100;
-                  let resampled = resample_stereo_i16(&pcm_i16, frame.sample_rate, target_rate);
+                  let resampled = resample_stereo_i16(&pcm_i16, frame.sample_rate, DEFAULT_RDP_AUDIO_SAMPLE_RATE);
                   
                   let pcm_bytes: Vec<u8> = resampled.iter()
                     .flat_map(|sample| sample.to_le_bytes())
                     .collect();
                     
-                  let ts = (frame.stream_time_ns / 1_000_000) as u32;
-                  let _ = ref_audio_sender.send(ServerEvent::Rdpsnd(RdpsndServerMessage::Wave(pcm_bytes, ts)));
+                  let timestamp_ms = (frame.stream_time_ns / NANOSECONDS_PER_MILLISECOND) as u32;
+                  let _ = ref_audio_sender.send(ServerEvent::Rdpsnd(RdpsndServerMessage::Wave(pcm_bytes, timestamp_ms)));
                 }
               }
               CaptureEvent::Gap(_) => {}
@@ -364,21 +271,12 @@ impl crate::platform::traits::Display for Display {
           }
         }
         
-        let _ = s.stop();
+        let _ = active_session.stop();
         return;
       }
     }
 
-    #[cfg(target_os = "windows")]
-    {
-      eprintln!("Display capture backend (pinray) failed or unavailable. Falling back to native GDI screen capture...");
-      run_gdi_capture_loop(_width, _height, sender).await;
-    }
-
-    #[cfg(not(target_os = "windows"))]
-    {
-      eprintln!("Display capture backend (pinray) failed and native GDI fallback is only supported on Windows.");
-    }
+    eprintln!("Display capture backend (pinray) failed or unavailable.");
   }
 }
 
@@ -392,7 +290,7 @@ impl Display {
     }
     #[cfg(not(target_os = "windows"))]
     {
-      (1280, 720)
+      (FALLBACK_DESKTOP_WIDTH, FALLBACK_DESKTOP_HEIGHT)
     }
   }
 }
