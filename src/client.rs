@@ -1,18 +1,18 @@
+use std::sync::{Arc, Mutex};
+
 use ironrdp::server::{
   DesktopSize, DisplayUpdate, KeyboardEvent, MouseEvent, RdpServer, RdpServerDisplay,
   RdpServerDisplayUpdates, RdpServerInputHandler, RdpsndServerHandler, RdpsndServerMessage,
   ServerEvent, SoundServerFactory,
 };
 use rustls_pki_types::{CertificateDer, PrivateKeyDer};
-use std::sync::Arc;
-use std::sync::Mutex;
-use tokio::net::TcpListener;
-use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
+use tokio::{
+  net::TcpListener,
+  sync::mpsc::{UnboundedReceiver, UnboundedSender},
+};
 use tokio_rustls::rustls::ServerConfig;
 
-use crate::platform::traits::Display as _;
-use crate::platform::traits::Keyboard as _;
-use crate::platform::traits::Mouse as _;
+use crate::platform::traits::{Display as _, Keyboard as _, Mouse as _};
 
 pub fn create_tls_config() -> anyhow::Result<Arc<ServerConfig>> {
   let subject_alt_names: Vec<String> = vec!["localhost".into(), "127.0.0.1".into()];
@@ -37,6 +37,10 @@ struct InputHandler {
 struct Display {
   width: u16,
   height: u16,
+  rx: Option<UnboundedReceiver<DisplayUpdate>>,
+}
+
+struct DisplayUpdates {
   rx: UnboundedReceiver<DisplayUpdate>,
 }
 
@@ -59,7 +63,7 @@ impl RdpServerInputHandler for InputHandler {
 }
 
 #[async_trait::async_trait]
-impl RdpServerDisplayUpdates for Display {
+impl RdpServerDisplayUpdates for DisplayUpdates {
   async fn next_update(&mut self) -> anyhow::Result<Option<DisplayUpdate>> {
     Ok(self.rx.recv().await)
   }
@@ -67,7 +71,11 @@ impl RdpServerDisplayUpdates for Display {
 
 impl Display {
   fn new(width: u16, height: u16, rx: UnboundedReceiver<DisplayUpdate>) -> Self {
-    Self { rx, width, height }
+    Self {
+      width,
+      height,
+      rx: Some(rx),
+    }
   }
 }
 
@@ -131,9 +139,8 @@ async fn handle_connection(
 ) -> anyhow::Result<()> {
   let peer_addr = stream.peer_addr()?;
 
-  let (width, height) = crate::platform::windows::display::Display::size();
-
   let (tx, rx) = tokio::sync::mpsc::unbounded_channel::<DisplayUpdate>();
+  let (width, height) = crate::platform::windows::display::Display::size();
 
   let input_handler = InputHandler::new(width, height);
   let display_handler = Display::new(width, height, rx);

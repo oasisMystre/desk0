@@ -69,7 +69,6 @@ pub async fn run_service() -> Result<()> {
     tokio::time::sleep(Duration::from_secs(1)).await;
   }
 
-
   status_handle.set_service_status(ServiceStatus {
     service_type: ServiceType::OWN_PROCESS,
     current_state: ServiceState::Stopped,

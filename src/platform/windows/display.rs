@@ -1,10 +1,11 @@
-use std::num::{NonZeroU16, NonZeroUsize};
-use std::time::Duration;
+use std::{
+  num::{NonZeroU16, NonZeroUsize},
+  time::Duration,
+};
 
 use dxgi_capture_rs::{CaptureError, FrameMetadata};
-use ironrdp::server::DisplayUpdate;
+use ironrdp::server::{DisplayUpdate, PixelFormat};
 use tokio::sync::mpsc::UnboundedSender;
-
 use windows::Win32::UI::WindowsAndMessaging::{GetSystemMetrics, SM_CXSCREEN, SM_CYSCREEN};
 
 pub struct Display;
