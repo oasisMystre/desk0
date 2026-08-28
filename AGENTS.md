@@ -1,0 +1,1 @@
+This is windows only app. I don't need other os target

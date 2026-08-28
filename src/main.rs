@@ -1,41 +1,56 @@
 use clap::Parser;
 
-use crate::shared::locale::get_system_locale;
-
-mod service;
-mod shared;
+mod client;
+mod platform;
 
 rust_i18n::i18n!("locales");
 
 #[derive(Parser, Debug)]
 struct Args {
-    #[arg(long)]
-    service: bool,
-    #[arg(long)]
-    install: bool,
-    #[arg(long)]
-    uninstall: bool,
+  #[arg(long)]
+  service: bool,
+  #[arg(long)]
+  install: bool,
+  #[arg(long)]
+  uninstall: bool,
+  #[arg(long, default_value = "3389")]
+  port: u16,
+  #[arg(long, default_value = "0.0.0.0")]
+  bind_addr: String,
 }
 
 pub fn main() {
-    let locale = get_system_locale();
-    rust_i18n::set_locale(&locale);
+  #[cfg(target_os = "windows")]
+  let locale = platform::windows::get_system_locale();
+  #[cfg(not(target_os = "windows"))]
+  let locale = "en-US";
 
-    let args = Args::parse();
+  rust_i18n::set_locale(&locale);
 
-    if args.service {
-        if args.install {
-            if let Err(error) = service::install() {
-                eprintln!("{}: service install error", error)
-            }
-        } else if args.uninstall {
-            if let Err(error) = service::uninstall() {
-                eprintln!("{}: service uninstall error", error)
-            }
-        } else {
-            if let Err(error) = service::start() {
-                eprintln!("{}: start error", error)
-            }
-        }
+  let args = Args::parse();
+
+  if args.service {
+    if args.install {
+      if let Err(error) = platform::windows::service::install() {
+        eprintln!("{}: service install error", error)
+      }
+    } else if args.uninstall {
+      if let Err(error) = platform::windows::service::uninstall() {
+        eprintln!("{}: service uninstall error", error)
+      }
+    } else {
+      if let Err(error) = platform::windows::service::start() {
+        eprintln!("{}: start error", error)
+      }
     }
+  } else {
+    let rt = tokio::runtime::Runtime::new().expect("failed to build tokio runtime");
+    rt.block_on(async {
+      let addr = format!("{}:{}", args.bind_addr, args.port);
+      println!("Starting Desk0 RDP Agent standalone on RDP://{}", addr);
+      if let Err(error) = client::run_server(&addr).await {
+        eprintln!("RDP server error: {}", error);
+      }
+    });
+  }
 }
