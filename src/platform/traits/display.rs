@@ -6,6 +6,5 @@ pub trait Display {
     width: u16,
     height: u16,
     sender: UnboundedSender<DisplayUpdate>,
-    audio_sender: Option<UnboundedSender<ServerEvent>>,
   );
 }
