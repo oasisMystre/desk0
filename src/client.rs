@@ -5,9 +5,9 @@ use ironrdp::server::{
 };
 use rustls_pki_types::{CertificateDer, PrivateKeyDer};
 use std::sync::Arc;
+use std::sync::Mutex;
 use tokio::net::TcpListener;
 use tokio::sync::mpsc::{Sender, UnboundedSender};
-use tokio::sync::Mutex;
 use tokio_rustls::rustls::ServerConfig;
 
 use crate::platform::traits::Display as _;
@@ -57,13 +57,13 @@ impl AudioBackend {
   }
 
   pub fn get_sender(&self) -> Option<UnboundedSender<ServerEvent>> {
-    self.sender.blocking_lock().clone()
+    self.sender.lock().unwrap().clone()
   }
 }
 
 impl ironrdp::server::ServerEventSender for AudioBackend {
   fn set_sender(&mut self, sender: UnboundedSender<ServerEvent>) {
-    *self.sender.blocking_lock() = Some(sender);
+    *self.sender.lock().unwrap() = Some(sender);
   }
 }
 

@@ -147,6 +147,25 @@ fn resample_stereo_i16(input: &[i16], in_rate: u32, out_rate: u32) -> Vec<i16> {
   output
 }
 
+fn crop_rect(
+  data: &[u8],
+  stride: usize,
+  rx: i32,
+  ry: i32,
+  rw: u32,
+  rh: u32,
+) -> Vec<u8> {
+  let mut cropped = Vec::with_capacity((rw * rh * 4) as usize);
+  for y in ry..(ry + rh as i32) {
+    let start_offset = y as usize * stride + rx as usize * 4;
+    let end_offset = start_offset + rw as usize * 4;
+    if end_offset <= data.len() {
+      cropped.extend_from_slice(&data[start_offset..end_offset]);
+    }
+  }
+  cropped
+}
+
 impl crate::platform::traits::Display for Display {
   async fn capture(
     _width: u16,
@@ -177,27 +196,43 @@ impl crate::platform::traits::Display for Display {
       match session.next_event(Some(Duration::from_secs(5))) {
         Ok(event) => match event {
           CaptureEvent::Video(frame) => {
-            if let Some(damage) = frame.damage {
-              for rect in damage {
-                match frame.data {
-                  FrameData::Host(ref data) => {
-                    let update = DisplayUpdate::Bitmap(BitmapUpdate {
-                      x: rect.x as u16,
-                      y: rect.y as u16,
-                      format: PixelFormat::RgbX32,
-                      data: bytes::Bytes::from(data.clone()),
-                      width: unsafe { NonZeroU16::new_unchecked(rect.width as u16) },
-                      height: unsafe { NonZeroU16::new_unchecked(rect.height as u16) },
-                      stride: unsafe { NonZeroUsize::new_unchecked(frame.stride as usize) },
-                    });
-                    
-                    if sender.send(update).await.is_err() {
-                      break;
-                    }
+            let damage_rects = frame.damage.clone().unwrap_or_else(|| {
+              vec![pinray::Rect {
+                x: 0,
+                y: 0,
+                width: frame.width,
+                height: frame.height,
+              }]
+            });
+            
+            match frame.data {
+              FrameData::Host(ref data) => {
+                for rect in damage_rects {
+                  let cropped_data = crop_rect(
+                    data,
+                    frame.stride as usize,
+                    rect.x,
+                    rect.y,
+                    rect.width,
+                    rect.height,
+                  );
+                  
+                  let update = DisplayUpdate::Bitmap(BitmapUpdate {
+                    x: rect.x as u16,
+                    y: rect.y as u16,
+                    format: PixelFormat::BgrX32,
+                    data: bytes::Bytes::from(cropped_data),
+                    width: unsafe { NonZeroU16::new_unchecked(rect.width as u16) },
+                    height: unsafe { NonZeroU16::new_unchecked(rect.height as u16) },
+                    stride: unsafe { NonZeroUsize::new_unchecked(rect.width as usize * 4) },
+                  });
+                  
+                  if sender.send(update).await.is_err() {
+                    break;
                   }
-                  _ => {}
                 }
               }
+              _ => {}
             }
           }
           CaptureEvent::Audio(ref frame) => {
