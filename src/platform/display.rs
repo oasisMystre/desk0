@@ -179,11 +179,26 @@ impl crate::platform::traits::Display for Display {
       builder = builder.audio(AudioCapture::SystemMix);
     }
     
-    let mut session = match builder.build() {
+    let mut session = match builder.clone().build() {
       Ok(s) => s,
       Err(error) => {
-        eprintln!("Failed to build capture session: {}", error);
-        return;
+        #[cfg(target_os = "windows")]
+        {
+          eprintln!("Failed to build auto capture session ({}). Retrying with DXGI backend...", error);
+          let dxgi_builder = builder.clone().backend_preference(pinray::BackendPreference::WindowsDxgi);
+          match dxgi_builder.build() {
+            Ok(s) => s,
+            Err(e) => {
+              eprintln!("Failed to build DXGI capture session: {}", e);
+              return;
+            }
+          }
+        }
+        #[cfg(not(target_os = "windows"))]
+        {
+          eprintln!("Failed to build capture session: {}", error);
+          return;
+        }
       }
     };
     
