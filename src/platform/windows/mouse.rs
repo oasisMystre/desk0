@@ -68,6 +68,8 @@ impl crate::platform::traits::Mouse for Mouse {
   }
 
   fn event(width: u16, height: u16, event: MouseEvent) {
+    println!("Received mouse event: {:?}", event);
+
     match event {
       MouseEvent::Move { x, y } => {
         Self::r#move(x, y, width, height);
