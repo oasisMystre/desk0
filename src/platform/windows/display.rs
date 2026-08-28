@@ -11,13 +11,24 @@ pub struct Display;
 impl crate::platform::traits::Display for Display {
   async fn capture(width: u16, height: u16, sender: Sender<DisplayUpdate>) {
     let mut ticker = tokio::time::interval(Duration::from_millis(100));
+    let mut last_error: Option<String> = None;
     loop {
       ticker.tick().await;
       let frame_data = match Self::capture_screen_gdi(width, height) {
-        Ok(data) => data,
+        Ok(data) => {
+          if last_error.is_some() {
+            println!("Screen capture recovered.");
+            last_error = None;
+          }
+          data
+        }
         Err(error) => {
-          eprintln!("Screen capture error: {}", error);
-          vec![]
+          let err_msg = error.to_string();
+          if last_error.as_ref() != Some(&err_msg) {
+            eprintln!("Screen capture error: {}", err_msg);
+            last_error = Some(err_msg);
+          }
+          continue;
         }
       };
 
