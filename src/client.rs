@@ -7,9 +7,9 @@ use std::sync::Arc;
 use tokio::{net::TcpListener, sync::mpsc::Sender};
 use tokio_rustls::rustls::ServerConfig;
 
-use crate::platform::traits::Mouse as _;
 use crate::platform::traits::Display as _;
 use crate::platform::traits::Keyboard as _;
+use crate::platform::traits::Mouse as _;
 
 pub fn create_tls_config() -> anyhow::Result<Arc<ServerConfig>> {
   let subject_alt_names: Vec<String> = vec!["localhost".into(), "127.0.0.1".into()];
@@ -102,9 +102,7 @@ pub async fn run_server(addr: &str) -> anyhow::Result<()> {
   let tls_config = create_tls_config()?;
   let tls_acceptor = tokio_rustls::TlsAcceptor::from(tls_config);
 
-  let local = tokio::task::LocalSet::new();
-
-  local
+  tokio::task::LocalSet::new()
     .run_until(async move {
       loop {
         let (stream, peer_addr) = listener.accept().await?;
@@ -118,6 +116,7 @@ pub async fn run_server(addr: &str) -> anyhow::Result<()> {
           }
         });
       }
+      
       #[allow(unreachable_code)]
       Ok::<(), anyhow::Error>(())
     })

@@ -21,7 +21,7 @@ struct Args {
 
 pub fn main() {
   #[cfg(target_os = "windows")]
-  let locale = platform::windows::get_system_locale();
+  let locale = crate::platform::windows::get_system_locale();
   #[cfg(not(target_os = "windows"))]
   let locale = "en-US";
 
@@ -31,15 +31,15 @@ pub fn main() {
 
   if args.service {
     if args.install {
-      if let Err(error) = platform::windows::service::install() {
+      if let Err(error) = crate::platform::windows::service::install() {
         eprintln!("{}: service install error", error)
       }
     } else if args.uninstall {
-      if let Err(error) = platform::windows::service::uninstall() {
+      if let Err(error) = crate::platform::windows::service::uninstall() {
         eprintln!("{}: service uninstall error", error)
       }
     } else {
-      if let Err(error) = platform::windows::service::start() {
+      if let Err(error) = crate::platform::windows::service::start() {
         eprintln!("{}: start error", error)
       }
     }
@@ -48,7 +48,7 @@ pub fn main() {
     rt.block_on(async {
       let addr = format!("{}:{}", args.bind_addr, args.port);
       println!("Starting Desk0 RDP Agent standalone on RDP://{}", addr);
-      if let Err(error) = client::run_server(&addr).await {
+      if let Err(error) = crate::client::run_server(&addr).await {
         eprintln!("RDP server error: {}", error);
       }
     });

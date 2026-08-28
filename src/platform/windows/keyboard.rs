@@ -49,7 +49,7 @@ impl crate::platform::traits::Keyboard for Keyboard {
       Anonymous: INPUT_0 {
         ki: KEYBDINPUT {
           wVk: VIRTUAL_KEY(0),
-          wScan: code as u16,
+          wScan: vk,
           dwFlags: flags,
           ..Default::default()
         },

@@ -49,7 +49,7 @@ pub async fn run_service() -> Result<()> {
     process_id: None,
   })?;
 
-  let server_handle = tokio::spawn(async {
+  let server_handle = tokio::spawn(async move {
     if let Err(err) = crate::client::run_server("0.0.0.0:3389").await {
       eprintln!("RDP server error in service: {:?}", err);
     }
