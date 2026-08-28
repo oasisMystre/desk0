@@ -8,53 +8,53 @@ use windows::Win32::UI::WindowsAndMessaging::{GetSystemMetrics, SM_CXSCREEN, SM_
 pub struct Display;
 
 impl crate::platform::traits::Display for Display {
-  async fn capture(width: u16, height: u16, sender: UnboundedSender<DisplayUpdate>) {
-    let mut manager = match dxgi_capture_rs::DXGIManager::new(1000) {
-      Ok(manager) => manager,
-      Err(error) => {
-        eprintln!("Failed to initialize DXGI capture manager: {:?}", error);
-        return;
-      }
-    };
-
-    println!("desktop capture listener");
-
-    let mut first_frame = true;
-
-    'outer: loop {
-      match manager.capture_frame_components_with_metadata() {
-        Ok((pixels, (width, height), metadata)) => {
-          println!("desktop capture listener");
-
-          let updates = if first_frame {
-            first_frame = false;
-            match Self::get_full_frame_update(&pixels, width, height) {
-              Some(update) => vec![update],
-              None => continue,
-            }
-          } else {
-            Self::get_frame_updates_from_metadata(&pixels, width, height, &metadata)
-          };
-
-          if updates.is_empty() {
-            continue;
-          }
-
-          for update in updates {
-            if sender.send(update).is_err() {
-              println!("display receiver dropped, stopped capturing");
-              break 'outer;
-            }
-          }
-        }
-        Err(CaptureError::Timeout) => {
-          println!("Capture timed out - no new frame available");
-        }
+  async fn capture(_width: u16, _height: u16, sender: UnboundedSender<DisplayUpdate>) {
+    tokio::task::spawn_blocking(move || {
+      let mut manager = match dxgi_capture_rs::DXGIManager::new(33) {
+        Ok(manager) => manager,
         Err(error) => {
-          eprintln!("Capture failed: {:?}", error);
+          eprintln!("Failed to initialize DXGI capture manager: {:?}", error);
+          return;
+        }
+      };
+
+      let mut first_frame = true;
+
+      'outer: loop {
+        match manager.capture_frame_components_with_metadata() {
+          Ok((pixels, (width, height), metadata)) => {
+            let updates = if first_frame {
+              first_frame = false;
+              match Self::get_full_frame_update(&pixels, width, height) {
+                Some(update) => vec![update],
+                None => continue,
+              }
+            } else {
+              Self::get_frame_updates_from_metadata(&pixels, width, height, &metadata)
+            };
+
+            if updates.is_empty() {
+              std::thread::sleep(std::time::Duration::from_millis(10));
+              continue;
+            }
+
+            for update in updates {
+              if sender.send(update).is_err() {
+                println!("display receiver dropped, stopped capturing");
+                break 'outer;
+              }
+            }
+          }
+          Err(CaptureError::Timeout) => {
+            std::thread::sleep(std::time::Duration::from_millis(16));
+          }
+          Err(error) => {
+            eprintln!("Capture failed: {:?}", error);
+            std::thread::sleep(std::time::Duration::from_millis(100));
+          }
         }
       }
-    }
+    });
   }
 }
 

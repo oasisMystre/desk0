@@ -33,25 +33,33 @@ pub fn main() {
   if args.service {
     if args.install {
       if let Err(error) = crate::platform::windows::service::install() {
-        eprintln!("{}: service install error", error)
+        eprintln!("{}: service install error", error);
       }
+      return;
     } else if args.uninstall {
       if let Err(error) = crate::platform::windows::service::uninstall() {
-        eprintln!("{}: service uninstall error", error)
+        eprintln!("{}: service uninstall error", error);
       }
+      return;
     } else {
       if let Err(error) = crate::platform::windows::service::start() {
-        eprintln!("{}: service start error", error)
+        eprintln!("{}: service start error", error);
       }
+      return;
     }
   }
 
   #[cfg(not(target_os = "windows"))]
   if args.service {
     eprintln!("Service mode is only supported on Windows.");
+    return;
   }
 
-  let rt = tokio::runtime::Runtime::new().expect("failed to build tokio runtime");
+  let rt = tokio::runtime::Builder::new_multi_thread()
+    .enable_all()
+    .build()
+    .expect("failed to build tokio multi-thread runtime");
+
   rt.block_on(async {
     let addr = format!("{}:{}", args.bind_addr, args.port);
     println!("Starting Desk0 RDP Agent standalone on RDP://{}", addr);

@@ -103,35 +103,23 @@ pub async fn run_server(addr: &str) -> anyhow::Result<()> {
   let tls_config = create_tls_config()?;
   let tls_acceptor = tokio_rustls::TlsAcceptor::from(tls_config);
 
-  tokio::task::LocalSet::new()
-    .run_until(async move {
-      loop {
-        let (stream, peer_addr) = listener.accept().await?;
-        println!("Accepted connection from {}", peer_addr);
+  loop {
+    let (stream, peer_addr) = listener.accept().await?;
+    println!("Accepted connection from {}", peer_addr);
 
-        let tls_acceptor = tls_acceptor.clone();
+    let tls_acceptor = tls_acceptor.clone();
 
-        tokio::task::spawn_local(async move {
-          if let Err(err) = handle_connection(stream, tls_acceptor).await {
-            eprintln!("Connection handler error for {}: {:?}", peer_addr, err);
-          }
-        });
+    tokio::spawn(async move {
+      if let Err(err) = handle_connection(stream, tls_acceptor).await {
+        eprintln!("Connection handler error for {}: {:?}", peer_addr, err);
       }
-
-      #[allow(unreachable_code)]
-      Ok::<(), anyhow::Error>(())
-    })
-    .await?;
-
-  Ok(())
+    });
+  }
 }
 
 async fn run_capture_loop(width: u16, height: u16, sender: UnboundedSender<DisplayUpdate>) {
-println!("omo");
-    #[cfg(target_os = "windows")]
+  #[cfg(target_os = "windows")]
   crate::platform::windows::display::Display::capture(width, height, sender).await;
-
-
 }
 
 async fn handle_connection(
@@ -141,7 +129,10 @@ async fn handle_connection(
   let peer_addr = stream.peer_addr()?;
 
   let (tx, rx) = tokio::sync::mpsc::unbounded_channel::<DisplayUpdate>();
+  #[cfg(target_os = "windows")]
   let (width, height) = crate::platform::windows::display::Display::size();
+  #[cfg(not(target_os = "windows"))]
+  let (width, height) = (1280, 720);
 
   let input_handler = InputHandler::new(width, height);
   let display_handler = Display::new(width, height, rx);
@@ -153,7 +144,7 @@ async fn handle_connection(
     .with_display_handler(display_handler)
     .build();
 
-  let _capture_task = tokio::task::spawn_local(run_capture_loop(width, height, tx));
+  let _capture_task = tokio::spawn(run_capture_loop(width, height, tx));
 
   println!("Running RDP connection for {}...", peer_addr);
   server.run_connection(stream).await?;
