@@ -1,7 +1,4 @@
-use std::{
-  num::{NonZeroU16, NonZeroUsize},
-  time::Duration,
-};
+use std::num::{NonZeroU16, NonZeroUsize};
 
 use dxgi_capture_rs::{CaptureError, FrameMetadata};
 use ironrdp::server::{BitmapUpdate, DisplayUpdate, PixelFormat};
@@ -12,7 +9,6 @@ pub struct Display;
 
 impl crate::platform::traits::Display for Display {
   async fn capture(width: u16, height: u16, sender: UnboundedSender<DisplayUpdate>) {
-    println!("desktop capture listener");
     let mut manager = match dxgi_capture_rs::DXGIManager::new(1000) {
       Ok(manager) => manager,
       Err(error) => {
@@ -21,11 +17,15 @@ impl crate::platform::traits::Display for Display {
       }
     };
 
+    println!("desktop capture listener");
+
     let mut first_frame = true;
 
     'outer: loop {
       match manager.capture_frame_components_with_metadata() {
         Ok((pixels, (width, height), metadata)) => {
+          println!("desktop capture listener");
+
           let updates = if first_frame {
             first_frame = false;
             match Self::get_full_frame_update(&pixels, width, height) {
