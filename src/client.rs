@@ -1,9 +1,8 @@
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use ironrdp::server::{
   DesktopSize, DisplayUpdate, KeyboardEvent, MouseEvent, RdpServer, RdpServerDisplay,
-  RdpServerDisplayUpdates, RdpServerInputHandler, RdpsndServerHandler, RdpsndServerMessage,
-  ServerEvent, SoundServerFactory,
+  RdpServerDisplayUpdates, RdpServerInputHandler,
 };
 use rustls_pki_types::{CertificateDer, PrivateKeyDer};
 use tokio::{
@@ -28,7 +27,6 @@ pub fn create_tls_config() -> anyhow::Result<Arc<ServerConfig>> {
   Ok(Arc::new(server_config))
 }
 
-#[allow(dead_code)]
 struct InputHandler {
   width: u16,
   height: u16,
@@ -129,8 +127,11 @@ pub async fn run_server(addr: &str) -> anyhow::Result<()> {
 }
 
 async fn run_capture_loop(width: u16, height: u16, sender: UnboundedSender<DisplayUpdate>) {
-  #[cfg(target_os = "windows")]
+println!("omo");
+    #[cfg(target_os = "windows")]
   crate::platform::windows::display::Display::capture(width, height, sender).await;
+
+
 }
 
 async fn handle_connection(

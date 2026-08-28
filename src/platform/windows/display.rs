@@ -12,6 +12,7 @@ pub struct Display;
 
 impl crate::platform::traits::Display for Display {
   async fn capture(width: u16, height: u16, sender: UnboundedSender<DisplayUpdate>) {
+    println!("desktop capture listener");
     let mut manager = match dxgi_capture_rs::DXGIManager::new(1000) {
       Ok(manager) => manager,
       Err(error) => {
