@@ -166,6 +166,118 @@ fn crop_rect(
   cropped
 }
 
+#[cfg(target_os = "windows")]
+fn capture_screen_gdi(width: u16, height: u16) -> anyhow::Result<Vec<u8>> {
+  use windows::Win32::Graphics::Gdi::*;
+  use windows::Win32::UI::WindowsAndMessaging::*;
+
+  unsafe {
+    let hdc_screen = GetDC(None);
+    if hdc_screen.0.is_null() {
+      anyhow::bail!("Failed to get screen device context");
+    }
+
+    let hdc_screen_mem = CreateCompatibleDC(Some(hdc_screen));
+    if hdc_screen_mem.0.is_null() {
+      ReleaseDC(None, hdc_screen);
+      anyhow::bail!("Failed to create compatible device context");
+    }
+
+    let hbitmap = CreateCompatibleBitmap(hdc_screen, width as i32, height as i32);
+    if hbitmap.0.is_null() {
+      DeleteDC(hdc_screen_mem);
+      ReleaseDC(None, hdc_screen);
+      anyhow::bail!("Failed to create compatible bitmap");
+    }
+
+    let old_object = SelectObject(hdc_screen_mem, hbitmap.into());
+    if let Err(error) = BitBlt(
+      hdc_screen_mem,
+      0,
+      0,
+      width as i32,
+      height as i32,
+      Some(hdc_screen),
+      0,
+      0,
+      SRCCOPY,
+    ) {
+      SelectObject(hdc_screen_mem, old_object);
+      DeleteObject(hbitmap.into());
+      DeleteDC(hdc_screen_mem);
+      ReleaseDC(None, hdc_screen);
+      return Err(error.into());
+    }
+
+    SelectObject(hdc_screen_mem, old_object);
+
+    let mut bmi = BITMAPINFO {
+      bmiHeader: BITMAPINFOHEADER {
+        biPlanes: 1,
+        biBitCount: 32,
+        biWidth: width as i32,
+        biHeight: -(height as i32),
+        biCompression: BI_RGB.0 as u32,
+        biSize: std::mem::size_of::<BITMAPINFOHEADER>() as u32,
+        ..Default::default()
+      },
+      ..Default::default()
+    };
+
+    let buffer_size = width as usize * height as usize * 4;
+    let mut buffer = vec![0u8; buffer_size];
+
+    let result = GetDIBits(
+      hdc_screen_mem,
+      hbitmap,
+      0,
+      height as u32,
+      Some(buffer.as_mut_ptr() as *mut _),
+      &mut bmi,
+      DIB_RGB_COLORS,
+    );
+
+    DeleteObject(hbitmap.into());
+    DeleteDC(hdc_screen_mem);
+    ReleaseDC(None, hdc_screen);
+
+    if result == 0 {
+      anyhow::bail!("GetDIBits failed to copy display buffer");
+    }
+
+    Ok(buffer)
+  }
+}
+
+#[cfg(target_os = "windows")]
+async fn run_gdi_capture_loop(width: u16, height: u16, sender: Sender<DisplayUpdate>) {
+  let mut ticker = tokio::time::interval(Duration::from_millis(100));
+  loop {
+    ticker.tick().await;
+    let frame_data = match capture_screen_gdi(width, height) {
+      Ok(data) => data,
+      Err(error) => {
+        eprintln!("GDI capture error: {}", error);
+        continue;
+      }
+    };
+
+    let bitmap = BitmapUpdate {
+      x: 0,
+      y: 0,
+      format: PixelFormat::BgrX32,
+      data: bytes::Bytes::from(frame_data),
+      width: std::num::NonZeroU16::new(width).unwrap(),
+      height: std::num::NonZeroU16::new(height).unwrap(),
+      stride: std::num::NonZeroUsize::new(width as usize * 4).unwrap(),
+    };
+
+    if sender.send(DisplayUpdate::Bitmap(bitmap)).await.is_err() {
+      break;
+    }
+  }
+}
+
 impl crate::platform::traits::Display for Display {
   async fn capture(
     _width: u16,
@@ -179,99 +291,94 @@ impl crate::platform::traits::Display for Display {
       builder = builder.audio(AudioCapture::SystemMix);
     }
     
-    let mut session = match builder.clone().build() {
-      Ok(s) => s,
-      Err(error) => {
-        #[cfg(target_os = "windows")]
-        {
-          eprintln!("Failed to build auto capture session ({}). Retrying with DXGI backend...", error);
-          let dxgi_builder = builder.clone().backend_preference(pinray::BackendPreference::WindowsDxgi);
-          match dxgi_builder.build() {
-            Ok(s) => s,
-            Err(e) => {
-              eprintln!("Failed to build DXGI capture session: {}", e);
-              return;
-            }
-          }
-        }
-        #[cfg(not(target_os = "windows"))]
-        {
-          eprintln!("Failed to build capture session: {}", error);
-          return;
-        }
-      }
-    };
-    
-    if let Err(error) = session.start() {
-      eprintln!("Failed to start capture session: {}", error);
-      return;
-    }
-    
-    loop {
-      match session.next_event(Some(Duration::from_secs(5))) {
-        Ok(event) => match event {
-          CaptureEvent::Video(frame) => {
-            let damage_rects = frame.damage.clone().unwrap_or_else(|| {
-              vec![pinray::Rect {
-                x: 0,
-                y: 0,
-                width: frame.width,
-                height: frame.height,
-              }]
-            });
-            
-            match frame.data {
-              FrameData::Host(ref data) => {
-                for rect in damage_rects {
-                  let cropped_data = crop_rect(
-                    data,
-                    frame.stride as usize,
-                    rect.x,
-                    rect.y,
-                    rect.width,
-                    rect.height,
-                  );
-                  
-                  let update = DisplayUpdate::Bitmap(BitmapUpdate {
-                    x: rect.x as u16,
-                    y: rect.y as u16,
-                    format: PixelFormat::BgrX32,
-                    data: bytes::Bytes::from(cropped_data),
-                    width: unsafe { NonZeroU16::new_unchecked(rect.width as u16) },
-                    height: unsafe { NonZeroU16::new_unchecked(rect.height as u16) },
-                    stride: unsafe { NonZeroUsize::new_unchecked(rect.width as usize * 4) },
-                  });
-                  
-                  if sender.send(update).await.is_err() {
-                    break;
+    let session = builder.clone().build().or_else(|_err| {
+      let dxgi_builder = builder.clone().backend_preference(pinray::BackendPreference::WindowsDxgi);
+      dxgi_builder.build()
+    });
+
+    if let Ok(mut s) = session {
+      if s.start().is_ok() {
+        println!("Successfully started pinray capture session.");
+        
+        loop {
+          match s.next_event(Some(Duration::from_secs(5))) {
+            Ok(event) => match event {
+              CaptureEvent::Video(frame) => {
+                let damage_rects = frame.damage.clone().unwrap_or_else(|| {
+                  vec![pinray::Rect {
+                    x: 0,
+                    y: 0,
+                    width: frame.width,
+                    height: frame.height,
+                  }]
+                });
+                
+                match frame.data {
+                  FrameData::Host(ref data) => {
+                    for rect in damage_rects {
+                      let cropped_data = crop_rect(
+                        data,
+                        frame.stride as usize,
+                        rect.x,
+                        rect.y,
+                        rect.width,
+                        rect.height,
+                      );
+                      
+                      let update = DisplayUpdate::Bitmap(BitmapUpdate {
+                        x: rect.x as u16,
+                        y: rect.y as u16,
+                        format: PixelFormat::BgrX32,
+                        data: bytes::Bytes::from(cropped_data),
+                        width: unsafe { NonZeroU16::new_unchecked(rect.width as u16) },
+                        height: unsafe { NonZeroU16::new_unchecked(rect.height as u16) },
+                        stride: unsafe { NonZeroUsize::new_unchecked(rect.width as usize * 4) },
+                      });
+                      
+                      if sender.send(update).await.is_err() {
+                        break;
+                      }
+                    }
                   }
+                  _ => {}
                 }
               }
-              _ => {}
+              CaptureEvent::Audio(ref frame) => {
+                if let Some(ref ref_audio_sender) = audio_sender {
+                  let pcm_i16 = audio_frame_to_pcm_i16(frame);
+                  let target_rate = 44100;
+                  let resampled = resample_stereo_i16(&pcm_i16, frame.sample_rate, target_rate);
+                  
+                  let pcm_bytes: Vec<u8> = resampled.iter()
+                    .flat_map(|sample| sample.to_le_bytes())
+                    .collect();
+                    
+                  let ts = (frame.stream_time_ns / 1_000_000) as u32;
+                  let _ = ref_audio_sender.send(ServerEvent::Rdpsnd(RdpsndServerMessage::Wave(pcm_bytes, ts)));
+                }
+              }
+              CaptureEvent::Gap(_) => {}
+              CaptureEvent::End => break,
             }
+            Err(_) => {}
           }
-          CaptureEvent::Audio(ref frame) => {
-            if let Some(ref ref_audio_sender) = audio_sender {
-              let pcm_i16 = audio_frame_to_pcm_i16(frame);
-              let target_rate = 44100;
-              let resampled = resample_stereo_i16(&pcm_i16, frame.sample_rate, target_rate);
-              
-              let pcm_bytes: Vec<u8> = resampled.iter()
-                .flat_map(|sample| sample.to_le_bytes())
-                .collect();
-                
-              let ts = (frame.stream_time_ns / 1_000_000) as u32;
-              let _ = ref_audio_sender.send(ServerEvent::Rdpsnd(RdpsndServerMessage::Wave(pcm_bytes, ts)));
-            }
-          }
-          CaptureEvent::Gap(_) => {}
-          CaptureEvent::End => break,
         }
-        Err(_) => {}
+        
+        let _ = s.stop();
+        return;
       }
     }
-    
-    let _ = session.stop();
+
+    #[cfg(target_os = "windows")]
+    {
+      eprintln!("Display capture backend (pinray) failed or unavailable. Falling back to native GDI screen capture...");
+      run_gdi_capture_loop(_width, _height, sender).await;
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+      eprintln!("Display capture backend (pinray) failed and native GDI fallback is only supported on Windows.");
+    }
   }
 }
 
