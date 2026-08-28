@@ -51,12 +51,6 @@ pub fn main() {
     eprintln!("Service mode is only supported on Windows.");
   }
 
-  if let Err(error) = run_app() {
-    eprintln!("{}: run app error", error);
-  }
-}
-
-async fn run_app() {
   let rt = tokio::runtime::Runtime::new().expect("failed to build tokio runtime");
   rt.block_on(async {
     let addr = format!("{}:{}", args.bind_addr, args.port);
