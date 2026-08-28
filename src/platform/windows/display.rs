@@ -102,6 +102,10 @@ impl Display {
         return Err(error.into());
       }
 
+      // Deselect the bitmap from the memory DC before calling GetDIBits,
+      // as required by the Windows GDI API specification.
+      SelectObject(hdc_screen_mem, old_object);
+
       let mut bmi = BITMAPINFO {
         bmiHeader: BITMAPINFOHEADER {
           biPlanes: 1,
@@ -118,7 +122,7 @@ impl Display {
       let buffer_size = width as usize * height as usize * 4;
       let mut buffer = vec![0u8; buffer_size];
 
-      GetDIBits(
+      let result = GetDIBits(
         hdc_screen_mem,
         hbitmap,
         0,
@@ -128,10 +132,13 @@ impl Display {
         DIB_RGB_COLORS,
       );
 
-      SelectObject(hdc_screen_mem, old_object);
       DeleteObject(hbitmap.into());
       DeleteDC(hdc_screen_mem);
       ReleaseDC(optional_hwnd, hdc_screen);
+
+      if result == 0 {
+        anyhow::bail!("GetDIBits failed to copy display buffer");
+      }
 
       Ok(buffer)
     }
