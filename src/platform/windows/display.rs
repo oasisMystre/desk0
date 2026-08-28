@@ -24,7 +24,7 @@ impl crate::platform::traits::Display for Display {
         match manager.capture_frame_components_with_metadata() {
           Ok((pixels, (width, height), metadata)) => {
             let updates = if first_frame {
-              first_frame = false;
+              // first_frame = false;
               match Self::get_full_frame_update(&pixels, width, height) {
                 Some(update) => vec![update],
                 None => continue,
