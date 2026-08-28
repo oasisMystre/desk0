@@ -4,7 +4,7 @@ use std::{
 };
 
 use dxgi_capture_rs::{CaptureError, FrameMetadata};
-use ironrdp::server::{DisplayUpdate, PixelFormat};
+use ironrdp::server::{BitmapUpdate, DisplayUpdate, PixelFormat};
 use tokio::sync::mpsc::UnboundedSender;
 use windows::Win32::UI::WindowsAndMessaging::{GetSystemMetrics, SM_CXSCREEN, SM_CYSCREEN};
 
