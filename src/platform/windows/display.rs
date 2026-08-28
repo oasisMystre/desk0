@@ -23,17 +23,16 @@ impl crate::platform::traits::Display for Display {
     let mut first_frame = true;
 
     'outer: loop {
-      match manager.capture_frame_with_metadata() {
+      match manager.capture_frame_components_with_metadata() {
         Ok((pixels, (width, height), metadata)) => {
-          let pixels = bytemuck::cast_slice(&pixels);
           let updates = if first_frame {
             first_frame = false;
-            match Self::get_full_frame_update(pixels, width, height) {
+            match Self::get_full_frame_update(&pixels, width, height) {
               Some(update) => vec![update],
               None => continue,
             }
           } else {
-            Self::get_frame_updates_from_metadata(pixels, width, height, &metadata)
+            Self::get_frame_updates_from_metadata(&pixels, width, height, &metadata)
           };
 
           if updates.is_empty() {
