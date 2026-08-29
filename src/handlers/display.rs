@@ -7,7 +7,10 @@ use display_info::DisplayInfo;
 use ironrdp::server::{
   BitmapUpdate, DesktopSize, DisplayUpdate, PixelFormat, RdpServerDisplay, RdpServerDisplayUpdates,
 };
-use rs_capture::{CaptureBackend, FrameMetadata, ScreenCapture, ScreenCaptureConfig};
+use rs_capture::{
+  CaptureBackend, FrameMetadata, PixelFormat as CapturePixelFormat, ScreenCapture,
+  ScreenCaptureConfig,
+};
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 
 #[derive(Clone)]
@@ -83,7 +86,7 @@ impl DisplayHandler {
       ScreenCaptureConfig {
         fps: Some(60),
         backend: Some(CaptureBackend::Auto),
-        ..Default::default()
+        pixel_format: Some(CapturePixelFormat::Bgra),
       },
       Arc::new(move |frame: rs_capture::FrameData, this: &ScreenCapture| {
         let width = frame.width as usize;
