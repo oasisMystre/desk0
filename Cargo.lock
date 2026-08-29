@@ -1301,6 +1301,7 @@ dependencies = [
  "rustls-pki-types",
  "tokio",
  "tokio-rustls",
+ "tokio-util",
  "tokio-utils",
  "tracing",
  "tracing-subscriber",

@@ -24,17 +24,17 @@ struct DisplayUpdates {
 
 impl DisplayHandler {
   pub fn new() -> anyhow::Result<Self> {
-    let (width, height) = if let Ok(displays) = DisplayInfo::all() {
-      if let Some(primary) = displays.iter().find(|display| display.is_primary) {
-        (primary.width as u16, primary.height as u16)
-      } else if let Some(first) = displays.first() {
-        (first.width as u16, first.height as u16)
-      } else {
-        (1920, 1080)
-      }
-    } else {
-      (1920, 1080)
-    };
+    let displays = DisplayInfo::all()?;
+
+    let to_u16 =
+      |value: u32| -> Option<u16> { u16::try_from(value).ok().filter(|&value| value > 0) };
+
+    let (width, height) = displays
+      .iter()
+      .find(|display| display.is_primary)
+      .or_else(|| displays.first())
+      .and_then(|display| Some((to_u16(display.width)?, to_u16(display.height)?)))
+      .unwrap_or((1920, 1080));
 
     let (sender, receiver) = unbounded_channel();
 

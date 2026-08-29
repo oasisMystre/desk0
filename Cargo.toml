@@ -26,6 +26,7 @@ tracing-subscriber = "0.3.23"
 bytemuck = "1.25.2"
 rs_capture = { path = "../../notmine/rs-capture", features = ["metadata"] }
 display-info = "0.5.9"
+tokio-util = "0.7.19"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows = { version = "0.62.2", features = [

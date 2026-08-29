@@ -1,4 +1,5 @@
 use clap::Parser;
+use tokio_util::sync::CancellationToken;
 
 mod client;
 mod handlers;
@@ -62,10 +63,23 @@ pub fn main() {
     .expect("failed to build tokio multi-thread runtime");
 
   rt.block_on(async {
-    let addr = format!("{}:{}", args.bind_addr, args.port);
-    println!("Starting Desk0 RDP Agent standalone on RDP://{}", addr);
-    if let Err(error) = crate::client::run_server(&addr).await {
-      eprintln!("RDP server error: {}", error);
+    let cancellation_token = CancellationToken::new();
+
+    let cancellation_token_clone = cancellation_token.clone();
+    tokio::select! {
+        _ = tokio::signal::ctrl_c() => {
+            cancellation_token.cancel();
+      }
+        result = async {
+          let addr = format!("{}:{}", args.bind_addr, args.port);
+          println!("Starting Desk0 RDP Agent standalone on RDP://{}", addr);
+          crate::client::run_server(&addr, cancellation_token_clone).await
+
+        } => {
+            if let Err(error) = result {
+              eprintln!("RDP server error: {}", error);
+            }
+        }
     }
   });
 }

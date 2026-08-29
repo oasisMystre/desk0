@@ -1,5 +1,6 @@
 use std::{ffi::OsString, time::Duration};
 
+use tokio_util::sync::CancellationToken;
 use windows_service::{
   Result,
   service::{
@@ -20,7 +21,7 @@ fn service_main(_args: Vec<OsString>) {
 
   rt.block_on(async {
     if let Err(error) = run_service().await {
-      eprintln!("{}: run service error", error);
+      eprintln!("{error:?}: run service error");
     }
   });
 }
@@ -32,7 +33,7 @@ pub async fn run_service() -> Result<()> {
       ServiceControl::Stop => match shutdown_tx.try_send(()) {
         Ok(()) => ServiceControlHandlerResult::NoError,
         Err(error) => {
-          eprintln!("{}: stop service error", error);
+          eprintln!("stop service error: {error:?}");
           ServiceControlHandlerResult::Other(0)
         }
       },
@@ -49,20 +50,23 @@ pub async fn run_service() -> Result<()> {
     process_id: None,
   })?;
 
-  let _server_thread = std::thread::spawn(|| {
+  let cancellation_token = CancellationToken::new();
+
+  let server_thread = std::thread::spawn(|| {
     let rt = tokio::runtime::Builder::new_current_thread()
       .enable_all()
       .build()
       .expect("failed to build single-threaded runtime");
     rt.block_on(async {
-      if let Err(err) = crate::client::run_server("0.0.0.0:3389").await {
-        eprintln!("RDP server error in service: {:?}", err);
+      if let Err(error) = crate::client::run_server("0.0.0.0:3389", cancellation_token).await {
+        eprintln!("RDP server error in service: {error:?}");
       }
     });
   });
 
   loop {
     if shutdown_rx.try_recv().is_ok() {
+      server_thread.join();
       break;
     }
 

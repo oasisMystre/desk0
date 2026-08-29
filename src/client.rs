@@ -5,6 +5,7 @@ use ironrdp::server::RdpServer;
 use rustls_pki_types::{CertificateDer, PrivateKeyDer};
 use tokio::net::TcpListener;
 use tokio_rustls::rustls::ServerConfig;
+use tokio_util::sync::CancellationToken;
 
 use crate::handlers::{display::DisplayHandler, input::InputHandler};
 
@@ -21,10 +22,10 @@ pub fn create_tls_config() -> anyhow::Result<Arc<ServerConfig>> {
 
   Ok(Arc::new(server_config))
 }
-pub async fn run_server(addr: &str) -> anyhow::Result<()> {
+pub async fn run_server(addr: &str, cancellation_token: CancellationToken) -> anyhow::Result<()> {
   let socket_addr = addr.parse::<std::net::SocketAddr>()?;
   let listener = TcpListener::bind(socket_addr).await?;
-  println!("RDP Server Listening on {}", socket_addr);
+  println!("RDP Server Listening on {socket_addr}");
 
   let tls_config = create_tls_config()?;
   let tls_acceptor = tokio_rustls::TlsAcceptor::from(tls_config);
@@ -36,10 +37,13 @@ pub async fn run_server(addr: &str) -> anyhow::Result<()> {
         println!("Accepted connection from {}", peer_addr);
 
         let tls_acceptor = tls_acceptor.clone();
+        let cancellation_token = cancellation_token.clone();
 
         tokio::task::spawn_local(async move {
-          if let Err(err) = handle_connection(stream, tls_acceptor).await {
-            eprintln!("Connection handler error for {}: {:?}", peer_addr, err);
+          if let Err(error) =
+            handle_connection(stream, tls_acceptor, cancellation_token.clone()).await
+          {
+            eprintln!("Connection handler error for {peer_addr}: {error:?}");
           }
         });
       }
@@ -55,22 +59,22 @@ pub async fn run_server(addr: &str) -> anyhow::Result<()> {
 async fn handle_connection(
   stream: tokio::net::TcpStream,
   tls_acceptor: tokio_rustls::TlsAcceptor,
+  cancellation_token: CancellationToken,
 ) -> anyhow::Result<()> {
   let peer_addr = stream.peer_addr()?;
 
   let display_handler = DisplayHandler::new()?;
-  let capture_handler = display_handler.clone();
   let input_handler = InputHandler::new(&Settings::default())?;
 
   let mut server = RdpServer::builder()
     .with_addr(peer_addr)
     .with_tls(tls_acceptor)
     .with_input_handler(input_handler)
-    .with_display_handler(display_handler)
+    .with_display_handler(display_handler.clone())
     .build();
 
-  let _capture_task = tokio::task::spawn_local(async move {
-    match capture_handler.capture().await {
+  let capture_handle = tokio::task::spawn_local(async move {
+    match display_handler.capture().await {
       Ok(()) => println!("Display handler shut down"),
       Err(error) => {
         eprintln!("Display handler error: {error:?}");
@@ -78,9 +82,16 @@ async fn handle_connection(
     }
   });
 
-  println!("Running RDP connection for {}...", peer_addr);
-  server.run_connection(stream).await?;
-  println!("RDP connection for {} disconnected.", peer_addr);
+  tokio::select! {
+      _ = cancellation_token.cancelled() => {
+          capture_handle.abort();
+      },
+      result = server.run_connection(stream) => {
+          if let Err(error) = result {
+              eprintln!("Connection dropped: {error:?}");
+          }
+      }
+  }
 
   Ok(())
 }
