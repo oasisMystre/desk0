@@ -1,17 +1,12 @@
 use std::sync::Arc;
 
-use ironrdp::server::{
-  DesktopSize, DisplayUpdate, KeyboardEvent, MouseEvent, RdpServer, RdpServerDisplay,
-  RdpServerDisplayUpdates, RdpServerInputHandler,
-};
+use enigo::Settings;
+use ironrdp::server::RdpServer;
 use rustls_pki_types::{CertificateDer, PrivateKeyDer};
-use tokio::{
-  net::TcpListener,
-  sync::mpsc::{UnboundedReceiver, UnboundedSender},
-};
+use tokio::net::TcpListener;
 use tokio_rustls::rustls::ServerConfig;
 
-use crate::platform::traits::{Display as _, Keyboard as _, Mouse as _};
+use crate::handlers::{display::DisplayHandler, input::InputHandler};
 
 pub fn create_tls_config() -> anyhow::Result<Arc<ServerConfig>> {
   let subject_alt_names: Vec<String> = vec!["localhost".into(), "127.0.0.1".into()];
@@ -26,75 +21,6 @@ pub fn create_tls_config() -> anyhow::Result<Arc<ServerConfig>> {
 
   Ok(Arc::new(server_config))
 }
-
-struct InputHandler {
-  width: u16,
-  height: u16,
-}
-
-struct Display {
-  width: u16,
-  height: u16,
-  rx: Option<UnboundedReceiver<DisplayUpdate>>,
-}
-
-struct DisplayUpdates {
-  rx: UnboundedReceiver<DisplayUpdate>,
-}
-
-impl InputHandler {
-  fn new(width: u16, height: u16) -> Self {
-    Self { width, height }
-  }
-}
-
-impl RdpServerInputHandler for InputHandler {
-  fn keyboard(&mut self, event: KeyboardEvent) {
-    #[cfg(target_os = "windows")]
-    crate::platform::windows::keyboard::Keyboard::event(event);
-  }
-
-  fn mouse(&mut self, event: MouseEvent) {
-    #[cfg(target_os = "windows")]
-    crate::platform::windows::mouse::Mouse::event(self.width, self.height, event);
-  }
-}
-
-#[async_trait::async_trait]
-impl RdpServerDisplayUpdates for DisplayUpdates {
-  async fn next_update(&mut self) -> anyhow::Result<Option<DisplayUpdate>> {
-    Ok(self.rx.recv().await)
-  }
-}
-
-impl Display {
-  fn new(width: u16, height: u16, rx: UnboundedReceiver<DisplayUpdate>) -> Self {
-    Self {
-      width,
-      height,
-      rx: Some(rx),
-    }
-  }
-}
-
-#[async_trait::async_trait]
-impl RdpServerDisplay for Display {
-  async fn size(&mut self) -> DesktopSize {
-    DesktopSize {
-      width: self.width,
-      height: self.height,
-    }
-  }
-
-  async fn updates(&mut self) -> anyhow::Result<Box<dyn RdpServerDisplayUpdates>> {
-    if let Some(rx) = self.rx.take() {
-      Ok(Box::new(DisplayUpdates { rx }))
-    } else {
-      anyhow::bail!("Display updates channel already taken");
-    }
-  }
-}
-
 pub async fn run_server(addr: &str) -> anyhow::Result<()> {
   let socket_addr = addr.parse::<std::net::SocketAddr>()?;
   let listener = TcpListener::bind(socket_addr).await?;
@@ -126,25 +52,15 @@ pub async fn run_server(addr: &str) -> anyhow::Result<()> {
   Ok(())
 }
 
-async fn run_capture_loop(width: u16, height: u16, sender: UnboundedSender<DisplayUpdate>) {
-  #[cfg(target_os = "windows")]
-  crate::platform::windows::display::Display::capture(width, height, sender).await;
-}
-
 async fn handle_connection(
   stream: tokio::net::TcpStream,
   tls_acceptor: tokio_rustls::TlsAcceptor,
 ) -> anyhow::Result<()> {
   let peer_addr = stream.peer_addr()?;
 
-  let (tx, rx) = tokio::sync::mpsc::unbounded_channel::<DisplayUpdate>();
-  #[cfg(target_os = "windows")]
-  let (width, height) = crate::platform::windows::display::Display::size();
-  #[cfg(not(target_os = "windows"))]
-  let (width, height) = (1280, 720);
-
-  let input_handler = InputHandler::new(width, height);
-  let display_handler = Display::new(width, height, rx);
+  let display_handler = DisplayHandler::new()?;
+  let capture_handler = display_handler.clone();
+  let input_handler = InputHandler::new(&Settings::default())?;
 
   let mut server = RdpServer::builder()
     .with_addr(peer_addr)
@@ -153,7 +69,14 @@ async fn handle_connection(
     .with_display_handler(display_handler)
     .build();
 
-  let _capture_task = tokio::task::spawn_local(run_capture_loop(width, height, tx));
+  let _capture_task = tokio::task::spawn_local(async move {
+    match capture_handler.capture().await {
+      Ok(()) => println!("Display handler shut down"),
+      Err(error) => {
+        eprintln!("Display handler error: {error:?}");
+      }
+    }
+  });
 
   println!("Running RDP connection for {}...", peer_addr);
   server.run_connection(stream).await?;

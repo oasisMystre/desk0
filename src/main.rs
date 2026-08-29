@@ -1,6 +1,7 @@
 use clap::Parser;
 
 mod client;
+mod handlers;
 mod platform;
 
 rust_i18n::i18n!("locales");

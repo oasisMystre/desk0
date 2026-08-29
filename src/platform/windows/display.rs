@@ -7,8 +7,8 @@ use windows::Win32::UI::WindowsAndMessaging::{GetSystemMetrics, SM_CXSCREEN, SM_
 
 pub struct Display;
 
-impl crate::platform::traits::Display for Display {
-  async fn capture(_width: u16, _height: u16, sender: UnboundedSender<DisplayUpdate>) {
+impl crate::platform::traits::display::Display for Display {
+  async fn capture(&self, sender: UnboundedSender<DisplayUpdate>) {
     tokio::task::spawn_blocking(move || {
       let mut manager = match dxgi_capture_rs::DXGIManager::new(33) {
         Ok(manager) => manager,
