@@ -7,7 +7,7 @@ use windows::Win32::UI::WindowsAndMessaging::{GetSystemMetrics, SM_CXSCREEN, SM_
 
 pub struct Display;
 
-impl crate::platform::traits::display::Display for Display {
+impl Display {
   async fn capture(&self, sender: UnboundedSender<DisplayUpdate>) {
     tokio::task::spawn_blocking(move || {
       let mut manager = match dxgi_capture_rs::DXGIManager::new(33) {
@@ -56,9 +56,7 @@ impl crate::platform::traits::display::Display for Display {
       }
     });
   }
-}
 
-impl Display {
   pub fn size() -> (u16, u16) {
     unsafe {
       let width = GetSystemMetrics(SM_CXSCREEN) as u16;
