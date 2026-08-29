@@ -89,14 +89,15 @@ impl DisplayHandler {
         let height = frame.height as usize;
         let is_first = first_frame_clone.swap(false, std::sync::atomic::Ordering::Relaxed);
 
-        let updates =// if is_first {
+        let updates = if is_first {
           match Self::get_full_frame_update(&frame.data, width, height) {
             Some(update) => vec![update],
             None => return,
-          };
-        // } else {
-        //   Self::get_frame_updates_from_metadata(&frame.data, width, height, &frame.metadata)
-        // };
+          }
+        } else {
+          println!("updating frames");
+          Self::get_frame_updates_from_metadata(&frame.data, width, height, &frame.metadata)
+        };
 
         for update in updates {
           if sender.send(update).is_err() {
