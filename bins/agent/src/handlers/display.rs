@@ -99,7 +99,6 @@ impl DisplayHandler {
             None => return,
           }
         } else {
-          println!("updating frames");
           Self::get_frame_updates_from_metadata(&frame.data, width, height, &frame.metadata)
         };
 

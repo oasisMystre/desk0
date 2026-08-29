@@ -1,0 +1,71 @@
+syntax = "proto3";
+
+package desk0;
+
+service Desk0Hub {
+  // Bidirectional control channel between Agent and Server
+  rpc ConnectTunnel (stream AgentMessage) returns (stream ServerMessage);
+
+  // Bidirectional streaming channel for tunneling raw RDP bytes for a given session
+  rpc RelayStream (stream RelayData) returns (stream RelayData);
+}
+
+message AgentRegister {
+  string org_id = 1;
+  string device_id = 2;
+  optional string hostname = 3;
+  string os = 4;
+  optional string username = 5;
+  string version = 6;
+}
+
+message Heartbeat {
+  string device_id = 1;
+}
+
+message SessionStatus {
+  string session_id = 1;
+  bool ready = 2;
+  bool closed = 3;
+}
+
+message AgentMessage {
+  oneof msg {
+    AgentRegister register = 1;
+    Heartbeat heartbeat = 2;
+    SessionStatus session_status = 3;
+  }
+}
+
+message RegisterAck {
+  bool success = 1;
+  string session_token = 2;
+  string error = 3;
+}
+
+message HeartbeatAck {}
+
+message StartSession {
+  string session_id = 1;
+}
+
+message CloseSession {
+  string session_id = 1;
+}
+
+message ServerMessage {
+  oneof msg {
+    RegisterAck register_ack = 1;
+    HeartbeatAck heartbeat_ack = 2;
+    StartSession start_session = 3;
+    CloseSession close_session = 4;
+  }
+}
+
+message RelayData {
+  string session_id = 1;
+  string device_id = 2;
+  bytes data = 3;
+  bool is_init = 4;
+  string org_id = 5;
+}

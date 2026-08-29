@@ -1,40 +1,28 @@
-[package]
-name = "desk0"
-version = "0.1.0"
-edition = "2024"
+[workspace]
+resolver = "3"
+members = ["bins/*", "crates/*"]
 
-[dependencies]
+[profile.dev]
+debug = 1
+strip = "debuginfo"
+opt-level = 1
+panic = "abort"
+
+[workspace.dependencies]
+rs_capture = { path = "../../notmine/rs-capture", features = ["metadata"] }
+desk0-protocol = { path = "crates/desk0-protocol" }
+
 anyhow = "1.0.104"
 async-trait = "0.1.92"
 bytes = "1.12.1"
-enigo = "0.3.0"
-clap = { version = "4.6.6", features = ["derive"] }
+prost = "0.13"
+prost-types = "0.13"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tonic = { version = "0.12", features = ["tls", "tls-roots", "transport"] }
+uuid = { version = "1.10", features = ["v4", "serde"] }
 
-
-ironrdp = { version = "0.17.0", features = ["connector", "session", "acceptor", "server"] }
-ironrdp-rdpsnd = "0.9.0"
-ironrdp-tokio = "0.10.0"
-rcgen = "0.14.9"
-rust-i18n = "4.2.1"
-rustls = "0.23.43"
-rustls-pki-types = "1.15.1"
-tokio = { version = "1.53.1", features = ["full"] }
+tokio-stream = "0.1"
+tokio-util = { version = "0.7.19", features = ["full", "codec", "io"] }
 tokio-rustls = "0.26.4"
-tokio-utils = "0.1.2"
-tracing = "0.1.44"
-tracing-subscriber = "0.3.23"
-bytemuck = "1.25.2"
-rs_capture = { path = "../../notmine/rs-capture", features = ["metadata"] }
-display-info = "0.5.9"
-tokio-util = "0.7.19"
-
-[target.'cfg(target_os = "windows")'.dependencies]
-windows = { version = "0.62.2", features = [
-    "Win32_Globalization",
-    "Win32_System_SystemServices",
-    "Win32_Graphics_Gdi",
-    "Win32_UI_WindowsAndMessaging",
-    "Win32_UI_Input_KeyboardAndMouse",
-] }
-windows-service = "0.8.1"
-dxgi-capture-rs = "1.2.2"
+tokio = { version = "1.53.1", features = ["full"] }

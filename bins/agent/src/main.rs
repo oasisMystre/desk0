@@ -1,0 +1,130 @@
+use clap::Parser;
+use tokio_util::sync::CancellationToken;
+
+mod handlers;
+mod platform;
+mod server;
+
+
+
+
+rust_i18n::i18n!("locales");
+
+#[derive(Parser, Debug)]
+#[command(name = "desk0-agent", about = "Desk0 Client Agent")]
+struct Args {
+  /// Run as a Windows Service (invoked by Windows Service Controller)
+  #[arg(long)]
+  service: bool,
+
+  /// Request elevation and install agent as a background Windows Service
+  #[arg(long)]
+  install: bool,
+
+  /// Request elevation and uninstall the background Windows Service
+  #[arg(long)]
+  uninstall: bool,
+
+  /// Central Desk0 server address to connect outbound reverse proxy tunnel to
+  #[arg(long, default_value = "http://127.0.0.1:8080")]
+  server_addr: String,
+
+  /// Organization ID / fingerprint override
+  #[arg(long, default_value = "11111111-1111-1111-1111-111111111111")]
+  org_id: String,
+
+  /// Run standalone direct RDP listener instead of connecting outbound to Desk0 Server
+  #[arg(long)]
+  listen: bool,
+
+  /// Port for standalone direct listener
+  #[arg(long, default_value = "3389")]
+  port: u16,
+
+  /// Bind address for standalone direct listener
+  #[arg(long, default_value = "0.0.0.0")]
+  bind_addr: String,
+}
+
+pub fn main() {
+  let locale = sys_locale::get_locale().unwrap_or_else(|| String::from("en-US"));
+  rust_i18n::set_locale(&locale);
+
+  let args = Args::parse();
+
+  #[cfg(target_os = "windows")]
+  {
+    if args.install {
+      if let Err(error) =
+        crate::platform::windows::service::install(Some(&args.server_addr), args.org_id.as_deref())
+      {
+        eprintln!("Service install error: {error:?}");
+      }
+      return;
+    }
+
+    if args.uninstall {
+      if let Err(error) = crate::platform::windows::service::uninstall() {
+        eprintln!("Service uninstall error: {error:?}");
+      }
+      return;
+    }
+
+    if args.service {
+      if let Err(error) = crate::platform::windows::service::start() {
+        eprintln!("Service start error: {error:?}");
+      }
+      return;
+    }
+  }
+
+  #[cfg(not(target_os = "windows"))]
+  if args.service || args.install || args.uninstall {
+    eprintln!("Service installation mode is currently supported on Windows.");
+    return;
+  }
+
+  let rt = tokio::runtime::Builder::new_multi_thread()
+    .enable_all()
+    .build()
+    .expect("failed to build tokio multi-thread runtime");
+
+  rt.block_on(async {
+    let cancellation_token = CancellationToken::new();
+    let cancellation_token_clone = cancellation_token.clone();
+
+    tokio::select! {
+      _ = tokio::signal::ctrl_c() => {
+        println!("Received shutdown signal. Stopping Desk0 Agent...");
+        cancellation_token.cancel();
+      }
+      result = async {
+        if args.listen {
+          use crate::server::traits::Server;
+
+          let addr = format!("{}:{}", args.bind_addr, args.port);
+          println!("Starting Desk0 RDP Agent standalone on RDP://{}", addr);
+          let server = crate::server::server::AgentServer::new(addr.parse()?);
+          server.run(cancellation_token_clone);
+        } else {
+          use crate::server::traits::Tunnel;
+
+          let db = rocksdb::DB::open_default("data")?;
+          let identity = crate::server::identity::Identity::upsert(&db, args.org_id)?;
+          println!(
+            "Starting Desk0 Agent Tunnel (Device ID: {}, Org: {})",
+            identity.device_id, identity.org_id
+          );
+          let tunnel = crate::server::tunnel::AgentTunnel::new(args.server_addr, identity);
+          tunnel.run( cancellation_token_clone).await?;
+        }
+
+        Ok::<_, anyhow::Error>(())
+      } => {
+        if let Err(error) = result {
+          eprintln!("Desk0 agent error: {error:?}");
+        }
+      }
+    }
+  });
+}
