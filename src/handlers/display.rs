@@ -119,7 +119,7 @@ impl DisplayHandler {
     Some(DisplayUpdate::Bitmap(BitmapUpdate {
       x: 0,
       y: 0,
-      format: PixelFormat::RgbA32,
+      format: PixelFormat::BgrA32,
       width: NonZeroU16::new(width as u16)?,
       height: NonZeroU16::new(height as u16)?,
       stride: NonZeroUsize::new(width * 4)?,
@@ -175,7 +175,7 @@ impl DisplayHandler {
         width: nz_w,
         height: nz_h,
         stride: nz_stride,
-        format: PixelFormat::RgbA32,
+        format: PixelFormat::BgrA32,
         data: bytes::Bytes::from(cropped),
       }));
     }
