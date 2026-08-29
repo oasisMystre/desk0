@@ -118,7 +118,7 @@ impl DisplayHandler {
     Some(DisplayUpdate::Bitmap(BitmapUpdate {
       x: 0,
       y: 0,
-      format: PixelFormat::BgrX32,
+      format: PixelFormat::RgbA32,
       width: NonZeroU16::new(width as u16)?,
       height: NonZeroU16::new(height as u16)?,
       stride: NonZeroUsize::new(width * 4)?,
