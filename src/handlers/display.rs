@@ -83,6 +83,7 @@ impl DisplayHandler {
       ScreenCaptureConfig {
         fps: Some(60),
         backend: Some(CaptureBackend::Auto),
+        ..Default::default()
       },
       Arc::new(move |frame: rs_capture::FrameData, this: &ScreenCapture| {
         let width = frame.width as usize;
@@ -174,7 +175,7 @@ impl DisplayHandler {
         width: nz_w,
         height: nz_h,
         stride: nz_stride,
-        format: PixelFormat::BgrX32,
+        format: PixelFormat::RgbA32,
         data: bytes::Bytes::from(cropped),
       }));
     }
