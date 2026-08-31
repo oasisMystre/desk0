@@ -1,169 +1,240 @@
-use std::{pin::Pin, time::Instant};
+use std::{
+  pin::Pin,
+  time::{Duration, Instant},
+};
 
 use desk0_protocol::{
-  AgentMessage, Desk0Hub, RegisterAck, RelayData, ServerMessage, agent_message,
-  create_relay_bridge, server_message,
+  ConnectTunnelRequest, ConnectTunnelResponse, Desk0HubService, HeartbeatAck, RegisterAck,
+  RegisterAckSuccess, Relay, RelayData, Session, StartSession, connect_tunnel_request,
+  connect_tunnel_response, create_relay_bridge, register_ack::Ack,
 };
-use futures::{Stream, StreamExt as _};
-use tokio::sync::mpsc;
+use futures::{Stream, StreamExt};
+use tokio::{
+  io::{DuplexStream, copy_bidirectional},
+  net::TcpStream,
+  sync::{mpsc::unbounded_channel, oneshot::channel},
+  time::timeout,
+};
 use tonic::{Request, Response, Status, Streaming};
-use uuid::Uuid;
 
-use crate::registry::{DeviceInfo, DeviceRegistry};
+use crate::{
+  context::Context,
+  registry::{DeviceInfo, DeviceRegistry},
+};
 
-pub struct Desk0HubService {
+pub struct Desk0Hub {
+  context: Context,
   registry: DeviceRegistry,
 }
 
-impl Desk0HubService {
-  pub fn new(registry: DeviceRegistry) -> Self {
-    Self { registry }
+impl Desk0Hub {
+  pub fn new(context: Context, registry: DeviceRegistry) -> Self {
+    Self { context, registry }
+  }
+
+  pub async fn bridge_client(
+    &self,
+    mut client_stream: TcpStream,
+    target_device_id: String,
+  ) -> anyhow::Result<()> {
+    let client_peer = client_stream.peer_addr()?;
+    let agent = match self.registry.get(&target_device_id) {
+      Some(sender) => sender,
+      None => {
+        anyhow::bail!("Target device {target_device_id} is offline or not found");
+      }
+    };
+
+    let session_id = uuid::Uuid::new_v4().to_string();
+    let (downstream_tx, downstream_rx) = channel::<DuplexStream>();
+
+    self.registry.queue(session_id.clone(), downstream_tx).await;
+
+    tracing::info!(session_id, ?client_peer, "Initiating gRPC RDP session");
+
+    agent.sender.send(ConnectTunnelResponse {
+      msg: Some(connect_tunnel_response::Msg::StartSession(StartSession {
+        session_id: session_id.clone(),
+      })),
+    })?;
+
+    let mut duplex_stream = timeout(Duration::from_secs(30), downstream_rx).await??;
+
+    let (from_client, from_agent) =
+      copy_bidirectional(&mut client_stream, &mut duplex_stream).await?;
+
+    tracing::debug!(
+      "Session {session_id} finished: {from_client} bytes from viewer, {from_agent} bytes from agent"
+    );
+
+    Ok(())
   }
 }
 
 #[tonic::async_trait]
-impl Desk0Hub for Desk0HubService {
-  type ConnectTunnelStream = Pin<Box<dyn Stream<Item = Result<ServerMessage, Status>> + Send>>;
+impl Desk0HubService for Desk0Hub {
+  type ConnectTunnelStream =
+    Pin<Box<dyn Stream<Item = Result<ConnectTunnelResponse, Status>> + Send>>;
   type RelayStreamStream = Pin<Box<dyn Stream<Item = Result<RelayData, Status>> + Send>>;
 
   async fn connect_tunnel(
     &self,
-    request: Request<Streaming<AgentMessage>>,
+    request: Request<Streaming<ConnectTunnelRequest>>,
   ) -> Result<Response<Self::ConnectTunnelStream>, Status> {
-    let mut in_stream = request.into_inner();
     let registry = self.registry.clone();
+    let mut inbound_stream = request.into_inner();
 
-    let first_msg = match in_stream.next().await {
-      Some(Ok(msg)) => msg,
-      Some(Err(e)) => return Err(Status::internal(format!("Stream error: {e:?}"))),
+    let first_message = match inbound_stream.next().await {
+      Some(Ok(message)) => message,
+      Some(Err(error)) => {
+        tracing::error!(?error, "Stream error");
+        return Err(Status::internal(format!("Stream error: {error:?}")));
+      }
       None => return Err(Status::invalid_argument("Empty stream")),
     };
 
-    let register_info = match first_msg.msg {
-      Some(agent_message::Msg::Register(r)) => r,
+    let register_info = match first_message.msg {
+      Some(connect_tunnel_request::Msg::Register(info)) => info,
       other => {
+        tracing::warn!(?other, "not register message");
         return Err(Status::invalid_argument(format!(
-          "Expected Register message as first stream element, got: {other:?}"
+          "Expected Register message as first stream element, got {other:?}"
         )));
       }
     };
 
-    println!(
-      "gRPC Agent registered: device={}, org={}, host={:?}, user={:?}",
-      register_info.device_id, register_info.org_id, register_info.hostname, register_info.username
+    tracing::info!(
+      register_info.device_id,
+      register_info.org_id,
+      register_info.hostname,
+      register_info.username,
+      "gRPC agent registered"
     );
 
-    let (tx_server, rx_server) = mpsc::unbounded_channel::<ServerMessage>();
+    let (outbound_tx, outbound_rx) = unbounded_channel::<ConnectTunnelResponse>();
+    registry.register(
+      DeviceInfo {
+        os: register_info.os,
+        last_seen: Instant::now(),
+        org_id: register_info.org_id,
+        version: register_info.version,
+        hostname: register_info.hostname,
+        username: register_info.username,
+        device_id: register_info.device_id.clone(),
+      },
+      outbound_tx.clone(),
+    );
 
-    let device_info = DeviceInfo {
-      org_id: register_info.org_id.clone(),
-      device_id: register_info.device_id.clone(),
-      hostname: register_info.hostname,
-      os: register_info.os,
-      username: register_info.username,
-      version: register_info.version,
-      last_seen: Instant::now(),
-    };
-
-    registry
-      .register_agent(device_info, tx_server.clone())
-      .await;
-
-    let ack_msg = ServerMessage {
-      msg: Some(server_message::Msg::RegisterAck(RegisterAck {
-        success: true,
-        session_token: Uuid::new_v4().to_string(),
-        error: String::new(),
+    if let Err(error) = outbound_tx.send(ConnectTunnelResponse {
+      msg: Some(connect_tunnel_response::Msg::RegisterAck(RegisterAck {
+        ack: Some(Ack::Success(RegisterAckSuccess {
+          session_token: uuid::Uuid::new_v4().to_string(),
+        })),
       })),
+    }) {
+      tracing::error!(?error, "send register ack error");
+      return Err(Status::internal(error.to_string()));
     };
-    let _ = tx_server.send(ack_msg);
 
-    let dev_id = register_info.device_id.clone();
-    let reg_clone = registry.clone();
-
+    let device_id = register_info.device_id.clone();
     tokio::spawn(async move {
-      while let Some(item) = in_stream.next().await {
-        match item {
-          Ok(agent_msg) => match agent_msg.msg {
-            Some(agent_message::Msg::Heartbeat(hb)) => {
-              reg_clone.update_heartbeat(&hb.device_id).await;
-              let _ = tx_server.send(ServerMessage {
-                msg: Some(server_message::Msg::HeartbeatAck(
-                  desk0_protocol::HeartbeatAck {},
-                )),
-              });
-            }
-            Some(agent_message::Msg::SessionStatus(st)) => {
-              println!(
-                "Agent session status update: session={}, ready={}, closed={}",
-                st.session_id, st.ready, st.closed
-              );
-            }
-            _ => {}
-          },
-          Err(e) => {
-            eprintln!("gRPC agent tunnel error ({dev_id}): {e:?}");
+      while let Some(message) = inbound_stream.next().await {
+        match message {
+          Err(error) => {
+            tracing::error!(device_id, ?error, "gRpc agent tunnel error",);
             break;
           }
+          Ok(message) => match message.msg {
+            Some(desk0_protocol::connect_tunnel_request::Msg::Heartbeat(data)) => {
+              registry.heartbeat(&data.device_id);
+              outbound_tx
+                .send(ConnectTunnelResponse {
+                  msg: Some(connect_tunnel_response::Msg::HeartbeatAck(HeartbeatAck {})),
+                })
+                .ok();
+            }
+            Some(desk0_protocol::connect_tunnel_request::Msg::SessionStatus(data)) => {}
+            _ => todo!(),
+          },
         }
       }
 
-      println!("gRPC agent tunnel disconnected: {dev_id}");
-      reg_clone.unregister_agent(&dev_id).await;
+      tracing::info!(device_id, "gRPC agent tunnel disconnected");
+
+      registry.unregister(&device_id);
     });
 
-    let out_stream = tokio_stream::wrappers::UnboundedReceiverStream::new(rx_server).map(Ok);
-    Ok(Response::new(Box::pin(out_stream)))
+    let outbound_stream = tokio_stream::wrappers::UnboundedReceiverStream::new(outbound_rx).map(Ok);
+    Ok(Response::new(Box::pin(outbound_stream)))
   }
 
   async fn relay_stream(
     &self,
     request: Request<Streaming<RelayData>>,
   ) -> Result<Response<Self::RelayStreamStream>, Status> {
-    let mut in_stream = request.into_inner();
     let registry = self.registry.clone();
+    let mut inbound_stream = request.into_inner();
 
-    let first_chunk = match in_stream.next().await {
+    let first_chunk = match inbound_stream.next().await {
       Some(Ok(chunk)) => chunk,
-      Some(Err(e)) => return Err(Status::internal(format!("Stream error: {e:?}"))),
+      Some(Err(error)) => {
+        tracing::error!(?error, "Stream error");
+        return Err(Status::internal(format!("Stream error: {error:?}")));
+      }
       None => return Err(Status::invalid_argument("Empty relay stream")),
     };
 
+    tracing::info!(
+      first_chunk.org_id,
+      first_chunk.device_id,
+      first_chunk.session_id,
+      "gRPC Relay stream attached"
+    );
+
+    let Relay {
+      stream,
+      inbound,
+      outbound,
+    } = create_relay_bridge(
+      Session {
+        org_id: first_chunk.org_id.clone(),
+        device_id: first_chunk.device_id.clone(),
+        session_id: first_chunk.session_id.clone(),
+      },
+      65536,
+    );
+
     let session_id = first_chunk.session_id.clone();
-    let device_id = first_chunk.device_id.clone();
-    let org_id = first_chunk.org_id.clone();
-
-    println!("gRPC Relay stream attached for session: {session_id} on device: {device_id}");
-
-    let (duplex_stream, tx_to_duplex, out_grpc_stream) =
-      create_relay_bridge(session_id.clone(), device_id, org_id, 65536);
-
     if !first_chunk.data.is_empty() {
-      let _ = tx_to_duplex.send(first_chunk).await;
+      inbound.send(first_chunk).ok();
     }
 
-    if !registry
-      .fulfill_pending_relay(&session_id, duplex_stream)
-      .await
-    {
-      eprintln!("Failed to fulfill pending relay for session {session_id} (expired or not found)");
+    if !registry.dequeue(&session_id, stream).await {
+      tracing::error!(
+        session_id,
+        "Failed to fulfill pending relay for session (expired or not found)"
+      );
       return Err(Status::not_found("Pending relay not found or expired"));
     }
 
     tokio::spawn(async move {
-      while let Some(item) = in_stream.next().await {
+      while let Some(item) = inbound_stream.next().await {
         match item {
           Ok(chunk) => {
-            if tx_to_duplex.send(chunk).await.is_err() {
+            if inbound.send(chunk).is_err() {
+              tracing::info!(session_id, "inbound stream channel closed");
               break;
             }
           }
-          Err(_) => break,
+          Err(error) => {
+            tracing::error!(session_id, ?error, "inbound stream error");
+            break;
+          }
         }
       }
     });
 
-    let mapped_out = out_grpc_stream.map(Ok);
+    let mapped_out = outbound.map(Ok);
     Ok(Response::new(Box::pin(mapped_out)))
   }
 }

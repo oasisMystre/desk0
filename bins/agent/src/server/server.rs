@@ -109,8 +109,6 @@ impl AgentServer {
         for handle in &handles {
           handle.abort();
         }
-        
-        futures::future::join_all(handles).await;
       }
       _ = futures::future::join_all(&mut handles) => {}
     }

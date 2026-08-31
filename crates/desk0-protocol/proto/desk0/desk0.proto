@@ -2,21 +2,21 @@ syntax = "proto3";
 
 package desk0;
 
-service Desk0Hub {
+service Desk0HubService {
   // Bidirectional control channel between Agent and Server
-  rpc ConnectTunnel (stream AgentMessage) returns (stream ServerMessage);
+  rpc ConnectTunnel(stream ConnectTunnelRequest) returns (stream ConnectTunnelResponse);
 
   // Bidirectional streaming channel for tunneling raw RDP bytes for a given session
-  rpc RelayStream (stream RelayData) returns (stream RelayData);
+  rpc RelayStream(stream RelayData) returns (stream RelayData);
 }
 
 message AgentRegister {
   string org_id = 1;
   string device_id = 2;
-  optional string hostname = 3;
-  string os = 4;
+  string os = 3;
+  string version = 4;
   optional string username = 5;
-  string version = 6;
+  optional string hostname = 6;
 }
 
 message Heartbeat {
@@ -29,7 +29,7 @@ message SessionStatus {
   bool closed = 3;
 }
 
-message AgentMessage {
+message ConnectTunnelRequest {
   oneof msg {
     AgentRegister register = 1;
     Heartbeat heartbeat = 2;
@@ -37,10 +37,19 @@ message AgentMessage {
   }
 }
 
-message RegisterAck {
-  bool success = 1;
+message RegisterAckSuccess {
   string session_token = 2;
+}
+
+message RegisterAckError {
   string error = 3;
+}
+
+message RegisterAck {
+  oneof ack {
+    RegisterAckSuccess success = 1;
+    RegisterAckError error = 2;
+  }
 }
 
 message HeartbeatAck {}
@@ -53,7 +62,7 @@ message CloseSession {
   string session_id = 1;
 }
 
-message ServerMessage {
+message ConnectTunnelResponse {
   oneof msg {
     RegisterAck register_ack = 1;
     HeartbeatAck heartbeat_ack = 2;
@@ -63,9 +72,9 @@ message ServerMessage {
 }
 
 message RelayData {
-  string session_id = 1;
-  string device_id = 2;
-  bytes data = 3;
-  bool is_init = 4;
-  string org_id = 5;
+  bool is_init = 1;
+  string org_id = 2;
+  string device_id = 3;
+  string session_id = 4;
+  bytes data = 5;
 }

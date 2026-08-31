@@ -2,8 +2,9 @@ use std::time::Duration;
 
 use dashmap::DashMap;
 use desk0_protocol::{
-  AgentMessage, AgentRegister, Desk0HubClient, Heartbeat, RelayData, agent_message,
-  create_relay_bridge, server_message,
+  AgentRegister, ConnectTunnelRequest, Desk0HubServiceClient, Heartbeat, RegisterAckError,
+  RegisterAckSuccess, Relay, RelayData, Session, connect_tunnel_request, connect_tunnel_response,
+  create_relay_bridge, register_ack::Ack,
 };
 use futures::StreamExt;
 use tokio::{
@@ -59,11 +60,11 @@ impl Tunnel for AgentTunnel {
         }
       };
 
-      let mut client = Desk0HubClient::new(channel);
-      let (outbound_tx, outbound_rx) = unbounded_channel::<AgentMessage>();
+      let mut client = Desk0HubServiceClient::new(channel);
+      let (outbound_tx, outbound_rx) = unbounded_channel::<ConnectTunnelRequest>();
 
-      if let Err(error) = outbound_tx.send(AgentMessage {
-        msg: Some(agent_message::Msg::Register(AgentRegister {
+      if let Err(error) = outbound_tx.send(ConnectTunnelRequest {
+        msg: Some(connect_tunnel_request::Msg::Register(AgentRegister {
           org_id: self.identity.org_id.clone(),
           device_id: self.identity.device_id.clone(),
           os: self.identity.os(),
@@ -99,8 +100,8 @@ impl Tunnel for AgentTunnel {
             }
             _ = heartbeat_interval.tick() => {
                 if outbound_tx.send(
-                    AgentMessage{
-                        msg: Some(agent_message::Msg::Heartbeat(Heartbeat{ device_id: self.identity.device_id.clone() }))
+                    ConnectTunnelRequest{
+                        msg: Some(connect_tunnel_request::Msg::Heartbeat(Heartbeat{ device_id: self.identity.device_id.clone() }))
                     }
                 ).is_err() {
                     eprintln!("Failed to send heartbeat. Tunnel disconnected.");
@@ -120,17 +121,21 @@ impl Tunnel for AgentTunnel {
                     Ok(Some(message)) => {
                         match message.msg {
                             None => {},
-                            Some(server_message::Msg::RegisterAck(ack)) => {
-                                if ack.success {
-                                    println!("Registration confirmed by gRPC server. Token: {}", ack.session_token);
-                                } else {
-                                    eprintln!("Registration rejected by server: {}", ack.error);
-                                    break 'session;
+                            Some(connect_tunnel_response::Msg::RegisterAck(data)) => {
+                                if let Some(ack) = data.ack {
+                                    match ack {
+                                        Ack::Success(RegisterAckSuccess{ session_token }) =>  {
+                                            println!("Registration confirmed by gRPC server. Token: {}", session_token);
+                                        },
+                                        Ack::Error(RegisterAckError{ error }) => {
+                                            eprintln!("Registration rejected by server: {}", error);
+                                            break 'session;
+                                        },
+                                    }
                                 }
                             },
-                            Some(server_message::Msg::StartSession(start)) => {
+                            Some(connect_tunnel_response::Msg::StartSession(start)) => {
                                 let cancellation_token = CancellationToken::new();
-
                                 self.sessions.insert(start.session_id.clone(), cancellation_token.clone());
 
                                 let this = self.clone();
@@ -152,13 +157,13 @@ impl Tunnel for AgentTunnel {
                                     }
                                 });
                             }
-                            Some(server_message::Msg::CloseSession(close)) => {
+                            Some(connect_tunnel_response::Msg::CloseSession(close)) => {
                                 println!("Received CloseSession request for session: {}", close.session_id);
                                 if let Some((_, token)) = self.sessions.remove(&close.session_id) {
                                     token.cancel();
                                 }
                             }
-                            Some(server_message::Msg::HeartbeatAck(_)) => {},
+                            Some(connect_tunnel_response::Msg::HeartbeatAck(_)) => {},
                         }
                     }
                 }
@@ -185,14 +190,20 @@ impl AgentTunnel {
     let channel = tonic::transport::Endpoint::from_shared(self.config.addr.clone())?
       .connect()
       .await?;
-    let mut client = Desk0HubClient::new(channel);
+    let mut client = Desk0HubServiceClient::new(channel);
 
     // create relay bridge which intercept request from ironrdp stream
     // send to outbound stream / tunnel
-    let (duplex_io, tx_in, out_stream) = create_relay_bridge(
-      session_id.clone(),
-      self.identity.device_id.clone(),
-      self.identity.org_id.clone(),
+    let Relay {
+      inbound,
+      outbound,
+      stream,
+    } = create_relay_bridge(
+      Session {
+        session_id: session_id.clone(),
+        org_id: self.identity.org_id.clone(),
+        device_id: self.identity.device_id.clone(),
+      },
       u16::MAX as usize + 1,
     );
 
@@ -206,7 +217,7 @@ impl AgentTunnel {
     })?;
 
     tokio::spawn(async move {
-      let mut out_stream = out_stream;
+      let mut out_stream = outbound;
       while let Some(chunk) = out_stream.next().await {
         if outbound_tx.send(chunk).is_err() {
           break;
@@ -219,7 +230,7 @@ impl AgentTunnel {
 
     tokio::spawn(async move {
       while let Ok(Some(chunk)) = inbound_stream.message().await {
-        if tx_in.send(chunk).await.is_err() {
+        if inbound.send(chunk).is_err() {
           break;
         }
       }
@@ -230,7 +241,7 @@ impl AgentTunnel {
     tokio::task::LocalSet::new()
       .run_until(async move {
         if let Err(error) =
-          AgentServer::handle(AgentServerConfig::default(), duplex_io, cancellation_token).await
+          AgentServer::handle(AgentServerConfig::default(), stream, cancellation_token).await
         {
           eprintln!("Agent server error: {error:?}")
         };

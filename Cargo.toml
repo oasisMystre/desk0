@@ -15,6 +15,8 @@ desk0-protocol = { path = "crates/desk0-protocol" }
 anyhow = "1.0.104"
 async-trait = "0.1.92"
 bytes = "1.12.1"
+clap = { version = "4.6.6", features = ["derive"] }
+futures = "0.3"
 prost = "0.13"
 prost-types = "0.13"
 serde = { version = "1.0", features = ["derive"] }
