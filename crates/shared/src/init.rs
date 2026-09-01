@@ -1,3 +1,4 @@
+#[cfg(feature = "postgres")]
 use diesel_async::{
   AsyncPgConnection,
   pooled_connection::{AsyncDieselConnectionManager, bb8::Pool},
@@ -15,8 +16,10 @@ use tracing_subscriber::{EnvFilter, Layer, layer::SubscriberExt, util::Subscribe
 #[cfg(feature = "otel")]
 use tracing_throttle::TracingRateLimitLayer;
 
+#[cfg(any(feature = "otel", feature = "postgres", feature = "redis"))]
 use crate::env::{Env, FromEnv};
 
+#[cfg(feature = "postgres")]
 pub async fn init_db_pool(max_size: u32) -> anyhow::Result<Pool<AsyncPgConnection>> {
   let manager = AsyncDieselConnectionManager::<AsyncPgConnection>::new(Env::DatabaseUrl.get()?);
 
@@ -41,6 +44,8 @@ type InitTracingResult = (
   Option<SdkMeterProvider>,
   Option<SdkLoggerProvider>,
 );
+
+#[cfg(feature = "otel")]
 #[cfg(not(feature = "opentelemetry"))]
 type InitTracingResult = ();
 
@@ -195,6 +200,7 @@ pub fn init_redis_pool(max_size: usize) -> anyhow::Result<deadpool_redis::sentin
   }
 }
 
+#[cfg(feature = "redis")]
 #[cfg(not(feature = "sentinel"))]
 pub fn init_redis_pool(max_size: usize) -> anyhow::Result<deadpool_redis::Pool> {
   use anyhow::Context as _;

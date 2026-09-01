@@ -1,0 +1,25 @@
+[package]
+name = "desk0-api"
+version = "0.1.0"
+edition = "2024"
+
+[features]
+opentelemetry = ["shared/opentelemetry"]
+
+[dependencies]
+flow.workspace = true
+shared = { workspace = true, features = ["otel", "redis", "postgres"]}
+anyhow.workspace = true
+axum = "0.8.9"
+tracing.workspace = true
+diesel-async.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+uuid.workspace = true
+diesel = "2.3.12"
+strum.workspace = true
+jwt.workspace = true
+sha2.workspace = true
+hmac.workspace = true
+clap.workspace = true

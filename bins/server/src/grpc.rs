@@ -22,6 +22,7 @@ use crate::{
   registry::{DeviceInfo, DeviceRegistry},
 };
 
+#[derive(Clone)]
 pub struct Desk0Hub {
   context: Context,
   registry: DeviceRegistry,

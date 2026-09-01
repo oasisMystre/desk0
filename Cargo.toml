@@ -9,12 +9,21 @@ opt-level = 1
 panic = "abort"
 
 [workspace.dependencies]
-rs_capture = { path = "../../notmine/rs-capture", features = ["metadata"] }
+flow = { path = "crates/flow" }
+shared = { path = "crates/shared" }
 desk0-protocol = { path = "crates/desk0-protocol" }
+rs_capture = { path = "../../notmine/rs-capture", features = ["metadata"] }
 
+jwt = "0.16.0"
+sha2 = "0.10.0"
+hmac = "0.12.0"
 anyhow = "1.0.104"
+tracing = "0.1.44"
+dotenvy = "0.15.7"
 async-trait = "0.1.92"
 bytes = "1.12.1"
+deadpool-redis = "0.23.1"
+strum = { version = "0.27", features = ["derive"] }
 clap = { version = "4.6.6", features = ["derive"] }
 futures = "0.3"
 prost = "0.13"
@@ -23,6 +32,7 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 tonic = { version = "0.12", features = ["tls", "tls-roots", "transport"] }
 uuid = { version = "1.10", features = ["v4", "serde"] }
+diesel-async = { version = "0.9.2", features = ["postgres"] }
 
 tokio-stream = "0.1"
 tokio-util = { version = "0.7.19", features = ["full", "codec", "io"] }

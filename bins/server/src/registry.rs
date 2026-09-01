@@ -64,6 +64,14 @@ impl DeviceRegistry {
       .map(|value| value.value().clone())
   }
 
+  pub fn get_by_org_and_device_id(&self, org_id: &str, device_id: &str) -> Option<AgentSession> {
+    return self
+      .sessions
+      .iter()
+      .find(|session| session.info.org_id == org_id && session.info.device_id == device_id)
+      .map(|value| value.clone());
+  }
+
   pub async fn queue(&self, session_id: String, sender: Sender<DuplexStream>) {
     let mut lock = self.relays.write().await;
     lock.insert(session_id, sender);

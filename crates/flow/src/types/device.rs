@@ -1,0 +1,19 @@
+use crate::schema::devices;
+use chrono::{DateTime, Utc};
+use diesel::{HasQuery, prelude::Insertable};
+use serde::{Deserialize, Serialize};
+
+#[derive(HasQuery, Insertable, Serialize, Deserialize, Default)]
+#[diesel(table_name = devices)]
+pub struct Device {
+  pub id: uuid::Uuid,
+  pub os: Option<String>,
+  pub hostname: Option<String>,
+  pub username: Option<String>,
+  pub version: Option<String>,
+  pub organization: uuid::Uuid,
+  #[diesel(column_name = "lastLoggedIn")]
+  pub last_logged_in: DateTime<Utc>,
+  #[diesel(column_name = "createdAt")]
+  pub created_at: DateTime<Utc>,
+}
