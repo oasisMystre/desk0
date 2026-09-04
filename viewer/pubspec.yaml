@@ -40,6 +40,9 @@ dependencies:
   window_manager: ^0.5.2
   flutter_svg: ^2.3.0
   liquid_glass_widgets: ^1.2.2
+  http: ^1.6.0
+  shared_preferences: ^2.5.5
+  dio: ^5.11.0
 
 dev_dependencies:
   flutter_test:
@@ -64,6 +67,7 @@ flutter:
   uses-material-design: true
 
   assets:
+    - assets/
     - assets/icons/
 
   # An image asset can refer to one or more resolution-specific "variants", see

@@ -5,16 +5,14 @@ use axum::{
   extract::{Path, State},
   http::StatusCode,
 };
-use diesel::SelectableHelper;
+use chrono::Utc;
+use diesel::{ExpressionMethods, HasQuery, QueryDsl, SelectableHelper};
 use diesel_async::RunQueryDsl;
 use flow::{organization::Organization, organizations};
 use jwt::SignWithKey;
 use serde::{Deserialize, Serialize};
 
-use crate::{
-  auth::{AuthenticatedUser, MaybeGuestUser},
-  context::Context,
-};
+use crate::{auth::AuthenticatedUser, context::Context};
 
 #[derive(Deserialize)]
 pub struct CreateOrganization {
@@ -26,9 +24,30 @@ pub struct CreateConnectionTokenResponse {
   pub token: String,
 }
 
+pub async fn get_organizations(
+  State(context): State<Context>,
+  user: AuthenticatedUser,
+) -> Result<Json<Vec<Organization>>, StatusCode> {
+  let mut connection = context.pg.get().await.map_err(|error| {
+    tracing::error!(?error, "database connection error");
+    StatusCode::INTERNAL_SERVER_ERROR
+  })?;
+
+  let results: Vec<Organization> = Organization::query()
+    .filter(organizations::user.eq(user.user))
+    .load(&mut connection)
+    .await
+    .map_err(|error| {
+      tracing::error!(?error, "database query error");
+      StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+
+  Ok(Json(results))
+}
+
 pub async fn create_organization(
   State(context): State<Context>,
-  user: MaybeGuestUser,
+  user: AuthenticatedUser,
   Json(body): Json<CreateOrganization>,
 ) -> Result<Json<Organization>, StatusCode> {
   let mut connection = context.pg.get().await.map_err(|error| {
@@ -38,9 +57,9 @@ pub async fn create_organization(
 
   let organization = Organization {
     id: uuid::Uuid::new_v4(),
-    uid: user.uid,
+    user: user.user,
     name: body.name,
-    ..Default::default()
+    created_at: Utc::now(),
   };
   let organization = diesel::insert_into(organizations::table)
     .values(&organization)
@@ -61,7 +80,8 @@ pub async fn create_connection_token(
   user: AuthenticatedUser,
 ) -> Result<Json<CreateConnectionTokenResponse>, StatusCode> {
   let mut claims = BTreeMap::new();
-  claims.insert("sub", user.org_id.to_string());
+  claims.insert("sub", user.org_id()?.to_string());
+  claims.insert("user", user.user.to_string());
   claims.insert("device", device_id.to_string());
 
   let token = claims
@@ -71,5 +91,5 @@ pub async fn create_connection_token(
       StatusCode::INTERNAL_SERVER_ERROR
     })?;
 
-  Ok(Json(CreateConnectionTokenResponse { token }))
+  return Ok(Json(CreateConnectionTokenResponse { token }));
 }

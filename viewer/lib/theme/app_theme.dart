@@ -13,6 +13,7 @@ class AppColors {
   static const Color glassSurfaceActive = Color(0x38FFFFFF); // ~22% white
   static const Color glassBorder = Color(0x1FFFFFFF); // ~12% white border
   static const Color glassBorderHover = Color(0x3DFFFFFF); // ~24% white border
+  static const Color glassOverlayBackground = Color(0xF216181F); // ~95% dark frosted glass for menus/dialogs
 
   // Sidebar Selected & Hover State (Translucent glass pill)
   static const Color sidebarSelected = Color(0x2BFFFFFF); // Frosted highlight pill

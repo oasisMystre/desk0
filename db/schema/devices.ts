@@ -2,7 +2,7 @@ import { pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 
 import { organizations } from "./organizations";
 
-export const clients = pgTable("clients", {
+export const devices = pgTable("devices", {
   id: uuid().defaultRandom().primaryKey(),
   os: text(),
   hostname: text(),

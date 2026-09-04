@@ -1,12 +1,14 @@
 use clap::Parser;
+use rfd::{MessageButtons, MessageDialog, MessageLevel};
+use rust_i18n::t;
 use tokio_util::sync::CancellationToken;
 
+use crate::api::{Api, ApiConfig};
+
+mod api;
 mod handlers;
 mod platform;
 mod server;
-
-
-
 
 rust_i18n::i18n!("locales");
 
@@ -29,6 +31,9 @@ struct Args {
   #[arg(long, default_value = "http://127.0.0.1:8080")]
   server_addr: String,
 
+  #[arg(long, default_value = "http://127.0.0.1:8000")]
+  api_addr: String,
+
   /// Organization ID / fingerprint override
   #[arg(long, default_value = "11111111-1111-1111-1111-111111111111")]
   org_id: String,
@@ -46,9 +51,18 @@ struct Args {
   bind_addr: String,
 }
 
+const SUPPORTED_LOCALES: [&str; 1] = ["en-US"];
+
 pub fn main() {
+  rust_i18n::i18n!("locale", fallback = ["en-US"]);
+
   let locale = sys_locale::get_locale().unwrap_or_else(|| String::from("en-US"));
-  rust_i18n::set_locale(&locale);
+  let locale = if SUPPORTED_LOCALES.contains(&locale.as_str()) {
+    &locale
+  } else {
+    "en-US"
+  };
+  rust_i18n::set_locale(locale);
 
   let args = Args::parse();
 
@@ -109,8 +123,10 @@ pub fn main() {
         } else {
           use crate::server::traits::Tunnel;
 
+          let api = Api::from_config(ApiConfig{base_url: &args.api_addr});
           let db = rocksdb::DB::open_default("data")?;
-          let identity = crate::server::identity::Identity::upsert(&db, args.org_id)?;
+
+          let identity = crate::server::identity::Identity::upsert(&api, &db, args.org_id).await?;
           println!(
             "Starting Desk0 Agent Tunnel (Device ID: {}, Org: {})",
             identity.device_id, identity.org_id
@@ -122,7 +138,13 @@ pub fn main() {
         Ok::<_, anyhow::Error>(())
       } => {
         if let Err(error) = result {
-          eprintln!("Desk0 agent error: {error:?}");
+          let _ = MessageDialog::new()
+              .set_title(t!("error_title"))
+              .set_description(t!("error_description"))
+              .set_level(MessageLevel::Error)
+              .set_buttons(MessageButtons::Ok).show();
+
+            eprintln!("Desk0 agent error: {error:?}");
         }
       }
     }

@@ -1,3 +1,5 @@
+use crate::api::Api;
+
 #[derive(Clone)]
 pub struct Identity {
   pub org_id: String,
@@ -5,19 +7,34 @@ pub struct Identity {
 }
 
 impl Identity {
-  pub fn upsert(db: &rocksdb::DB, org_id: String) -> anyhow::Result<Self> {
-    let device_id = if let Some(device_id) = db
+  pub async fn upsert(api: &Api, db: &rocksdb::DB, org_id: String) -> anyhow::Result<Self> {
+    if let Some(device_id) = db
       .get("device_id")
       .map(|result| result.and_then(|value| String::from_utf8(value).ok()))?
     {
-      device_id
-    } else {
-      let device_id = uuid::Uuid::new_v4().to_string();
-      db.put("device_id", device_id.clone())?;
-      device_id
-    };
+      let identity = Self {
+        org_id,
+        device_id: device_id.clone(),
+      };
 
-    Ok(Self { org_id, device_id })
+      api
+        .device
+        .update_device(&device_id, &identity.clone().into())
+        .await?;
+
+      Ok(identity)
+    } else {
+      let mut identity = Self {
+        org_id: org_id.clone(),
+        device_id: uuid::Uuid::new_v4().to_string(),
+      };
+      let device = api.device.create_device(&identity.clone().into()).await?;
+      let device_id = device.id.to_string();
+      identity.device_id = device_id.clone();
+      db.put("device_id", device_id)?;
+
+      Ok(identity)
+    }
   }
 
   pub fn hostname(&self) -> Option<String> {

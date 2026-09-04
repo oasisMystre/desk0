@@ -9,7 +9,7 @@ use tokio::{
 use tokio_util::sync::CancellationToken;
 
 use crate::{
-  handlers::{display::DisplayHandler, input::InputHandler},
+  handlers::{clipdr::CliprdrHandler, display::DisplayHandler, input::InputHandler},
   server::traits::Server,
 };
 
@@ -85,7 +85,8 @@ impl AgentServer {
       .with_addr(addr)
       .with_no_security()
       .with_input_handler(input_handler)
-      .with_display_handler(display_handler.clone());
+      .with_display_handler(display_handler.clone())
+      .with_cliprdr_factory(Some(Box::new(CliprdrHandler::new())));
 
     let mut server = server.build();
 

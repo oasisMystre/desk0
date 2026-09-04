@@ -1,10 +1,14 @@
-import 'package:desk0/states/app_state.dart';
+
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/svg.dart';
 import 'package:get/get.dart';
 
+import './tab_list_type.dart';
 import '../search_input.dart';
 import './tab_icon_button.dart';
+import '../app/create_app_dialog.dart';
+import '../../states/app_state.dart';
 
 class Toolbar extends StatelessWidget {
   const Toolbar({super.key});
@@ -36,8 +40,7 @@ class Toolbar extends StatelessWidget {
               children: [
                 TabIconButton(
                   data: TabIconData(
-                    name: "Add connection",
-
+                    name: "New Application",
                     icon: (color) {
                       return SvgPicture.asset(
                         'assets/icons/add.svg',
@@ -47,7 +50,15 @@ class Toolbar extends StatelessWidget {
                       );
                     },
                   ),
-                  onPressed: () {},
+                  onPressed: () {
+                    showCupertinoDialog(
+                      context: context,
+                      barrierDismissible: true,
+                      builder: (context) {
+                        return Dialog(child: CreateAppDialog());
+                      },
+                    );
+                  },
                 ),
                 TabIconButton(
                   data: TabIconData(
@@ -63,34 +74,7 @@ class Toolbar extends StatelessWidget {
                   ),
                   onPressed: () {},
                 ),
-                TabIconGroupButton(
-                  selectedIndex: 0,
-                  group: [
-                    TabIconData(
-                      name: "Grid",
-                      icon: (color) {
-                        return SvgPicture.asset(
-                          'assets/icons/grid.svg',
-                          colorFilter: color == null
-                              ? null
-                              : ColorFilter.mode(color, BlendMode.srcIn),
-                        );
-                      },
-                    ),
-                    TabIconData(
-                      icon: (color) {
-                        return SvgPicture.asset(
-                          'assets/icons/list.svg',
-                          colorFilter: color == null
-                              ? null
-                              : ColorFilter.mode(color, BlendMode.srcIn),
-                        );
-                      },
-                      name: "List",
-                    ),
-                  ],
-                  onSelected: (index, data) {},
-                ),
+                TabListType(),
                 TabIconGroupButton(
                   selectedIndex: 0,
                   group: [

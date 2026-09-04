@@ -23,3 +23,6 @@ jwt.workspace = true
 sha2.workspace = true
 hmac.workspace = true
 clap.workspace = true
+aws-sdk-s3 = "1.144.0"
+aws-config = "1.11.0"
+chrono = "0.4.45"

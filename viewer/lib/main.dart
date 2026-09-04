@@ -3,9 +3,11 @@ import 'package:get/instance_manager.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:window_manager/window_manager.dart';
 
 import 'screens/index.dart';
+import 'dio/index.dart';
 import 'theme/app_theme.dart';
 import 'components/index.dart';
 import 'states/app_state.dart';
@@ -19,18 +21,39 @@ class InterceptFullscreenListener extends WindowListener {
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  final Api api = Api(baseUrl: 'http://0.0.0.0:8000');
+  final sharedPreferences = await SharedPreferences.getInstance();
+  final guestUser = sharedPreferences.getStringList('user');
+
+  late String user, organization;
+
+  if (guestUser == null) {
+    final response = await api.user.createUser();
+    await sharedPreferences.setStringList('user', [
+      response.user.id,
+      response.organization.id,
+    ]);
+    user = response.user.id;
+    organization = response.organization.id;
+  } else {
+    [user, organization] = guestUser;
+  }
+
+  api.updateUserId(user);
+  api.updateOrganizationId(organization);
+
   await windowManager.ensureInitialized();
   await LiquidGlassWidgets.initialize();
 
   windowManager.addListener(InterceptFullscreenListener());
 
+  Get.put(api);
   Get.put(AppState());
 
   await windowManager.waitUntilReadyToShow(
     WindowOptions(
-      size: Size(640, 420),
-      minimumSize: Size(640, 420),
-      maximumSize: Size(640, 420),
+      size: Size(720, 480),
       skipTaskbar: true,
       backgroundColor: Colors.transparent,
       titleBarStyle: TitleBarStyle.hidden,
@@ -50,18 +73,20 @@ final router = GoRouter(
     ShellRoute(
       builder: (context, state, child) {
         return GlassScaffold(
+          backgroundColor: Colors.transparent,
+          settings: LiquidGlassSettings.figma(
+            depth: 10,
+            dispersion: 5,
+            frost: 5,
+            refraction: 10,
+          ),
           body: Stack(
             children: [
               Positioned.fill(
                 child: Row(
                   children: [
                     SideNav(),
-                    Expanded(
-                      child: Padding(
-                        padding: EdgeInsetsGeometry.all(4),
-                        child: Column(children: [Expanded(child: child)]),
-                      ),
-                    ),
+                    Expanded(child: child),
                   ],
                 ),
               ),
@@ -96,7 +121,7 @@ class MainApplication extends StatelessWidget {
       routerConfig: router,
       theme: ThemeData(
         brightness: Brightness.dark,
-        textTheme: GoogleFonts.robotoFlexTextTheme(),
+        textTheme: GoogleFonts.monaSansTextTheme(),
         scaffoldBackgroundColor: Colors.transparent,
         colorScheme: const ColorScheme.dark(
           primary: AppColors.accentBlue,

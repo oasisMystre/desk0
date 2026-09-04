@@ -1,0 +1,4 @@
+service_description: "Desk0 Agent Service \n used for "
+error_title: "Agent0 failed to start"
+error_description: "Oops! Agent0 could not start. Restart app or contact support@agent0.com for assistance."
+ 

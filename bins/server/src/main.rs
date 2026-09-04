@@ -2,6 +2,7 @@ use std::net::SocketAddr;
 
 use clap::Parser;
 use desk0_protocol::Desk0HubServiceServer;
+use shared::init::{init_tracing, load_env};
 use tokio::net::TcpListener;
 
 use crate::{auth::Auth, context::Context, grpc::Desk0Hub, registry::DeviceRegistry};
@@ -33,6 +34,9 @@ struct Args {
 
 #[tokio::main]
 pub async fn main() -> anyhow::Result<()> {
+  load_env();
+  init_tracing()?;
+
   let args = Args::parse();
   let registry = DeviceRegistry::new();
   let context = Context::from_env().await?;
@@ -104,6 +108,17 @@ pub async fn main() -> anyhow::Result<()> {
     });
 
     handles.push(handle);
+  }
+
+  tokio::select! {
+      _ = tokio::signal::ctrl_c() => {
+          for handle in handles {
+              handle.abort();
+          }
+      }
+      _ = futures::future::try_join_all(&mut handles) => {
+
+      }
   }
 
   Ok(())

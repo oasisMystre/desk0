@@ -4,6 +4,7 @@ use axum::{
   http::StatusCode,
   response::IntoResponse,
 };
+use chrono::{DateTime, Utc};
 use diesel::{
   BoolExpressionMethods, ExpressionMethods, HasQuery, QueryDsl, SelectableHelper,
   query_builder::AsChangeset,
@@ -14,8 +15,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{auth::AuthenticatedUser, context::Context};
 
-#[derive(Deserialize, Serialize, AsChangeset)]
-#[diesel(table_name = devices)]
+#[derive(Deserialize, Serialize)]
 pub struct PartialDevice {
   os: Option<String>,
   hostname: Option<String>,
@@ -23,17 +23,28 @@ pub struct PartialDevice {
   version: Option<String>,
 }
 
+#[derive(Deserialize, Serialize, AsChangeset)]
+#[diesel(table_name = devices)]
+pub struct UpdateDevice {
+  os: Option<String>,
+  hostname: Option<String>,
+  username: Option<String>,
+  version: Option<String>,
+  #[diesel(column_name = "lastLoggedIn")]
+  pub last_logged_in: Option<DateTime<Utc>>,
+}
+
 pub async fn get_devices(
   State(context): State<Context>,
   user: AuthenticatedUser,
-) -> Result<impl IntoResponse, StatusCode> {
+) -> Result<Json<Vec<Device>>, StatusCode> {
   let mut connection = context.pg.get().await.map_err(|error| {
     tracing::error!(?error, "database connection error");
     StatusCode::INTERNAL_SERVER_ERROR
   })?;
 
-  let devices: Vec<Device> = Device::query()
-    .filter(devices::organization.eq(user.org_id))
+  let results: Vec<Device> = Device::query()
+    .filter(devices::organization.eq(user.org_id()?))
     .load(&mut connection)
     .await
     .map_err(|error| {
@@ -41,7 +52,7 @@ pub async fn get_devices(
       StatusCode::INTERNAL_SERVER_ERROR
     })?;
 
-  Ok(Json(devices))
+  Ok(Json(results))
 }
 
 pub async fn create_device(
@@ -55,8 +66,9 @@ pub async fn create_device(
     hostname: body.hostname,
     username: body.username,
     version: body.version,
-    organization: user.org_id,
-    ..Default::default()
+    organization: user.org_id()?,
+    created_at: Utc::now(),
+    last_logged_in: Utc::now(),
   };
 
   let mut connection = context.pg.get().await.map_err(|error| {
@@ -77,11 +89,52 @@ pub async fn create_device(
   Ok(Json(device))
 }
 
+pub async fn update_device(
+  State(context): State<Context>,
+  Path(device_id): Path<uuid::Uuid>,
+  user: AuthenticatedUser,
+  Json(body): Json<PartialDevice>,
+) -> Result<Json<Device>, StatusCode> {
+  let mut connection = context.pg.get().await.map_err(|error| {
+    tracing::error!(?error, "database connection error");
+    StatusCode::INTERNAL_SERVER_ERROR
+  })?;
+
+  let update = UpdateDevice {
+    os: body.os,
+    hostname: body.hostname,
+    username: body.username,
+    version: body.version,
+    last_logged_in: Some(Utc::now()),
+  };
+
+  let result: Device = diesel::update(
+    devices::table.filter(
+      devices::id
+        .eq(device_id)
+        .and(devices::organization.eq(user.org_id()?)),
+    ),
+  )
+  .set(&update)
+  .returning(Device::as_returning())
+  .get_result(&mut connection)
+  .await
+  .map_err(|error| match error {
+    diesel::result::Error::NotFound => StatusCode::NOT_FOUND,
+    _ => {
+      tracing::error!(?error, "database update error");
+      StatusCode::INTERNAL_SERVER_ERROR
+    }
+  })?;
+
+  Ok(Json(result))
+}
+
 pub async fn delete_device(
   State(context): State<Context>,
   Path(device_id): Path<uuid::Uuid>,
   user: AuthenticatedUser,
-) -> Result<impl IntoResponse, StatusCode> {
+) -> Result<Json<Device>, StatusCode> {
   let mut connection = context.pg.get().await.map_err(|error| {
     tracing::error!(?error, "database connection error");
     StatusCode::INTERNAL_SERVER_ERROR
@@ -91,42 +144,9 @@ pub async fn delete_device(
     devices::table.filter(
       devices::id
         .eq(device_id)
-        .and(devices::organization.eq(user.org_id)),
+        .and(devices::organization.eq(user.org_id()?)),
     ),
   )
-  .returning(Device::as_returning())
-  .get_result(&mut connection)
-  .await
-  .map_err(|error| match error {
-    diesel::result::Error::NotFound => StatusCode::NOT_FOUND,
-    _ => {
-      tracing::error!(?error, "pg update error");
-      StatusCode::INTERNAL_SERVER_ERROR
-    }
-  })?;
-
-  Ok(Json(serde_json::json!(result)))
-}
-
-pub async fn update_device(
-  State(context): State<Context>,
-  Path(device_id): Path<uuid::Uuid>,
-  user: AuthenticatedUser,
-  Json(body): Json<PartialDevice>,
-) -> Result<impl IntoResponse, StatusCode> {
-  let mut connection = context.pg.get().await.map_err(|error| {
-    tracing::error!(?error, "database connection error");
-    StatusCode::INTERNAL_SERVER_ERROR
-  })?;
-
-  let result: Device = diesel::update(
-    devices::table.filter(
-      devices::id
-        .eq(device_id)
-        .and(devices::organization.eq(user.org_id)),
-    ),
-  )
-  .set(&body)
   .returning(Device::as_returning())
   .get_result(&mut connection)
   .await
