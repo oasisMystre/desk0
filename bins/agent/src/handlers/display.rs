@@ -27,19 +27,8 @@ struct DisplayUpdates {
 
 impl DisplayHandler {
   pub fn new() -> anyhow::Result<Self> {
-    let displays = DisplayInfo::all()?;
-
-    let to_u16 =
-      |value: u32| -> Option<u16> { u16::try_from(value).ok().filter(|&value| value > 0) };
-
-    let (width, height) = displays
-      .iter()
-      .find(|display| display.is_primary)
-      .or_else(|| displays.first())
-      .and_then(|display| Some((to_u16(display.width)?, to_u16(display.height)?)))
-      .unwrap_or((1920, 1080));
-
     let (sender, receiver) = unbounded_channel();
+    let (width, height) = Self::get_display_size();
 
     Ok(Self {
       width,
@@ -183,5 +172,22 @@ impl DisplayHandler {
     }
 
     updates
+  }
+
+  pub fn get_display_size() -> (u16, u16) {
+    let display = DisplayInfo::all().ok().and_then(|displays| {
+      let to_u16 =
+        |value: u32| -> Option<u16> { u16::try_from(value).ok().filter(|&value| value > 0) };
+
+      let display = displays
+        .iter()
+        .find(|display| display.is_primary)
+        .or_else(|| displays.first())
+        .and_then(|display| Some((to_u16(display.width)?, to_u16(display.height)?)));
+
+      display
+    });
+
+    display.unwrap_or((1920, 1080))
   }
 }

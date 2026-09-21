@@ -1,4 +1,4 @@
-use crate::api::Api;
+use crate::{api::Api, handlers::display::DisplayHandler};
 
 #[derive(Clone)]
 pub struct Identity {
@@ -51,5 +51,14 @@ impl Identity {
 
   pub fn version(&self) -> String {
     env!("CARGO_PKG_VERSION").to_string()
+  }
+
+  pub fn metadata(&self) -> Option<serde_json::Value> {
+    let (width, height) = DisplayHandler::get_display_size();
+    Some(serde_json::json!({
+        "_version": 1,
+        "width": width,
+        "height": height,
+    }))
   }
 }

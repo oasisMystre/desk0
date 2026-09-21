@@ -28,10 +28,10 @@ struct Args {
   uninstall: bool,
 
   /// Central Desk0 server address to connect outbound reverse proxy tunnel to
-  #[arg(long, default_value = "http://127.0.0.1:8080")]
+  #[arg(long, default_value = "ws:///172.20.10.4:8080")]
   server_addr: String,
 
-  #[arg(long, default_value = "http://127.0.0.1:8000")]
+  #[arg(long, default_value = "http:///172.20.10.4:8080")]
   api_addr: String,
 
   /// Organization ID / fingerprint override
@@ -119,7 +119,7 @@ pub fn main() {
           let addr = format!("{}:{}", args.bind_addr, args.port);
           println!("Starting Desk0 RDP Agent standalone on RDP://{}", addr);
           let server = crate::server::server::AgentServer::new(addr.parse()?);
-          server.run(cancellation_token_clone);
+          server.run(cancellation_token_clone).await?;
         } else {
           use crate::server::traits::Tunnel;
 
@@ -131,7 +131,7 @@ pub fn main() {
             "Starting Desk0 Agent Tunnel (Device ID: {}, Org: {})",
             identity.device_id, identity.org_id
           );
-          let tunnel = crate::server::tunnel::AgentTunnel::new(args.server_addr, identity);
+          let tunnel = crate::server::tunnel::AgentTunnel::new(args.server_addr, identity, api);
           tunnel.run( cancellation_token_clone).await?;
         }
 

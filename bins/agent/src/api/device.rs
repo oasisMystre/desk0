@@ -38,6 +38,7 @@ pub struct UpdateDevice {
   pub hostname: Option<String>,
   pub username: Option<String>,
   pub version: Option<String>,
+  pub metadata: Option<serde_json::Value>,
 }
 
 impl From<Identity> for CreateDevice {
@@ -56,6 +57,7 @@ impl From<Identity> for UpdateDevice {
   fn from(value: Identity) -> Self {
     Self {
       os: Some(value.os()),
+      metadata: value.metadata(),
       hostname: value.hostname(),
       username: value.username(),
       version: Some(value.version()),
@@ -123,5 +125,38 @@ impl DeviceApi {
     let response = request.json::<Device>().await?;
 
     Ok(response)
+  }
+
+  pub async fn get_token(&self, device_id: &str) -> anyhow::Result<String> {
+    let mut request = self
+      .client
+      .client
+      .post(
+        self
+          .client
+          .base_url
+          .join(&format!("orgnaization/token/{device_id}"))?,
+      )
+      .json(&serde_json::json!({"role": "agent"}));
+
+    if let Some(ref headers) = self.client.headers {
+      request = request.headers(headers.clone());
+    }
+
+    let request = request.send().await?;
+
+    if request.status() != StatusCode::OK {
+      let response = request.text().await?;
+      anyhow::bail!(response)
+    }
+
+    #[derive(Deserialize)]
+    struct Response {
+      token: String,
+    }
+
+    let response = request.json::<Response>().await?;
+
+    Ok(response.token)
   }
 }

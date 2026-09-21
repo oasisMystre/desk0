@@ -12,6 +12,7 @@ pub struct Device {
   pub username: Option<String>,
   pub version: Option<String>,
   pub organization: uuid::Uuid,
+  pub metadata: Option<serde_json::Value>,
   #[diesel(column_name = "lastLoggedIn")]
   pub last_logged_in: DateTime<Utc>,
   #[diesel(column_name = "createdAt")]

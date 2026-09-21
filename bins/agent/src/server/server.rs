@@ -1,5 +1,6 @@
 use std::net::SocketAddr;
 
+use copypaste::CliprdrHandler;
 use enigo::Settings;
 use ironrdp::server::RdpServer;
 use tokio::{
@@ -9,7 +10,7 @@ use tokio::{
 use tokio_util::sync::CancellationToken;
 
 use crate::{
-  handlers::{clipdr::CliprdrHandler, display::DisplayHandler, input::InputHandler},
+  handlers::{display::DisplayHandler, input::InputHandler},
   server::traits::Server,
 };
 
@@ -31,35 +32,46 @@ impl AgentServer {
   }
 }
 
+#[async_trait::async_trait(?Send)]
 impl Server for AgentServer {
-  fn run(&self, cancellation_token: CancellationToken) {
-    let _ = tokio::task::LocalSet::new().run_until(async move {
-      let listener = TcpListener::bind(self.config.addr.unwrap()).await?;
-      println!("RDP server listening on {}", self.config.addr.unwrap());
+  async fn run(&self, cancellation_token: CancellationToken) -> anyhow::Result<()> {
+    let local = tokio::task::LocalSet::new();
+    local
+      .run_until(async move {
+        let addr = self
+          .config
+          .addr
+          .ok_or_else(|| anyhow::anyhow!("Server bind address is not configured"))?;
+        let listener = TcpListener::bind(addr).await?;
+        println!("RDP server listening on {addr}");
 
-      loop {
-        tokio::select! {
+        loop {
+          tokio::select! {
             _ = cancellation_token.cancelled() => {
-                break;
+              println!("RDP server shutting down...");
+              break;
             }
             result = listener.accept() => {
-                let (stream, peer_addr) = result?;
-                println!("Accepted connection from {peer_addr}");
+              let (stream, peer_addr) = result?;
+              println!("Accepted connection from {peer_addr}");
 
-                let config = self.config.clone();
-                let cancellation_token = cancellation_token.clone();
+              let config = self.config.clone();
+              let cancellation_token = cancellation_token.clone();
 
-                tokio::task::spawn_local(async move {
-                    if let Err(error) = Self::handle(config, stream, cancellation_token).await {
-                        eprintln!("Connection handler error for {peer_addr}: {error:?}");
-                    }
-                });
+              tokio::task::spawn_local(async move {
+                if let Err(error) = Self::handle(config, stream, cancellation_token).await {
+                  eprintln!("Connection handler error for {peer_addr}: {error:?}");
+                }
+              });
             }
+          }
         }
-      }
 
-      Ok::<_, anyhow::Error>(())
-    });
+        Ok::<_, anyhow::Error>(())
+      })
+      .await?;
+
+    Ok(())
   }
 }
 

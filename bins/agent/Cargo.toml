@@ -4,13 +4,13 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+copypaste = { workspace = true, features = ["server"]}
 flow.workspace = true
 anyhow.workspace = true
 async-trait.workspace = true
 bytes.workspace = true
 clap.workspace = true
 dashmap = "6.2.1"
-desk0-protocol.workspace = true
 display-info = "0.5.9"
 enigo = "0.3.0"
 futures.workspace = true
@@ -23,13 +23,15 @@ sys-locale = "0.3.2"
 tokio.workspace = true
 tokio-stream.workspace = true
 tokio-util.workspace = true
+tokio-tungstenite = "0.30.0"
 tonic.workspace = true
 uuid.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 rfd = "0.17.2"
-clipboard-master = "4.0.0"
-clipboard-rs = "0.3.5"
+
+tracing.workspace = true
+
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows = { version = "0.62.2", features = [

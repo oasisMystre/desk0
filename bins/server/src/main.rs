@@ -1,17 +1,16 @@
-use std::net::SocketAddr;
-
+use axum::{
+  Router,
+  routing::{delete, get, patch, post},
+};
 use clap::Parser;
-use desk0_protocol::Desk0HubServiceServer;
 use shared::init::{init_tracing, load_env};
 use tokio::net::TcpListener;
 
-use crate::{auth::Auth, context::Context, grpc::Desk0Hub, registry::DeviceRegistry};
+use crate::routes::state::AppState;
 
-mod auth;
 mod context;
 mod env;
-mod grpc;
-mod registry;
+mod routes;
 
 #[derive(Parser, Debug)]
 #[command(name = "desk0-server", about = "Desk0 Relay Server & Device Broker")]
@@ -19,17 +18,8 @@ struct Args {
   #[arg(long, default_value = "0.0.0.0")]
   bind_addr: String,
 
-  /// Port for agents to connect outbound gRPC control and relay streams
   #[arg(long, default_value = "8080")]
-  grpc_port: u16,
-
-  /// Port for RDP clients / viewers to connect
-  #[arg(long, default_value = "3389")]
-  rdp_port: u16,
-
-  /// Default target device ID to route incoming RDP connections to
-  #[arg(long)]
-  default_target_device: Option<String>,
+  port: u16,
 }
 
 #[tokio::main]
@@ -38,87 +28,53 @@ pub async fn main() -> anyhow::Result<()> {
   init_tracing()?;
 
   let args = Args::parse();
-  let registry = DeviceRegistry::new();
-  let context = Context::from_env().await?;
-  let auth = Auth::from_env()?;
+  let state = AppState::init().await?;
 
-  let mut handles = vec![];
+  let address = format!("{}:{}", args.bind_addr, args.port);
+  let listener = TcpListener::bind(&address).await?;
+  tracing::info!(%address, "server listening");
 
-  let grpc_listen_addr = format!("{}:{}", args.bind_addr, args.grpc_port).parse::<SocketAddr>()?;
-  let rdp_listen_addr = format!("{}:{}", args.bind_addr, args.rdp_port).parse::<SocketAddr>()?;
-
-  let rdp_listener = TcpListener::bind(&rdp_listen_addr).await?;
-  tracing::info!("Desk0 RDP Viewer Proxy running on {}", rdp_listen_addr);
-
-  let service = Desk0Hub::new(context, registry.clone());
-  {
-    let service = service.clone();
-    let handle = tokio::spawn(async move {
-      if let Err(error) = tonic::transport::Server::builder()
-        .add_service(Desk0HubServiceServer::new(service))
-        .serve(grpc_listen_addr)
-        .await
-      {
-        tracing::error!(?error, "gRPC Server error {error:?}");
-      }
-    });
-
-    handles.push(handle);
-  }
-
-  {
-    let handle = tokio::spawn(async move {
-      loop {
-        let (viewer_stream, claims) = match auth.accept_authenticated(&rdp_listener).await {
-          Ok(value) => value,
-          Err(error) => {
-            tracing::error!(?error, "Rdp failed to accept connection");
-            continue;
-          }
-        };
-
-        let agent = registry.get_by_org_and_device_id(&claims.sub, &claims.device);
-
-        match agent {
-          Some(agent) => {
-            let service = service.clone();
-            tokio::spawn(async move {
-              if let Err(error) = service
-                .bridge_client(viewer_stream, agent.info.device_id)
-                .await
-              {
-                tracing::error!(
-                  org = claims.sub,
-                  device = claims.device,
-                  ?error,
-                  "RDP proxy session error"
-                );
-              }
-            });
-          }
-          None => {
-            tracing::error!(
-              org = claims.sub,
-              device = claims.device,
-              "No agent for target device connected"
-            );
-          }
-        }
-      }
-    });
-
-    handles.push(handle);
-  }
+  let app = Router::new()
+    .route("/users", post(routes::users::create_user))
+    .route("/user", delete(routes::users::delete_user))
+    .route(
+      "/organizations",
+      get(routes::organizations::get_organizations),
+    )
+    .route(
+      "/organizations",
+      post(routes::organizations::create_organization),
+    )
+    .route(
+      "/organizations/token/{device_id}",
+      post(routes::organizations::create_connection_token),
+    )
+    .route("/devices", get(routes::devices::get_devices))
+    .route("/devices", post(routes::devices::create_device))
+    .route(
+      "/devices/{device_id}",
+      patch(routes::devices::update_device),
+    )
+    .route(
+      "/devices/{device_id}",
+      delete(routes::devices::delete_device),
+    )
+    .route("/attachments", get(routes::attachments::get_attachments))
+    .route("/attachments", post(routes::attachments::create_attachment))
+    .route(
+      "/attachments/{file_id}",
+      patch(routes::attachments::update_attachment),
+    )
+    .route(
+      "/attachments/{file_id}",
+      delete(routes::attachments::delete_attachment),
+    )
+    .route("/ws", get(routes::ws::websocket::ws_route))
+    .with_state(state);
 
   tokio::select! {
-      _ = tokio::signal::ctrl_c() => {
-          for handle in handles {
-              handle.abort();
-          }
-      }
-      _ = futures::future::try_join_all(&mut handles) => {
-
-      }
+    result = tokio::signal::ctrl_c() => result?,
+    result = axum::serve(listener, app) => result?
   }
 
   Ok(())

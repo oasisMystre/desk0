@@ -1,4 +1,3 @@
-
 diesel::table! {
     users (id) {
         id -> Uuid,
@@ -21,6 +20,7 @@ diesel::table! {
     devices (id) {
         id -> Uuid,
         os -> Nullable<Text>,
+        metadata -> Nullable<Jsonb>,
         hostname -> Nullable<Text>,
         username -> Nullable<Text>,
         version -> Nullable<Text>,

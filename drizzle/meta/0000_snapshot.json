@@ -1,5 +1,5 @@
 {
-  "id": "356d45cd-7dc8-444d-82a4-71206498fb4c",
+  "id": "4347572d-ffb4-404f-9d71-007cd3cc9081",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -76,6 +76,12 @@
         "version": {
           "name": "version",
           "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "metadata": {
+          "name": "metadata",
+          "type": "jsonb",
           "primaryKey": false,
           "notNull": false
         },
@@ -162,6 +168,12 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true
+        },
+        "metadata": {
+          "name": "metadata",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
         },
         "organization": {
           "name": "organization",

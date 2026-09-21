@@ -1,7 +1,8 @@
 use tokio_util::sync::CancellationToken;
 
+#[async_trait::async_trait(?Send)]
 pub trait Server {
-   fn run(&self, cancellation_token: CancellationToken);
+  async fn run(&self, cancellation_token: CancellationToken) -> anyhow::Result<()>;
 }
 
 #[async_trait::async_trait]
