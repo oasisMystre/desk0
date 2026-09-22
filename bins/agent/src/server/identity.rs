@@ -8,20 +8,7 @@ pub struct Identity {
 
 impl Identity {
   pub async fn upsert(api: &Api, db: &rocksdb::DB, org_id: String) -> anyhow::Result<Self> {
-    if let Some(device_id) = db
-      .get("device_id")
-      .map(|result| result.and_then(|value| String::from_utf8(value).ok()))?
-    {
-      let identity = Self {
-        org_id,
-        device_id: device_id.clone(),
-      };
-
-      api
-        .device
-        .update_device(&device_id, &identity.clone().into())
-        .await?;
-
+    if let Some(identity) = Self::get(db) {
       Ok(identity)
     } else {
       let mut identity = Self {

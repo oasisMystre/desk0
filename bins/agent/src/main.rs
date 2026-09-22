@@ -124,7 +124,13 @@ pub fn main() {
           let api = Api::from_config(ApiConfig{base_url: &args.api_addr});
           let db = rocksdb::DB::open_default("data")?;
           println!("2");
-          let identity = crate::server::identity::Identity::upsert(&api, &db, args.org_id).await?;
+          let identity = match crate::server::identity::Identity::upsert(&api, &db, args.org_id).await {
+            Ok(value) => value,
+            Err(error) => {
+                eprintln!("identity {error:?}");
+                return Err(error);
+            }
+        };
           println!(
             "Starting Desk0 Agent Tunnel (Device ID: {}, Org: {})",
             identity.device_id, identity.org_id
