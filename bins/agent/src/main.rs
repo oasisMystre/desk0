@@ -28,7 +28,7 @@ struct Args {
   uninstall: bool,
 
   /// Central Desk0 server address to connect outbound reverse proxy tunnel to
-  #[arg(long, default_value = "ws:///172.20.10.4:8080")]
+  #[arg(long, default_value = "ws://172.20.10.4:8080")]
   server_addr: String,
 
   #[arg(long, default_value = "http:///172.20.10.4:8080")]
@@ -101,7 +101,9 @@ pub fn main() {
     .build()
     .expect("failed to build tokio multi-thread runtime");
 
-  rt.block_on(async {
+  let local = tokio::task::LocalSet::new();
+
+  local.block_on(&rt, async {
     let cancellation_token = CancellationToken::new();
     let cancellation_token_clone = cancellation_token.clone();
 
@@ -125,10 +127,6 @@ pub fn main() {
           let db = rocksdb::DB::open_default("data")?;
 
           let identity = crate::server::identity::Identity::upsert(&api, &db, args.org_id).await?;
-          println!(
-            "Starting Desk0 Agent Tunnel (Device ID: {}, Org: {})",
-            identity.device_id, identity.org_id
-          );
           let tunnel = crate::server::tunnel::AgentTunnel::new(args.server_addr, identity, api);
           tunnel.run( cancellation_token_clone).await?;
         }

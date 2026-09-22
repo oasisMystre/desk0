@@ -53,6 +53,10 @@ pub async fn main() -> anyhow::Result<()> {
     .route("/devices", get(routes::devices::get_devices))
     .route("/devices", post(routes::devices::create_device))
     .route(
+      "/devices/token/{device_id}",
+      post(routes::devices::create_connection_token),
+    )
+    .route(
       "/devices/{device_id}",
       patch(routes::devices::update_device),
     )

@@ -46,12 +46,13 @@ impl AgentTunnel {
       })
       .unwrap_or_else(|| addr.to_owned());
 
-    format!("{addr}/agent?token={token}")
+    format!("{addr}/ws?token={token}")
   }
 
   async fn connect(&self) -> anyhow::Result<()> {
     let token = self.api.device.get_token(&self.identity.device_id).await?;
     let url = self.websocket_url(&token);
+
     let (websocket, _) = connect_async(url).await?;
     let (mut websocket_writer, mut websocket_reader) = websocket.split();
 

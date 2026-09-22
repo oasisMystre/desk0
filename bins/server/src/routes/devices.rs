@@ -1,3 +1,5 @@
+use std::{collections::BTreeMap, sync::Arc};
+
 use axum::{
   Json,
   extract::{Path, State},
@@ -11,12 +13,16 @@ use diesel::{
 };
 use diesel_async::RunQueryDsl;
 use flow::{device::Device, devices};
+use jwt::SignWithKey;
 use serde::{Deserialize, Serialize};
 
-use crate::routes::{auth::AuthenticatedUser, state::AppState};
+use crate::routes::{
+  auth::AuthenticatedUser, state::AppState, types::CreateConnectionTokenResponse,
+};
 
 #[derive(Deserialize, Serialize)]
 pub struct PartialDevice {
+  organization: uuid::Uuid,
   os: Option<String>,
   hostname: Option<String>,
   username: Option<String>,
@@ -31,6 +37,7 @@ pub struct UpdateDevice {
   hostname: Option<String>,
   username: Option<String>,
   version: Option<String>,
+  metadata: Option<serde_json::Value>,
   #[diesel(column_name = "lastLoggedIn")]
   pub last_logged_in: Option<DateTime<Utc>>,
 }
@@ -58,7 +65,6 @@ pub async fn get_devices(
 
 pub async fn create_device(
   State(AppState { context, .. }): State<AppState>,
-  user: AuthenticatedUser,
   Json(body): Json<PartialDevice>,
 ) -> Result<impl IntoResponse, StatusCode> {
   let device = Device {
@@ -69,8 +75,8 @@ pub async fn create_device(
     version: body.version,
     created_at: Utc::now(),
     id: uuid::Uuid::new_v4(),
-    organization: user.org_id()?,
     last_logged_in: Utc::now(),
+    organization: body.organization,
   };
 
   let mut connection = context.pg.get().await.map_err(|error| {
@@ -93,9 +99,7 @@ pub async fn create_device(
 
 pub async fn update_device(
   State(AppState { context, .. }): State<AppState>,
-
   Path(device_id): Path<uuid::Uuid>,
-  user: AuthenticatedUser,
   Json(body): Json<PartialDevice>,
 ) -> Result<Json<Device>, StatusCode> {
   let mut connection = context.pg.get().await.map_err(|error| {
@@ -105,9 +109,10 @@ pub async fn update_device(
 
   let update = UpdateDevice {
     os: body.os,
+    version: body.version,
     hostname: body.hostname,
     username: body.username,
-    version: body.version,
+    metadata: body.metadata,
     last_logged_in: Some(Utc::now()),
   };
 
@@ -115,7 +120,7 @@ pub async fn update_device(
     devices::table.filter(
       devices::id
         .eq(device_id)
-        .and(devices::organization.eq(user.org_id()?)),
+        .and(devices::organization.eq(body.organization)),
     ),
   )
   .set(&update)
@@ -162,4 +167,35 @@ pub async fn delete_device(
   })?;
 
   Ok(Json(result))
+}
+
+pub async fn create_connection_token(
+  State(AppState { context, .. }): State<AppState>,
+  Path(device_id): Path<uuid::Uuid>,
+) -> Result<Json<CreateConnectionTokenResponse>, StatusCode> {
+  let mut connection = context.pg.get().await.map_err(|error| {
+    tracing::error!(?error, "database connection error");
+    StatusCode::INTERNAL_SERVER_ERROR
+  })?;
+  let Ok(organization) = devices::table
+    .select(devices::organization)
+    .find(device_id)
+    .get_result::<uuid::Uuid>(&mut connection)
+    .await
+  else {
+    return Err(StatusCode::NOT_FOUND);
+  };
+  let mut claims = BTreeMap::new();
+  claims.insert("role", "agent".into());
+  claims.insert("sub", organization.to_string());
+  claims.insert("device", device_id.to_string());
+
+  let token = claims
+    .sign_with_key(&Arc::unwrap_or_clone(context.auth_key))
+    .map_err(|error| {
+      tracing::error!(?error, "claim sign error");
+      StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+
+  return Ok(Json(CreateConnectionTokenResponse { token }));
 }

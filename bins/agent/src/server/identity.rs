@@ -1,3 +1,5 @@
+use anyhow::Context;
+
 use crate::{api::Api, handlers::display::DisplayHandler};
 
 #[derive(Clone)]
@@ -15,7 +17,11 @@ impl Identity {
         org_id: org_id.clone(),
         device_id: uuid::Uuid::new_v4().to_string(),
       };
-      let device = api.device.create_device(&identity.clone().into()).await?;
+      let device = api
+        .device
+        .create_device(&identity.clone().into())
+        .await
+        .context("failed to create device")?;
       let device_id = device.id.to_string();
       identity.device_id = device_id.clone();
       db.put("org_id", org_id)?;

@@ -30,10 +30,12 @@ pub struct CreateDevice {
   pub username: Option<String>,
   pub version: Option<String>,
   pub organization: uuid::Uuid,
+  pub metadata: Option<serde_json::Value>,
 }
 
 #[derive(Serialize, Deserialize)]
 pub struct UpdateDevice {
+  pub organization: uuid::Uuid,
   pub os: Option<String>,
   pub hostname: Option<String>,
   pub username: Option<String>,
@@ -45,6 +47,7 @@ impl From<Identity> for CreateDevice {
   fn from(value: Identity) -> Self {
     Self {
       os: Some(value.os()),
+      metadata: value.metadata(),
       hostname: value.hostname(),
       username: value.username(),
       version: Some(value.version()),
@@ -61,6 +64,7 @@ impl From<Identity> for UpdateDevice {
       hostname: value.hostname(),
       username: value.username(),
       version: Some(value.version()),
+      organization: value.org_id.parse::<Uuid>().unwrap(),
     }
   }
 }
@@ -84,8 +88,9 @@ impl DeviceApi {
     }
 
     let request = request.send().await?;
+    let status = request.status();
 
-    if request.status() != StatusCode::OK {
+    if status != StatusCode::OK {
       let response = request.text().await?;
       anyhow::bail!(response)
     }
@@ -135,7 +140,7 @@ impl DeviceApi {
         self
           .client
           .base_url
-          .join(&format!("orgnaization/token/{device_id}"))?,
+          .join(&format!("devices/token/{device_id}"))?,
       )
       .json(&serde_json::json!({"role": "agent"}));
 
