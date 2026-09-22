@@ -69,9 +69,7 @@ pub fn main() {
   #[cfg(target_os = "windows")]
   {
     if args.install {
-      if let Err(error) =
-        crate::platform::windows::service::install(Some(&args.server_addr), args.org_id.as_deref())
-      {
+      if let Err(error) = crate::platform::windows::service::install() {
         eprintln!("Service install error: {error:?}");
       }
       return;

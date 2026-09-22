@@ -1,5 +1,7 @@
+use std::os::windows::ffi::OsStrExt;
 use std::{ffi::OsString, fs, path::PathBuf, time::Duration};
 
+use tokio::process::Command;
 use tokio_util::sync::CancellationToken;
 use windows_service::{
   Result,
@@ -45,41 +47,36 @@ pub async fn run_service() -> Result<()> {
     })?;
 
   status_handle.set_service_status(ServiceStatus {
-    service_type: ServiceType::OWN_PROCESS,
-    current_state: ServiceState::Running,
-    controls_accepted: ServiceControlAccept::STOP,
-    exit_code: ServiceExitCode::Win32(0),
     checkpoint: 0,
-    wait_hint: Duration::from_secs(10),
     process_id: None,
+    wait_hint: Duration::from_secs(10),
+    current_state: ServiceState::Running,
+    exit_code: ServiceExitCode::Win32(0),
+    service_type: ServiceType::OWN_PROCESS,
+    controls_accepted: ServiceControlAccept::STOP,
   })?;
 
-  let cancellation_token = CancellationToken::new();
-  let token_clone = cancellation_token.clone();
+  let exe = std::env::current_exe()?;
+  let status = Command::new(exe).arg("--agent").spawn()?;
 
-  let server_addr =
-    std::env::var("DESK0_SERVER_ADDR").unwrap_or_else(|_| "127.0.0.1:8080".to_string());
-  let identity = crate::identity::DeviceIdentity::load_or_create(None)
-    .expect("failed to load/create device identity");
-
-  let tunnel_task = tokio::spawn(async move {
-    if let Err(err) = crate::tunnel::run_agent_tunnel(&server_addr, identity, token_clone).await {
-      eprintln!("Tunnel error in service: {err:?}");
-    }
-  });
-
-  let _ = shutdown_rx.recv().await;
-  cancellation_token.cancel();
-  let _ = tunnel_task.await;
+  tokio::select! {
+      _ = shutdown_rx.recv().await => {
+          let _ = child.kill().await;
+          let _ = child.wait().await;
+      },
+      status = child.wait() => {
+        eprintln!("desk0 exited: {status:?}");
+      }
+  }
 
   status_handle.set_service_status(ServiceStatus {
-    service_type: ServiceType::OWN_PROCESS,
-    current_state: ServiceState::Stopped,
-    controls_accepted: ServiceControlAccept::empty(),
-    exit_code: ServiceExitCode::Win32(0),
     checkpoint: 0,
-    wait_hint: Duration::ZERO,
     process_id: None,
+    wait_hint: Duration::ZERO,
+    exit_code: ServiceExitCode::Win32(0),
+    current_state: ServiceState::Stopped,
+    service_type: ServiceType::OWN_PROCESS,
+    controls_accepted: ServiceControlAccept::empty(),
   })?;
 
   Ok(())
@@ -90,7 +87,6 @@ pub fn check_and_request_elevation() -> anyhow::Result<bool> {
     return Ok(true);
   }
 
-  println!("Requesting Administrator elevation...");
   let current_exe = std::env::current_exe()?;
   let current_exe_w: Vec<u16> = current_exe
     .as_os_str()
@@ -116,7 +112,6 @@ pub fn check_and_request_elevation() -> anyhow::Result<bool> {
     );
 
     if res.0 as isize > 32 {
-      println!("Elevated installer launched successfully.");
       std::process::exit(0);
     } else {
       anyhow::bail!("Failed to obtain administrator privileges (UAC prompt declined).");
@@ -141,7 +136,7 @@ pub fn is_elevated() -> bool {
     let mut return_length = 0u32;
     let size = std::mem::size_of::<TOKEN_ELEVATION>() as u32;
 
-    let res = GetTokenInformation(
+    let result = GetTokenInformation(
       token,
       TokenElevation,
       Some(&mut elevation as *mut _ as *mut _),
@@ -151,7 +146,7 @@ pub fn is_elevated() -> bool {
 
     let _ = windows::Win32::Foundation::CloseHandle(token);
 
-    if res.is_ok() {
+    if result.is_ok() {
       elevation.TokenIsElevated != 0
     } else {
       false
@@ -159,20 +154,12 @@ pub fn is_elevated() -> bool {
   }
 }
 
-pub fn install(server_addr: Option<&str>, org_id: Option<&str>) -> anyhow::Result<()> {
+pub fn install() -> anyhow::Result<()> {
   if !is_elevated() {
     check_and_request_elevation()?;
     return Ok(());
   }
 
-  // 1. Initialize & persist identity
-  let identity = crate::identity::DeviceIdentity::load_or_create(org_id)?;
-  println!(
-    "Device registered: id={}, org={}",
-    identity.device_id, identity.org_id
-  );
-
-  // 2. Prepare Program Files directory
   let prog_files =
     std::env::var("ProgramFiles").unwrap_or_else(|_| r"C:\Program Files".to_string());
   let target_dir = PathBuf::from(prog_files).join("Desk0");
@@ -182,36 +169,27 @@ pub fn install(server_addr: Option<&str>, org_id: Option<&str>) -> anyhow::Resul
   let current_exe = std::env::current_exe()?;
 
   if current_exe != target_exe {
-    println!("Installing executable to {}...", target_exe.display());
     fs::copy(&current_exe, &target_exe)?;
   }
 
-  // 3. Register & Start Windows Service
   let manager = ServiceManager::local_computer(
     None::<&str>,
     ServiceManagerAccess::CREATE_SERVICE | ServiceManagerAccess::CONNECT,
   )?;
 
-  let mut launch_args = vec![OsString::from("--service")];
-  if let Some(addr) = server_addr {
-    launch_args.push(OsString::from("--server-addr"));
-    launch_args.push(OsString::from(addr));
-  }
-
   let service_info = ServiceInfo {
+    account_name: None,
+    account_password: None,
     name: SERVICE_NAME.into(),
     display_name: SERVICE_DISPLAY_NAME.into(),
     service_type: ServiceType::OWN_PROCESS,
     start_type: ServiceStartType::AutoStart,
     error_control: ServiceErrorControl::Normal,
     executable_path: target_exe.clone(),
-    launch_arguments: launch_args,
     dependencies: vec![],
-    account_name: None,
-    account_password: None,
+    launch_arguments: [OsString::from("--service")],
   };
 
-  // If service exists, delete it first to reinstall cleanly
   if let Ok(existing) =
     manager.open_service(SERVICE_NAME, ServiceAccess::STOP | ServiceAccess::DELETE)
   {
@@ -222,17 +200,12 @@ pub fn install(server_addr: Option<&str>, org_id: Option<&str>) -> anyhow::Resul
 
   let service =
     manager.create_service(&service_info, ServiceAccess::START | ServiceAccess::STOP)?;
-  println!("Windows service '{SERVICE_NAME}' registered successfully with AutoStart.");
 
-  if let Err(e) = service.start(&[]) {
-    eprintln!("Warning: Service registered but could not be started immediately: {e:?}");
-  } else {
-    println!("Windows service '{SERVICE_NAME}' started.");
+  if let Err(error) = service.start(&[]) {
+    eprintln!("Warning: Service registered but could not be started immediately: {error:?}");
   }
 
-  // 4. Clean up temporary installer if executed from temp folder
   if current_exe != target_exe {
-    println!("Installation complete. Installer will now exit and clean up.");
     schedule_self_delete(&current_exe);
   }
 
@@ -257,9 +230,6 @@ pub fn uninstall() -> anyhow::Result<()> {
   {
     let _ = service.stop();
     service.delete()?;
-    println!("Windows service '{SERVICE_NAME}' stopped and removed.");
-  } else {
-    println!("Windows service '{SERVICE_NAME}' is not installed.");
   }
 
   Ok(())

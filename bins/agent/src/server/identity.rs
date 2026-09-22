@@ -31,10 +31,28 @@ impl Identity {
       let device = api.device.create_device(&identity.clone().into()).await?;
       let device_id = device.id.to_string();
       identity.device_id = device_id.clone();
+      db.put("org_id", org_id)?;
       db.put("device_id", device_id)?;
 
       Ok(identity)
     }
+  }
+
+  pub fn get(db: &rocksdb::DB) -> Option<Self> {
+    let org_id = db
+      .get("org_id")
+      .ok()
+      .and_then(|result| result.and_then(|value| String::from_utf8(value).ok()))?;
+
+    let device_id = db
+      .get("device_id")
+      .ok()
+      .and_then(|result| result.and_then(|value| String::from_utf8(value).ok()))?;
+
+    Some(Self {
+      org_id,
+      device_id: device_id.clone(),
+    })
   }
 
   pub fn hostname(&self) -> Option<String> {
