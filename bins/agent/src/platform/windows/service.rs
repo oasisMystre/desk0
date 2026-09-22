@@ -57,7 +57,7 @@ pub async fn run_service() -> anyhow::Result<()> {
   })?;
 
   let exe = std::env::current_exe()?;
-  let status = Command::new(exe).arg("--agent").spawn()?;
+  let child = Command::new(exe).arg("--agent").spawn()?;
 
   tokio::select! {
       _ = shutdown_rx.recv().await => {
@@ -201,7 +201,7 @@ pub fn install() -> anyhow::Result<()> {
   let service =
     manager.create_service(&service_info, ServiceAccess::START | ServiceAccess::STOP)?;
 
-  if let Err(error) = service.start(&[]) {
+  if let Err(error) = service.start::<OsString>(&[]) {
     eprintln!("Warning: Service registered but could not be started immediately: {error:?}");
   }
 
