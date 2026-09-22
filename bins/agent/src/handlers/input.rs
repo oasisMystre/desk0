@@ -43,19 +43,34 @@ impl RdpServerInputHandler for InputHandler {
   fn mouse(&mut self, event: MouseEvent) {
     match event {
       MouseEvent::Move { x, y } => {
-        let _ = self.enigo.move_mouse(x as i32, y as i32, Coordinate::Abs);
+        tracing::debug!(x, y, "RDP mouse move");
+        if let Err(error) = self.enigo.move_mouse(x as i32, y as i32, Coordinate::Abs) {
+          tracing::error!(?error, x, y, "failed to move mouse");
+        }
       }
       MouseEvent::LeftPressed => {
-        let _ = self.enigo.button(Button::Left, Direction::Press);
+        tracing::debug!("RDP left mouse pressed");
+        if let Err(error) = self.enigo.button(Button::Left, Direction::Press) {
+          tracing::error!(?error, "failed to press left mouse button");
+        }
       }
       MouseEvent::LeftReleased => {
-        let _ = self.enigo.button(Button::Left, Direction::Release);
+        tracing::debug!("RDP left mouse released");
+        if let Err(error) = self.enigo.button(Button::Left, Direction::Release) {
+          tracing::error!(?error, "failed to release left mouse button");
+        }
       }
       MouseEvent::RightPressed => {
-        let _ = self.enigo.button(Button::Right, Direction::Press);
+        tracing::debug!("RDP right mouse pressed");
+        if let Err(error) = self.enigo.button(Button::Right, Direction::Press) {
+          tracing::error!(?error, "failed to press right mouse button");
+        }
       }
       MouseEvent::RightReleased => {
-        let _ = self.enigo.button(Button::Right, Direction::Release);
+        tracing::debug!("RDP right mouse released");
+        if let Err(error) = self.enigo.button(Button::Right, Direction::Release) {
+          tracing::error!(?error, "failed to release right mouse button");
+        }
       }
       MouseEvent::MiddlePressed => {
         let _ = self.enigo.button(Button::Middle, Direction::Press);

@@ -10,7 +10,6 @@ client = ["dep:ironrdp-client"]
 [dependencies]
 image = "0.25.10"
 clipboard-rs = "0.3.5"
-clipboard-master = "4.0.0"
 anyhow.workspace = true
 tokio.workspace = true
 tracing.workspace = true

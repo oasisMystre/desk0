@@ -23,7 +23,6 @@ jwt.workspace = true
 sha2.workspace = true
 hmac.workspace = true
 tracing.workspace = true
-tokio-tungstenite = "0.30.0"
 serde_json.workspace = true
 ironrdp-rdcleanpath = "0.2.2"
 rcgen = "0.14.10"
@@ -37,5 +36,4 @@ diesel = "2.3.12"
 aws-sdk-s3 = "1.144.0"
 aws-config = "1.11.0"
 chrono = "0.4.45"
-axum-extra = { version="0.12.6", features=["typed-header"] }
 tower-http = { version="0.7.1", features=["trace"]}

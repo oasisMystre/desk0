@@ -5,12 +5,10 @@ edition = "2024"
 
 [dependencies]
 copypaste = { workspace = true, features = ["server"]}
-flow.workspace = true
 anyhow.workspace = true
 async-trait.workspace = true
 bytes.workspace = true
 clap.workspace = true
-dashmap = "6.2.1"
 display-info = "0.5.9"
 enigo = "0.3.0"
 futures.workspace = true
@@ -21,11 +19,9 @@ rs_capture.workspace = true
 rust-i18n = "4.2.1"
 sys-locale = "0.3.2"
 tokio.workspace = true
-tokio-stream.workspace = true
 tokio-util.workspace = true
 tokio-rustls.workspace = true
 tokio-tungstenite = "0.30.0"
-tonic.workspace = true
 uuid.workspace = true
 serde.workspace = true
 serde_json.workspace = true

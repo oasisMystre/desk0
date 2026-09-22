@@ -11,10 +11,6 @@ copypaste = { workspace = true, features=["client"] }
 anyhow.workspace = true
 ironrdp = { workspace = true, features = ["client", "connector", "cliprdr", "input", "session"] }
 tokio.workspace = true
-tokio-util.workspace = true
-serde.workspace = true
-serde_json.workspace = true
-futures.workspace = true
 smallvec = "1.15"
 softbuffer = "0.4.8"
 tracing.workspace = true
@@ -22,7 +18,6 @@ tracing-subscriber.workspace = true
 winit = "0.30.13"
 url = "2"
 display-info = "0.5.9"
-rust_decimal = "1.43.0"
 clap.workspace = true
 thiserror = "2.0.20"
 whoami = "2.1.3"

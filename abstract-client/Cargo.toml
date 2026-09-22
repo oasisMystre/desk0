@@ -12,13 +12,11 @@ path = "src/main.rs"
 
 [dependencies]
 anyhow.workspace = true
-futures.workspace = true
 ironrdp = { workspace = true, features = ["client", "connector", "cliprdr"] }
 ironrdp-client.workspace = true
 smallvec = "1.15"
 softbuffer = "0.4.8"
 tokio.workspace = true
-tracing.workspace = true
 url = "2"
 winit = "0.30.13"
 

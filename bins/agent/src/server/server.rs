@@ -130,11 +130,9 @@ impl AgentServer {
     }));
 
     handles.push(tokio::task::spawn_local(async move {
-      tracing::info!("starting IronRDP server connection");
       if let Err(error) = server.run_connection_with(stream, TransportTls::AlreadyDone).await {
         eprintln!("Connection dropped: {error:?}");
       }
-      tracing::info!("IronRDP server connection stopped");
     }));
 
     tokio::select! {
