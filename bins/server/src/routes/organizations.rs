@@ -2,7 +2,7 @@ use std::{collections::BTreeMap, sync::Arc};
 
 use axum::{
   Json,
-  extract::{Path, Query, State},
+  extract::{Path, State},
   http::StatusCode,
 };
 use chrono::Utc;
@@ -13,9 +13,7 @@ use jwt::SignWithKey;
 use serde::Deserialize;
 
 use crate::routes::{
-  auth::AuthenticatedUser,
-  state::AppState,
-  types::{CreateConnectionTokenQueryParams, CreateConnectionTokenResponse},
+  auth::AuthenticatedUser, state::AppState, types::CreateConnectionTokenResponse,
 };
 
 #[derive(Deserialize)]
@@ -76,20 +74,13 @@ pub async fn create_organization(
 pub async fn create_connection_token(
   State(AppState { context, .. }): State<AppState>,
   Path(device_id): Path<uuid::Uuid>,
-  Query(query): Query<CreateConnectionTokenQueryParams>,
   user: AuthenticatedUser,
 ) -> Result<Json<CreateConnectionTokenResponse>, StatusCode> {
   let mut claims = BTreeMap::new();
-  claims.insert("sub", user.org_id()?.to_string());
+  claims.insert("role", "organization".into());
   claims.insert("user", user.user.to_string());
   claims.insert("device", device_id.to_string());
-  claims.insert(
-    "role",
-    serde_json::to_string(&query.role).map_err(|error| {
-      tracing::error!(?error, "serialize error");
-      StatusCode::INTERNAL_SERVER_ERROR
-    })?,
-  );
+  claims.insert("sub", user.org_id()?.to_string());
 
   let token = claims
     .sign_with_key(&Arc::unwrap_or_clone(context.auth_key))
@@ -98,5 +89,6 @@ pub async fn create_connection_token(
       StatusCode::INTERNAL_SERVER_ERROR
     })?;
 
+  
   return Ok(Json(CreateConnectionTokenResponse { token }));
 }

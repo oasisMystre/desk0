@@ -81,7 +81,10 @@ impl Desk0Viewer {
       endpoint.set_scheme("wss").ok();
     }
 
-    let clipboard_handler = CliprdrHandler::new();
+    endpoint.set_query(Some(&format!("token={}", config.token)));
+
+    let mut clipboard_handler = CliprdrHandler::new();
+
     let displays = DisplayInfo::all().map_err(Desk0ViewerError::Display)?;
 
     let to_u16 =
@@ -94,19 +97,31 @@ impl Desk0Viewer {
       .and_then(|display| Some((to_u16(display.width)?, to_u16(display.height)?)))
       .unwrap_or((1920, 1080));
 
-    let destination = Destination::new("").map_err(Desk0ViewerError::Configuration)?;
+    let destination = Destination::new("").unwrap();
+
     let config = ConfigBuilder::new()
       .with_destination(destination)
+      .with_username("username")
+      .with_password("username")
       .with_transport(TransportKind::RDCleanPath { url: endpoint })
       .with_rdcleanpath_token(config.token)
       .with_platform(Self::platform())
-      .with_tls(false)
+      .with_tls(true)
       .with_credssp(false)
+      .with_client_dir(
+        std::env::current_exe()
+          .unwrap()
+          .to_string_lossy()
+          .to_string(),
+      )
+      .with_autologon(true)
       .with_desktop_width(width)
       .with_desktop_height(height)
       .with_clipboard(ClipboardType::Enable)
       .with_pointer_software_rendering(true)
-      .with_client_name(Self::CLIENT_NAME)
+      .with_client_name(Self::client_name())
+      .with_client_build(Self::client_build())
+      .with_client_dir("C:\\Windows\\System32\\mstscax.dll")
       .with_static_channel({
         let clipboard_handler = clipboard_handler.clone();
         move |_| Some(Cliprdr::new(clipboard_handler.build_cliprdr_backend()))
@@ -116,6 +131,8 @@ impl Desk0Viewer {
 
     let client = RdpClient::new(config, output_event_sender);
     let input = client.input_sender();
+
+    clipboard_handler.set_sender(input.clone());
 
     Ok(Self {
       input,
@@ -139,6 +156,7 @@ impl Desk0Viewer {
             let input = self.input.clone();
 
             move || {
+              tracing::info!("RDP client worker started");
               rt.block_on(async move {
                 let (callback, mut receiver) = callback;
                 let runner = client.run();
@@ -158,6 +176,7 @@ impl Desk0Viewer {
 
                 drop(input);
               });
+              tracing::info!("RDP client worker stopped");
             }
           })
           .map_err(|error| {
@@ -165,7 +184,11 @@ impl Desk0Viewer {
             Desk0ViewerError::InputClosed
           })?
       } else {
-        thread::spawn(move || rt.block_on(client.run()))
+        thread::spawn(move || {
+          tracing::info!("RDP client worker started");
+          let result = rt.block_on(client.run());
+          tracing::info!(?result, "RDP client worker stopped");
+        })
       };
 
       self.thread = Some(thread);
@@ -180,6 +203,19 @@ impl Desk0Viewer {
 
     #[cfg(target_os = "macos")]
     return MajorPlatformType::MACINTOSH;
+  }
+
+  pub fn client_name() -> String {
+    whoami::hostname().unwrap_or_else(|_| Self::CLIENT_NAME.to_owned())
+  }
+
+  pub fn client_build() -> u32 {
+    semver::Version::parse(env!("CARGO_PKG_VERSION"))
+      .map_or(0, |value| {
+        value.major * 100 + value.minor * 10 + value.patch
+      })
+      .try_into()
+      .unwrap_or(0)
   }
 
   pub fn shutdown(&mut self) {

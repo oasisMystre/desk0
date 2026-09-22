@@ -54,6 +54,15 @@ struct Args {
 const SUPPORTED_LOCALES: [&str; 1] = ["en-US"];
 
 pub fn main() {
+  tracing_subscriber::fmt()
+    .with_env_filter(
+      tracing_subscriber::EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info,ironrdp=debug")),
+    )
+    .with_target(true)
+    .with_thread_names(true)
+    .init();
+
   rust_i18n::i18n!("locale", fallback = ["en-US"]);
 
   let locale = sys_locale::get_locale().unwrap_or_else(|| String::from("en-US"));
@@ -122,6 +131,10 @@ pub fn main() {
           server.run(cancellation_token_clone).await?;
         } else {
           use crate::server::traits::Tunnel;
+
+          rustls::crypto::ring::default_provider()
+                  .install_default()
+                  .unwrap();
 
           let api = Api::from_config(ApiConfig{base_url: &args.api_addr});
           let db = rocksdb::DB::open_default("data")?;

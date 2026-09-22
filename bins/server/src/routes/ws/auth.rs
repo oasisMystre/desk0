@@ -34,12 +34,9 @@ impl Auth {
     }
 
     let claims: BTreeMap<String, String> = token.verify_with_key(&self.key)?;
-    let org_id = claims
-      .get("org_id")
-      .or_else(|| claims.get("sub"))
-      .ok_or_else(|| jwt::Error::Format)?;
+    let org_id = claims.get("sub").ok_or_else(|| jwt::Error::Format)?;
     let device_id = claims
-      .get("device_id")
+      .get("device")
       .or_else(|| claims.get("device"))
       .ok_or_else(|| jwt::Error::Format)?;
 

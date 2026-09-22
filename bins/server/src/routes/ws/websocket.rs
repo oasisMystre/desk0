@@ -1,10 +1,7 @@
 use axum::{
   extract::{Query, State, WebSocketUpgrade},
+  http::HeaderMap,
   response::{IntoResponse, Response},
-};
-use axum_extra::{
-  TypedHeader,
-  headers::{Authorization, authorization::Bearer},
 };
 use serde::Deserialize;
 
@@ -28,18 +25,26 @@ pub async fn ws_route(
     ..
   }): State<AppState>,
   ws: WebSocketUpgrade,
-  authorization: Option<TypedHeader<Authorization<Bearer>>>,
-
+  headers: HeaderMap,
   Query(WebSocketQueryParams { token }): Query<WebSocketQueryParams>,
 ) -> impl IntoResponse {
-  let Some(token) = token.or_else(|| authorization.map(|value| value.0.token().to_string())) else {
-    return Response::builder()
-      .status(401)
-      .body("Unauthorized".into())
-      .unwrap();
+  let token = match token {
+    Some(token) => token,
+    None => {
+      let Some(token) = headers
+        .get("rdcleanpath-token")
+        .and_then(|token| token.to_str().ok())
+      else {
+        return Response::builder()
+          .status(401)
+          .body("Unauthorized".into())
+          .unwrap();
+      };
+
+      token.to_string()
+    }
   };
 
-  let token = token.to_string();
   match auth.authenticate(&token) {
     Ok(claims) => match claims.role.as_deref() {
       Some("agent") => ws.on_upgrade({

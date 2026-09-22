@@ -86,7 +86,7 @@ impl DeviceRegistry {
   }
 
   pub fn get_by_org_and_device_id(&self, org_id: &str, device_id: &str) -> Option<AgentSession> {
-    self
+      self
       .sessions
       .get(&Self::session_key(org_id, device_id))
       .map(|value| value.clone())

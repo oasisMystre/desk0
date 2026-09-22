@@ -28,7 +28,7 @@ use ironrdp::{
 };
 #[cfg(not(feature = "server"))]
 use ironrdp_client::rdp::RdpInputEvent;
-use tokio::sync::mpsc::UnboundedSender;
+use tokio::sync::mpsc::{UnboundedSender, error::SendError};
 
 use crate::types::{ClipboardFile, ClipboardState, DownloadState, DownloadTask};
 
@@ -53,7 +53,7 @@ struct CliprdrHandlerBackend {
   clipboard: ClipboardContext,
   download_state: DownloadState,
   state: Arc<Mutex<ClipboardState>>,
-  sender: UnboundedSender<Event>,
+  sender: Option<UnboundedSender<Event>>,
   capabilities: ClipboardGeneralCapabilityFlags,
 }
 
@@ -67,17 +67,20 @@ impl Debug for CliprdrHandlerBackend {
 
 #[cfg(feature = "server")]
 impl ServerEventSender for CliprdrHandler {
-  fn set_sender(&mut self, sender: UnboundedSender<ServerEvent>) {
+  fn set_sender(&mut self, sender: UnboundedSender<Event>) {
+    self.sender = Some(sender);
+  }
+}
+#[cfg(not(feature = "server"))]
+impl CliprdrHandler {
+  pub fn set_sender(&mut self, sender: UnboundedSender<Event>) {
     self.sender = Some(sender);
   }
 }
 
 impl CliprdrBackendFactory for CliprdrHandler {
   fn build_cliprdr_backend(&self) -> Box<dyn CliprdrBackend> {
-    let sender = self
-      .sender
-      .clone()
-      .expect("sender must be set before building backend");
+    let sender = self.sender.clone();
 
     let temp_dir = std::env::temp_dir()
       .join("cliprdr")
@@ -163,6 +166,14 @@ impl ClipboardHandler for CliprdrHandlerBackend {
 }
 
 impl CliprdrHandlerBackend {
+  fn send(&self, message: Event) -> Result<(), SendError<Event>> {
+    if let Some(ref sender) = self.sender {
+      Ok(sender.send(message)?)
+    } else {
+      panic!("expected sender to be set")
+    }
+  }
+
   fn send_format_list(&self) {
     let state = self.state.lock().unwrap();
 
@@ -193,12 +204,9 @@ impl CliprdrHandlerBackend {
     }
 
     if !formats.is_empty() {
-      if let Err(error) = self
-        .sender
-        .send(Event::Clipboard(ClipboardMessage::SendInitiateCopy(
-          formats,
-        )))
-      {
+      if let Err(error) = self.send(Event::Clipboard(ClipboardMessage::SendInitiateCopy(
+        formats,
+      ))) {
         eprintln!("Failed to send initiate copy event {error}");
       };
     }
@@ -206,12 +214,9 @@ impl CliprdrHandlerBackend {
 
   fn send_text(&self, state: &mut ClipboardState) {
     if let Some(text) = &state.text {
-      if let Err(error) = self
-        .sender
-        .send(Event::Clipboard(ClipboardMessage::SendFormatData(
-          OwnedFormatDataResponse::new_unicode_string(&text),
-        )))
-      {
+      if let Err(error) = self.send(Event::Clipboard(ClipboardMessage::SendFormatData(
+        OwnedFormatDataResponse::new_unicode_string(&text),
+      ))) {
         eprintln!("Failed to send text clipboard event {error}");
       }
     }
@@ -219,12 +224,9 @@ impl CliprdrHandlerBackend {
 
   fn send_html(&self, state: &mut ClipboardState) {
     if let Some(html) = &state.html {
-      if let Err(error) = self
-        .sender
-        .send(Event::Clipboard(ClipboardMessage::SendFormatData(
-          OwnedFormatDataResponse::new_data(Cow::Owned(html.as_bytes().to_vec())),
-        )))
-      {
+      if let Err(error) = self.send(Event::Clipboard(ClipboardMessage::SendFormatData(
+        OwnedFormatDataResponse::new_data(Cow::Owned(html.as_bytes().to_vec())),
+      ))) {
         eprintln!("Failed to send html clipboard event {error}");
       }
     }
@@ -232,12 +234,9 @@ impl CliprdrHandlerBackend {
 
   fn send_rich_text(&self, state: &mut ClipboardState) {
     if let Some(rich_text) = &state.rich_text {
-      if let Err(error) = self
-        .sender
-        .send(Event::Clipboard(ClipboardMessage::SendFormatData(
-          OwnedFormatDataResponse::new_data(Cow::Owned(rich_text.as_bytes().to_vec())),
-        )))
-      {
+      if let Err(error) = self.send(Event::Clipboard(ClipboardMessage::SendFormatData(
+        OwnedFormatDataResponse::new_data(Cow::Owned(rich_text.as_bytes().to_vec())),
+      ))) {
         eprintln!("Failed to send rich_text clipboard event {error}");
       }
     }
@@ -253,12 +252,9 @@ impl CliprdrHandlerBackend {
         }
       };
 
-      if let Err(error) = self
-        .sender
-        .send(Event::Clipboard(ClipboardMessage::SendFormatData(
-          OwnedFormatDataResponse::new_file_list(&PackedFileList { files }).unwrap(),
-        )))
-      {
+      if let Err(error) = self.send(Event::Clipboard(ClipboardMessage::SendFormatData(
+        OwnedFormatDataResponse::new_file_list(&PackedFileList { files }).unwrap(),
+      ))) {
         eprintln!("failed to send file lists {error}");
       }
     }
@@ -266,12 +262,9 @@ impl CliprdrHandlerBackend {
 
   fn send_image(&self, state: &mut ClipboardState) {
     if let Some(image) = &state.image {
-      if let Err(error) = self
-        .sender
-        .send(Event::Clipboard(ClipboardMessage::SendFormatData(
-          OwnedFormatDataResponse::new_data(Cow::Owned(image.clone())),
-        )))
-      {
+      if let Err(error) = self.send(Event::Clipboard(ClipboardMessage::SendFormatData(
+        OwnedFormatDataResponse::new_data(Cow::Owned(image.clone())),
+      ))) {
         eprintln!("failed to send file lists {error}");
       }
     }
@@ -329,20 +322,16 @@ impl CliprdrHandlerBackend {
       }
 
       let chunk_size = remaining.min(MAX_CLIPBOARD_CHUNK as u64) as u32;
-      if let Err(error) =
-        self
-          .sender
-          .send(Event::Clipboard(ClipboardMessage::SendFileContentsRequest(
-            FileContentsRequest {
-              data_id: None,
-              stream_id: task.index,
-              index: task.index as i32,
-              position: task.received,
-              requested_size: chunk_size,
-              flags: FileContentsFlags::RANGE,
-            },
-          )))
-      {
+      if let Err(error) = self.send(Event::Clipboard(ClipboardMessage::SendFileContentsRequest(
+        FileContentsRequest {
+          data_id: None,
+          stream_id: task.index,
+          index: task.index as i32,
+          position: task.received,
+          requested_size: chunk_size,
+          flags: FileContentsFlags::RANGE,
+        },
+      ))) {
         tracing::error!(?error, "Failed to send file contents request");
       }
     }
@@ -407,12 +396,9 @@ impl CliprdrBackend for CliprdrHandlerBackend {
     }
 
     if let Some(format_id) = format_to_request {
-      if let Err(error) = self
-        .sender
-        .send(Event::Clipboard(ClipboardMessage::SendInitiatePaste(
-          format_id,
-        )))
-      {
+      if let Err(error) = self.send(Event::Clipboard(ClipboardMessage::SendInitiatePaste(
+        format_id,
+      ))) {
         eprintln!("Failed to initiate paste from remote {error}");
       }
     }
@@ -542,7 +528,7 @@ impl CliprdrBackend for CliprdrHandlerBackend {
 
     match result {
       Ok(buffer) => {
-        if let Err(error) = self.sender.send(Event::Clipboard(
+        if let Err(error) = self.send(Event::Clipboard(
           ClipboardMessage::SendFileContentsResponse(FileContentsResponse::new_data_response(
             request.stream_id,
             Cow::Owned(buffer),
@@ -557,7 +543,7 @@ impl CliprdrBackend for CliprdrHandlerBackend {
           ?error,
           "failed to read clipboard file"
         );
-        if let Err(error) = self.sender.send(Event::Clipboard(
+        if let Err(error) = self.send(Event::Clipboard(
           ClipboardMessage::SendFileContentsResponse(FileContentsResponse::new_error(
             request.stream_id,
           )),

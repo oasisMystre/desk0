@@ -1,13 +1,15 @@
 use std::net::SocketAddr;
+use std::sync::Arc;
 
 use copypaste::CliprdrHandler;
 use enigo::Settings;
-use ironrdp::server::RdpServer;
+use ironrdp::server::{RdpServer, TransportTls};
 use tokio::{
   io::{AsyncRead, AsyncWrite},
   net::TcpListener,
 };
 use tokio_util::sync::CancellationToken;
+use tokio_rustls::{TlsAcceptor, rustls::{self, pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer}}};
 
 use crate::{
   handlers::{display::DisplayHandler, input::InputHandler},
@@ -59,9 +61,11 @@ impl Server for AgentServer {
               let cancellation_token = cancellation_token.clone();
 
               tokio::task::spawn_local(async move {
+                tracing::info!(%peer_addr, "RDP connection accepted");
                 if let Err(error) = Self::handle(config, stream, cancellation_token).await {
                   eprintln!("Connection handler error for {peer_addr}: {error:?}");
                 }
+                tracing::info!(%peer_addr, "RDP connection handler stopped");
               });
             }
           }
@@ -76,6 +80,19 @@ impl Server for AgentServer {
 }
 
 impl AgentServer {
+  fn tls_acceptor() -> anyhow::Result<TlsAcceptor> {
+    let identity = rcgen::generate_simple_self_signed(vec!["desk0-agent".to_owned()])?;
+    let certificate = CertificateDer::from(identity.cert.der().to_vec());
+    let private_key = PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(
+      identity.signing_key.serialize_der(),
+    ));
+    let config = rustls::ServerConfig::builder()
+      .with_no_client_auth()
+      .with_single_cert(vec![certificate], private_key)?;
+
+    Ok(TlsAcceptor::from(Arc::new(config)))
+  }
+
   pub async fn handle<S>(
     config: AgentServerConfig,
     stream: S,
@@ -93,9 +110,10 @@ impl AgentServer {
       .addr
       .unwrap_or_else(|| SocketAddr::from(([127, 0, 0, 1], 0)));
 
+    let tls_acceptor = Self::tls_acceptor()?;
     let server = RdpServer::builder()
       .with_addr(addr)
-      .with_no_security()
+      .with_tls(tls_acceptor)
       .with_input_handler(input_handler)
       .with_display_handler(display_handler.clone())
       .with_cliprdr_factory(Some(Box::new(CliprdrHandler::new())));
@@ -112,9 +130,11 @@ impl AgentServer {
     }));
 
     handles.push(tokio::task::spawn_local(async move {
-      if let Err(error) = server.run_connection(stream).await {
+      tracing::info!("starting IronRDP server connection");
+      if let Err(error) = server.run_connection_with(stream, TransportTls::AlreadyDone).await {
         eprintln!("Connection dropped: {error:?}");
       }
+      tracing::info!("IronRDP server connection stopped");
     }));
 
     tokio::select! {

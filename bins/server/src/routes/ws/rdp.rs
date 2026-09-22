@@ -2,7 +2,10 @@ use std::sync::Arc;
 
 use axum::extract::ws::{Message, WebSocket};
 use futures::StreamExt;
-use tokio::sync::mpsc::UnboundedReceiver;
+use tokio::{
+  sync::mpsc::UnboundedReceiver,
+  time::{Duration, timeout},
+};
 
 use crate::routes::ws::{
   auth::Claims,
@@ -12,10 +15,11 @@ use crate::routes::ws::{
 pub async fn handle_viewer(
   mut socket: WebSocket,
   claims: Claims,
-  registry: DeviceRegistry,
+  registry: Arc<DeviceRegistry>,
   mut presence: UnboundedReceiver<DeviceInfo>,
   certificate: Arc<Vec<u8>>,
 ) {
+  tracing::info!(org = %claims.org_id, device = %claims.device_id, "viewer RDP WebSocket connected");
   let agent = match registry.get_by_org_and_device_id(&claims.org_id, &claims.device_id) {
     Some(agent) => agent,
     None => loop {
@@ -50,7 +54,7 @@ pub async fn handle_viewer(
       }
     },
   };
-
+  tracing::info!("agent found");
   let mut agent_reader = agent.subscribe_inbound();
   if let Err(error) =
     negotiate_rdcleanpath(&mut socket, &agent, &mut agent_reader, &certificate).await
@@ -63,6 +67,7 @@ pub async fn handle_viewer(
     tokio::select! {
       result = socket.next() => match result {
         Some(Ok(Message::Binary(bytes))) => {
+          tracing::debug!(bytes = bytes.len(), "viewer -> agent RDP bytes");
           if let Err(error) = agent.sender.send(Message::Binary(bytes)) {
             tracing::debug!(?error, "agent websocket closed while sending viewer data");
             break;
@@ -87,6 +92,9 @@ pub async fn handle_viewer(
       },
       result = agent_reader.recv() => match result {
         Some(message) => {
+          if let Message::Binary(ref bytes) = message {
+            tracing::debug!(bytes = bytes.len(), "agent -> viewer RDP bytes");
+          }
           if let Err(error) = socket.send(message).await {
             tracing::debug!(?error, "viewer write failed");
             break;
@@ -125,6 +133,8 @@ async fn negotiate_rdcleanpath(
     }
   };
 
+  tracing::info!("sending back");
+
   let request = match request.into_enum()? {
     ironrdp_rdcleanpath::RDCleanPath::Request {
       x224_connection_request,
@@ -134,14 +144,24 @@ async fn negotiate_rdcleanpath(
   };
 
   agent.sender.send(Message::Binary(request.into()))?;
-  let response = loop {
-    let Some(message) = agent_reader.recv().await else {
-      anyhow::bail!("agent closed during RDCleanPath negotiation")
-    };
-    if let Message::Binary(bytes) = message {
-      break bytes;
+  tracing::info!("RDCleanPath request forwarded to agent; waiting for response");
+  
+  let response = timeout(Duration::from_secs(15), async {
+    loop {
+      let Some(message) = agent_reader.recv().await else {
+        anyhow::bail!("agent closed during RDCleanPath negotiation")
+      };
+      if let Message::Binary(bytes) = message {
+        break Ok::<_, anyhow::Error>(bytes);
+      }
     }
-  };
+  })
+  .await
+  .map_err(|_| anyhow::anyhow!("timed out waiting 15s for agent RDCleanPath response"))??;
+  tracing::debug!(
+    bytes = response.len(),
+    "RDCleanPath response received from agent"
+  );
 
   let response = ironrdp_rdcleanpath::RDCleanPath::Response {
     x224_connection_response: ironrdp_rdcleanpath::der::asn1::OctetString::new(response)

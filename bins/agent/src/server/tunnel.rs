@@ -53,42 +53,58 @@ impl AgentTunnel {
     let token = self.api.device.get_token(&self.identity.device_id).await?;
     let url = self.websocket_url(&token);
 
+    tracing::info!("connecting agent WebSocket");
     let (websocket, _) = connect_async(url).await?;
+    tracing::info!("agent WebSocket connected");
     let (mut websocket_writer, mut websocket_reader) = websocket.split();
 
     let (mut rdp_peer, rdp_stream) = tokio::io::duplex(1024 * 1024);
 
+    let rdp_cancellation = CancellationToken::new();
     let rdp = AgentServer::handle(
       AgentServerConfig::default(),
       rdp_stream,
-      CancellationToken::new(),
+      rdp_cancellation.clone(),
     );
     tokio::pin!(rdp);
     let mut bytes = [0; 16 * 1024];
 
-    loop {
+    let disconnect_reason = loop {
       tokio::select! {
         result = websocket_reader.next() => match result {
-          Some(Ok(Message::Binary(bytes))) => rdp_peer.write_all(&bytes).await?,
+          Some(Ok(Message::Binary(bytes))) => {
+            tracing::debug!(bytes = bytes.len(), "server -> agent RDP bytes");
+            rdp_peer.write_all(&bytes).await?
+          },
           Some(Ok(Message::Ping(bytes))) => websocket_writer.send(Message::Pong(bytes)).await?,
-          Some(Ok(Message::Close(_))) | None => break,
+          Some(Ok(Message::Close(_))) | None => break "server closed agent WebSocket",
           Some(Ok(Message::Pong(_) | Message::Text(_) | Message::Frame(_))) => {},
-          Some(Err(error)) => return Err(error.into()),
+          Some(Err(error)) => {
+            tracing::warn!(?error, "agent WebSocket read failed");
+            break "agent WebSocket read failed";
+          }
         },
         result = rdp_peer.read(&mut bytes) => {
           let count = result?;
           if count == 0 {
-            break;
+            break "local RDP stream closed";
           }
+          tracing::debug!(bytes = count, "agent -> server RDP bytes");
           websocket_writer
             .send(Message::Binary(bytes[..count].to_vec().into()))
             .await?;
         },
         result = &mut rdp => {
           result?;
-          break;
+          break "RDP server stopped";
         },
       }
+    };
+
+    rdp_cancellation.cancel();
+    tracing::info!(reason = disconnect_reason, "closing agent WebSocket");
+    if let Err(error) = websocket_writer.close().await {
+      tracing::debug!(?error, "agent WebSocket close handshake failed");
     }
 
     Ok(())

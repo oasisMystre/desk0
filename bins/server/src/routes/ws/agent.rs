@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use axum::extract::ws::{Message, WebSocket};
 
 use crate::routes::ws::{
@@ -5,7 +7,7 @@ use crate::routes::ws::{
   registry::{DeviceInfo, DeviceRegistry},
 };
 
-pub async fn handle_agent(mut socket: WebSocket, claims: Claims, registry: DeviceRegistry) {
+pub async fn handle_agent(mut socket: WebSocket, claims: Claims, registry: Arc<DeviceRegistry>) {
   let (agent_sender, mut agent_receiver) = tokio::sync::mpsc::unbounded_channel();
   let agent_session = registry.register(
     DeviceInfo {
@@ -24,7 +26,10 @@ pub async fn handle_agent(mut socket: WebSocket, claims: Claims, registry: Devic
         }
       }
       result = socket.recv() => match result {
-        Some(Ok(Message::Binary(bytes))) => agent_session.publish_inbound(Message::Binary(bytes)),
+        Some(Ok(Message::Binary(bytes))) => {
+          tracing::debug!(bytes = bytes.len(), "agent -> relay RDP bytes");
+          agent_session.publish_inbound(Message::Binary(bytes));
+        }
         Some(Ok(Message::Ping(bytes))) => {
           if let Err(error) = socket.send(Message::Pong(bytes)).await {
             tracing::debug!(?error, "agent pong failed");
@@ -46,5 +51,6 @@ pub async fn handle_agent(mut socket: WebSocket, claims: Claims, registry: Devic
     }
   }
 
+  tracing::info!(org = %claims.org_id, device = %claims.device_id, "agent WebSocket disconnected");
   registry.unregister(&claims.org_id, &claims.device_id);
 }

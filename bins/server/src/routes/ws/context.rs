@@ -5,7 +5,7 @@ use crate::routes::ws::{auth::Auth, registry::DeviceRegistry};
 #[derive(Clone)]
 pub struct WsContext {
   pub auth: Auth,
-  pub registry: DeviceRegistry,
+  pub registry: Arc<DeviceRegistry>,
   pub certificate: Arc<Vec<u8>>,
 }
 
@@ -17,7 +17,7 @@ impl WsContext {
     Ok(Self {
       certificate,
       auth: Auth::from_env()?,
-      registry: DeviceRegistry::new(),
+      registry: Arc::new(DeviceRegistry::new()),
     })
   }
 }

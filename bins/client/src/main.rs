@@ -17,7 +17,7 @@ mod viewer;
 #[command(name = "desk0-viewer", version, about, long_about = None)]
 struct Args {
   /// RDCleanPath / websocket endpoint to connect to
-  #[arg(long)]
+  #[arg(long, default_value = "http://172.20.10.4:8080/ws")]
   endpoint: String,
 
   /// Auth token for the RDP session
@@ -34,7 +34,17 @@ struct Args {
 }
 
 fn main() -> anyhow::Result<()> {
+  tracing_subscriber::fmt()
+    .with_env_filter(
+      tracing_subscriber::EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info,ironrdp=debug")),
+    )
+    .with_target(true)
+    .with_thread_names(true)
+    .init();
+
   let args = Args::parse();
+  tracing::info!(endpoint = %args.endpoint, "starting RDP client");
 
   let initial_size = match (args.width, args.height) {
     (Some(width), Some(height)) => Some(PhysicalSize::new(width, height)),
@@ -44,13 +54,18 @@ fn main() -> anyhow::Result<()> {
 
   let (output_event_sender, mut output_event_receiver) = channel::<RdpOutputEvent>(64);
 
-  let viewer = Desk0Viewer::with_channel(
+  let mut viewer = Desk0Viewer::with_channel(
     Desk0ViewerConfig {
       token: &args.token,
       endpoint: &args.endpoint,
     },
     output_event_sender,
   )?;
+
+  let rt = tokio::runtime::Builder::new_multi_thread()
+    .enable_all()
+    .build()?;
+  viewer.run(rt, None)?;
 
   let event_loop = EventLoop::<RdpOutputEvent>::with_user_event().build()?;
   let proxy = event_loop.create_proxy();
@@ -72,10 +87,35 @@ fn main() -> anyhow::Result<()> {
 
       rt.block_on(async move {
         while let Some(event) = output_event_receiver.recv().await {
+          match &event {
+            RdpOutputEvent::Image { width, height, .. } => {
+              tracing::debug!(?width, ?height, "RDP image received");
+            }
+            RdpOutputEvent::PointerBitmap(pointer) => {
+              tracing::debug!(
+                width = pointer.width,
+                height = pointer.height,
+                "RDP pointer bitmap received"
+              );
+            }
+            RdpOutputEvent::PointerPosition { x, y } => {
+              tracing::debug!(x, y, "RDP pointer position received");
+            }
+            RdpOutputEvent::PointerHidden => tracing::debug!("RDP pointer hidden"),
+            RdpOutputEvent::PointerDefault => tracing::debug!("RDP default pointer received"),
+            RdpOutputEvent::ConnectionFailure(error) => {
+              tracing::error!(?error, "RDP connection failure event received");
+            }
+            RdpOutputEvent::Terminated(reason) => {
+              tracing::info!(?reason, "RDP terminated event received")
+            }
+          }
           if proxy.send_event(event).is_err() {
+            tracing::warn!("RDP UI event loop closed");
             break;
           }
         }
+        tracing::info!("RDP output event bridge stopped");
       });
     })?;
 
