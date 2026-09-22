@@ -120,10 +120,10 @@ pub fn main() {
           server.run(cancellation_token_clone).await?;
         } else {
           use crate::server::traits::Tunnel;
-
+          println!("1");
           let api = Api::from_config(ApiConfig{base_url: &args.api_addr});
           let db = rocksdb::DB::open_default("data")?;
-
+          println!("2");
           let identity = crate::server::identity::Identity::upsert(&api, &db, args.org_id).await?;
           println!(
             "Starting Desk0 Agent Tunnel (Device ID: {}, Org: {})",
@@ -131,6 +131,8 @@ pub fn main() {
           );
           let tunnel = crate::server::tunnel::AgentTunnel::new(args.server_addr, identity, api);
           tunnel.run( cancellation_token_clone).await?;
+          println!("3");
+
         }
 
         Ok::<_, anyhow::Error>(())
