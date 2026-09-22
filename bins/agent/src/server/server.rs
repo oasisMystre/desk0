@@ -110,7 +110,7 @@ impl AgentServer {
       .addr
       .unwrap_or_else(|| SocketAddr::from(([127, 0, 0, 1], 0)));
 
-    // let tls_acceptor = Self::tls_acceptor()?;
+    let tls_acceptor = Self::tls_acceptor()?;
     let server = RdpServer::builder()
       .with_addr(addr)
     // .with_no_security()
