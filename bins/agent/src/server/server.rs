@@ -110,10 +110,11 @@ impl AgentServer {
       .addr
       .unwrap_or_else(|| SocketAddr::from(([127, 0, 0, 1], 0)));
 
-    let tls_acceptor = Self::tls_acceptor()?;
+    // let tls_acceptor = Self::tls_acceptor()?;
     let server = RdpServer::builder()
       .with_addr(addr)
-      .with_tls(tls_acceptor)
+    .with_no_security()
+      // .with_tls(tls_acceptor)
       .with_input_handler(input_handler)
       .with_display_handler(display_handler.clone())
       .with_cliprdr_factory(Some(Box::new(CliprdrHandler::new())));
