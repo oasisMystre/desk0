@@ -60,7 +60,7 @@ pub async fn run_service() -> anyhow::Result<()> {
   let child = Command::new(exe).arg("--agent").spawn()?;
 
   tokio::select! {
-      _ = shutdown_rx.recv().await => {
+      _ = shutdown_rx.recv() => {
           let _ = child.kill().await;
           let _ = child.wait().await;
       },
