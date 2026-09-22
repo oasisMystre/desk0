@@ -32,7 +32,7 @@ fn service_main(_args: Vec<OsString>) {
   });
 }
 
-pub async fn run_service() -> Result<()> {
+pub async fn run_service() -> anyhow::Result<()> {
   let (shutdown_tx, mut shutdown_rx) = tokio::sync::mpsc::channel::<()>(1);
   let status_handle =
     service_control_handler::register(SERVICE_NAME, move |control_event| match control_event {
@@ -187,7 +187,7 @@ pub fn install() -> anyhow::Result<()> {
     error_control: ServiceErrorControl::Normal,
     executable_path: target_exe.clone(),
     dependencies: vec![],
-    launch_arguments: [OsString::from("--service")],
+    launch_arguments: vec![OsString::from("--service")],
   };
 
   if let Ok(existing) =
