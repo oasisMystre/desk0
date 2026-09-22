@@ -113,7 +113,7 @@ impl AgentServer {
     // let tls_acceptor = Self::tls_acceptor()?;
     let server = RdpServer::builder()
       .with_addr(addr)
-    .with_no_security()
+    // .with_no_security()
       .with_tls(tls_acceptor)
       .with_input_handler(input_handler)
       .with_display_handler(display_handler.clone())
