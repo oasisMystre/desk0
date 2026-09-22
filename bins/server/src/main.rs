@@ -5,6 +5,7 @@ use axum::{
 use clap::Parser;
 use shared::init::{init_tracing, load_env};
 use tokio::net::TcpListener;
+use tower_http::trace::TraceLayer;
 
 use crate::routes::state::AppState;
 
@@ -70,6 +71,7 @@ pub async fn main() -> anyhow::Result<()> {
       delete(routes::attachments::delete_attachment),
     )
     .route("/ws", get(routes::ws::websocket::ws_route))
+    .layer(TraceLayer::new_for_http())
     .with_state(state);
 
   tokio::select! {

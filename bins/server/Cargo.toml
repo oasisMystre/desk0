@@ -38,3 +38,4 @@ aws-sdk-s3 = "1.144.0"
 aws-config = "1.11.0"
 chrono = "0.4.45"
 axum-extra = { version="0.12.6", features=["typed-header"] }
+tower-http = { version="0.7.1", features=["trace"]}
