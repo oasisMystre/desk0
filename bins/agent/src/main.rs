@@ -127,7 +127,7 @@ pub fn main() {
           let identity = match crate::server::identity::Identity::upsert(&api, &db, args.org_id).await {
             Ok(value) => value,
             Err(error) => {
-                eprintln!("identity {error:?}");
+                eprintln!("identity {error:#?}");
                 return Err(error);
             }
         };
