@@ -114,7 +114,7 @@ impl AgentServer {
     let server = RdpServer::builder()
       .with_addr(addr)
     .with_no_security()
-      // .with_tls(tls_acceptor)
+      .with_tls(tls_acceptor)
       .with_input_handler(input_handler)
       .with_display_handler(display_handler.clone())
       .with_cliprdr_factory(Some(Box::new(CliprdrHandler::new())));
@@ -131,7 +131,7 @@ impl AgentServer {
     }));
 
     handles.push(tokio::task::spawn_local(async move {
-      if let Err(error) = server.run_connection_with(stream, TransportTls::AlreadyDone).await {
+      if let Err(error) = server.run_connection(stream).await {
         eprintln!("Connection dropped: {error:?}");
       }
     }));
