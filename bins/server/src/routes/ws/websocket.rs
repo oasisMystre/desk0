@@ -28,48 +28,38 @@ pub async fn ws_route(
   headers: HeaderMap,
   Query(WebSocketQueryParams { token }): Query<WebSocketQueryParams>,
 ) -> impl IntoResponse {
-  let token = match token {
-    Some(token) => token,
-    None => {
-      let Some(token) = headers
-        .get("rdcleanpath-token")
-        .and_then(|token| token.to_str().ok())
-      else {
-        return Response::builder()
-          .status(401)
-          .body("Unauthorized".into())
-          .unwrap();
-      };
-
-      token.to_string()
-    }
+  let token = if token.is_some() {
+    token
+  } else {
+    headers
+      .get("x-token")
+      .and_then(|token| token.to_str().ok())
+      .map(|value| value.to_string())
   };
 
-  match auth.authenticate(&token) {
-    Ok(claims) => match claims.role.as_deref() {
-      Some("agent") => ws.on_upgrade({
+  let unauthorized = Response::builder()
+    .status(401)
+    .body("Unauthorized".into())
+    .unwrap();
+
+  if let Some(token) = token {
+    return match auth.authenticate(&token) {
+      Ok(claims) if claims.role.as_deref() == Some("agent") => ws.on_upgrade({
         let claims = claims.clone();
         move |socket| agent::handle_agent(socket, claims, registry)
       }),
-      Some("organization") => ws.on_upgrade({
-        let claims = claims.clone();
-
-        move |socket| {
-          let presence = registry.subscribe_presence();
-          rdp::handle_viewer(socket, claims, registry, presence, certificate)
-        }
-      }),
-      _ => Response::builder()
-        .status(401)
-        .body("invalid role".into())
-        .unwrap(),
-    },
-    Err(error) => {
-      tracing::error!(?error, "WebSocket authentication failed");
-      Response::builder()
-        .status(401)
-        .body("Unauthorized".into())
-        .unwrap()
-    }
+      Ok(_) => Response::builder().status(401).body("invalid role".into()).unwrap(),
+      Err(error) => {
+        tracing::error!(?error, "agent WebSocket authentication failed");
+        unauthorized
+      }
+    };
   }
+
+  ws.on_upgrade({
+    move |socket| {
+      let presence = registry.subscribe_presence();
+      rdp::handle_viewer(socket, auth, registry, presence, certificate)
+    }
+  })
 }

@@ -122,6 +122,10 @@ pub fn main() {
         cancellation_token.cancel();
       }
       result = async {
+        rustls::crypto::ring::default_provider()
+            .install_default()
+            .unwrap();
+
         if args.listen {
           use crate::server::traits::Server;
 
@@ -132,10 +136,6 @@ pub fn main() {
         } else {
           use crate::server::traits::Tunnel;
 
-          rustls::crypto::ring::default_provider()
-                  .install_default()
-                  .unwrap();
-
           let api = Api::from_config(ApiConfig{base_url: &args.api_addr});
           let db = rocksdb::DB::open_default("data")?;
 
@@ -143,7 +143,6 @@ pub fn main() {
           let tunnel = crate::server::tunnel::AgentTunnel::new(args.server_addr, identity, api);
           tunnel.run( cancellation_token_clone).await?;
         }
-
         Ok::<_, anyhow::Error>(())
       } => {
         if let Err(error) = result {

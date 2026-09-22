@@ -350,11 +350,11 @@ impl Desk0App {
       }
       WindowEvent::MouseInput { state, button, .. } => {
         let button = match button {
+          winit::event::MouseButton::Back => ironrdp::input::MouseButton::X1,
+          winit::event::MouseButton::Forward => ironrdp::input::MouseButton::X2,
           winit::event::MouseButton::Left => ironrdp::input::MouseButton::Left,
           winit::event::MouseButton::Right => ironrdp::input::MouseButton::Right,
           winit::event::MouseButton::Middle => ironrdp::input::MouseButton::Middle,
-          winit::event::MouseButton::Back => ironrdp::input::MouseButton::X1,
-          winit::event::MouseButton::Forward => ironrdp::input::MouseButton::X2,
           winit::event::MouseButton::Other(native_button) => {
             if let Some(button) = ironrdp::input::MouseButton::from_native_button(native_button) {
               button
@@ -388,9 +388,6 @@ impl Desk0App {
         buffer.copy_from_slice(&self.buffer.as_slice());
         buffer.present().expect("buffer present");
       }
-      WindowEvent::DroppedFile(pathbuf) => {}
-      WindowEvent::HoveredFile(pathbuf) => {}
-      WindowEvent::HoveredFileCancelled => {}
       _ => {}
     }
   }
@@ -441,6 +438,7 @@ fn apply_and_send_fast_path_events(
   operations: impl IntoIterator<Item = Operation>,
 ) {
   let events = input_database.apply(operations);
+
   if !events.is_empty() {
     if let Err(error) = viewer.input.send(RdpInputEvent::FastPath(events)) {
       tracing::error!(?error, "rdp input closed");

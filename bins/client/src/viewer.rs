@@ -81,8 +81,6 @@ impl Desk0Viewer {
       endpoint.set_scheme("wss").ok();
     }
 
-    endpoint.set_query(Some(&format!("token={}", config.token)));
-
     let mut clipboard_handler = CliprdrHandler::new();
 
     let displays = DisplayInfo::all().map_err(Desk0ViewerError::Display)?;
