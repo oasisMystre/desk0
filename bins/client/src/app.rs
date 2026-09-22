@@ -2,7 +2,11 @@ use std::{num::NonZeroU32, rc::Rc, time::Duration};
 
 use ironrdp::{
   client::rdp::{RdpInputEvent, RdpOutputEvent},
-  input::{Database, MousePosition, Operation, Scancode, WheelRotations},
+  input::{
+    Database, MousePosition,
+    Operation::{self, KeyReleased},
+    Scancode, WheelRotations,
+  },
 };
 use smallvec::SmallVec;
 use softbuffer::{Context, Surface};
@@ -231,6 +235,16 @@ impl Desk0App {
 
     match event {
       WindowEvent::Resized(size) => {
+        if let AppState::Running { surface, .. } = &mut self.state {
+          if let (Some(width), Some(height)) =
+            (NonZeroU32::new(size.width), NonZeroU32::new(size.height))
+          {
+            if let Err(error) = surface.resize(width, height) {
+              tracing::error!(?error, "failed to resize surface");
+            }
+          }
+        }
+
         self.last_size = Some(size);
         self.resize_timeout = Some(Instant::now() + Duration::from_secs(1));
       }
@@ -267,7 +281,7 @@ impl Desk0App {
             ]
           }
           winit::event::ElementState::Released => {
-            smallvec::smallvec![Operation::KeyPressed(scancode),]
+            smallvec::smallvec![Operation::KeyReleased(scancode),]
           }
         };
 

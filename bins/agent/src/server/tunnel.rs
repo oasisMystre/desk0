@@ -62,7 +62,10 @@ impl AgentTunnel {
 
     let rdp_cancellation = CancellationToken::new();
     let rdp = AgentServer::handle(
-      AgentServerConfig::default(),
+      AgentServerConfig {
+        tunnel: true,
+        ..Default::default()
+      },
       rdp_stream,
       rdp_cancellation.clone(),
     );
@@ -89,7 +92,7 @@ impl AgentTunnel {
           if count == 0 {
             break "local RDP stream closed";
           }
-          tracing::debug!(bytes = count, "agent -> server RDP bytes");
+          tracing::debug!(bytes = count, prefix = ?&bytes[..count.min(8)], "agent -> server RDP bytes");
           websocket_writer
             .send(Message::Binary(bytes[..count].to_vec().into()))
             .await?;

@@ -8,8 +8,14 @@ use tokio::{
   io::{AsyncRead, AsyncWrite},
   net::TcpListener,
 };
+use tokio_rustls::{
+  TlsAcceptor,
+  rustls::{
+    self,
+    pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer},
+  },
+};
 use tokio_util::sync::CancellationToken;
-use tokio_rustls::{TlsAcceptor, rustls::{self, pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer}}};
 
 use crate::{
   handlers::{display::DisplayHandler, input::InputHandler},
@@ -23,13 +29,17 @@ pub struct AgentServer {
 
 #[derive(Clone, Default)]
 pub struct AgentServerConfig {
+  pub tunnel: bool,
   pub addr: Option<SocketAddr>,
 }
 
 impl AgentServer {
   pub fn new(addr: SocketAddr) -> Self {
     Self {
-      config: AgentServerConfig { addr: Some(addr) },
+      config: AgentServerConfig {
+        addr: Some(addr),
+        tunnel: false,
+      },
     }
   }
 }
@@ -113,7 +123,6 @@ impl AgentServer {
     let tls_acceptor = Self::tls_acceptor()?;
     let server = RdpServer::builder()
       .with_addr(addr)
-    // .with_no_security()
       .with_tls(tls_acceptor)
       .with_input_handler(input_handler)
       .with_display_handler(display_handler.clone())
@@ -131,7 +140,15 @@ impl AgentServer {
     }));
 
     handles.push(tokio::task::spawn_local(async move {
-      if let Err(error) = server.run_connection(stream).await {
+      let future = if config.tunnel {
+        server
+          .run_connection_with(stream, TransportTls::AlreadyDone)
+          .await
+      } else {
+        server.run_connection(stream).await
+      };
+
+      if let Err(error) = future {
         eprintln!("Connection dropped: {error:?}");
       }
     }));

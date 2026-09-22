@@ -80,7 +80,7 @@ pub async fn handle_viewer(
       },
       result = agent_reader.recv() => match result {
         Some(message) => {
-          if let Message::Binary(ref bytes) = message { tracing::debug!(bytes = bytes.len(), "agent -> viewer RDP bytes"); }
+          if let Message::Binary(ref bytes) = message { tracing::debug!(bytes = bytes.len(), prefix = ?&bytes[..bytes.len().min(8)], "agent -> viewer RDP bytes"); }
           if socket.send(message).await.is_err() { break; }
         }
         None => break,
