@@ -261,6 +261,8 @@ impl CliprdrHandlerBackend {
 
           if let Err(error) = self.clipboard.set_files(paths) {
             tracing::error!(?error, "Failed to set downloaded files to clipboard");
+          } else {
+            tracing::info!("Downloaded clipboard files and published them to the local clipboard");
           }
 
           download_state.downloaded.clear();
@@ -373,6 +375,7 @@ impl CliprdrBackend for CliprdrHandlerBackend {
     }
 
     if let Some(format_id) = format_to_request {
+      tracing::info!(format = ?format_id, "Initiating paste for remote clipboard data");
       if let Err(error) = self
         .handler
         .send(Event::Clipboard(ClipboardMessage::SendInitiatePaste(
