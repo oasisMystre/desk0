@@ -1,6 +1,6 @@
 use std::{
   num::{NonZeroU16, NonZeroUsize},
-  sync::Arc,
+  sync::{Arc, atomic::Ordering},
 };
 
 use display_info::DisplayInfo;
@@ -81,9 +81,9 @@ impl DisplayHandler {
       Arc::new(move |frame: rs_capture::FrameData, this: &ScreenCapture| {
         let width = frame.width as usize;
         let height = frame.height as usize;
-        let is_first = first_frame_clone.swap(false, std::sync::atomic::Ordering::Relaxed);
+        let is_first = first_frame_clone.swap(false, Ordering::Relaxed);
 
-        let updates = if is_first {
+        let mut updates = if is_first {
           match Self::get_full_frame_update(&frame.data, width, height) {
             Some(update) => vec![update],
             None => return,
@@ -91,6 +91,8 @@ impl DisplayHandler {
         } else {
           Self::get_frame_updates_from_metadata(&frame.data, width, height, &frame.metadata)
         };
+
+        Self::append_pointer_updates(&mut updates, &frame.metadata);
 
         for update in updates {
           if sender.send(update).is_err() {
@@ -161,30 +163,6 @@ impl DisplayHandler {
         continue;
       };
 
-      if let Some(pointer) = &metadata.pointer_shape {
-        match pointer {
-          PointerShape::Hidden => updates.push(DisplayUpdate::HidePointer),
-          PointerShape::Default => updates.push(DisplayUpdate::DefaultPointer),
-          PointerShape::Color(pointer) => updates.push(DisplayUpdate::ColorPointer(ColorPointer {
-            width: pointer.width,
-            height: pointer.height,
-            hot_x: pointer.hot_x,
-            hot_y: pointer.hot_y,
-            cache_index: pointer.cache_index,
-            and_mask: pointer.and_mask.to_vec(),
-            xor_mask: pointer.xor_mask.to_vec(),
-          })),
-          PointerShape::Rgba(pointer) => updates.push(DisplayUpdate::RGBAPointer(RGBAPointer {
-            width: pointer.width,
-            height: pointer.height,
-            hot_x: pointer.hot_x,
-            hot_y: pointer.hot_y,
-            data: pointer.data.to_vec(),
-            cache_index: pointer.cache_index,
-          })),
-        }
-      }
-
       updates.push(DisplayUpdate::Bitmap(BitmapUpdate {
         x: x as u16,
         y: y as u16,
@@ -197,6 +175,68 @@ impl DisplayHandler {
     }
 
     updates
+  }
+
+  fn append_pointer_updates(updates: &mut Vec<DisplayUpdate>, metadata: &FrameMetadata) {
+    if let Some(pointer) = &metadata.pointer_shape {
+      match pointer {
+        PointerShape::Hidden => {
+          tracing::debug!("Sending RDP hidden-pointer update");
+          updates.push(DisplayUpdate::HidePointer);
+        }
+        PointerShape::Default => {
+          tracing::debug!("Sending RDP default-pointer update");
+          updates.push(DisplayUpdate::DefaultPointer);
+        }
+        PointerShape::Color(pointer) => {
+          tracing::debug!(
+            width = pointer.width,
+            height = pointer.height,
+            hotspot_x = pointer.hot_x,
+            hotspot_y = pointer.hot_y,
+            and_bytes = pointer.and_mask.len(),
+            xor_bytes = pointer.xor_mask.len(),
+            "Sending RDP color-pointer bitmap"
+          );
+          updates.push(DisplayUpdate::ColorPointer(ColorPointer {
+            width: pointer.width,
+            height: pointer.height,
+            hot_x: pointer.hot_x,
+            hot_y: pointer.hot_y,
+            cache_index: pointer.cache_index,
+            and_mask: pointer.and_mask.clone(),
+            xor_mask: pointer.xor_mask.clone(),
+          }));
+        }
+        PointerShape::Rgba(pointer) => {
+          tracing::debug!(
+            width = pointer.width,
+            height = pointer.height,
+            hotspot_x = pointer.hot_x,
+            hotspot_y = pointer.hot_y,
+            bytes = pointer.data.len(),
+            "Sending RDP RGBA-pointer bitmap"
+          );
+          updates.push(DisplayUpdate::RGBAPointer(RGBAPointer {
+            width: pointer.width,
+            height: pointer.height,
+            hot_x: pointer.hot_x,
+            hot_y: pointer.hot_y,
+            data: pointer.data.clone(),
+            cache_index: pointer.cache_index,
+          }));
+        }
+      }
+    }
+
+    if let Some((x, y)) = metadata.pointer_position {
+      updates.push(DisplayUpdate::PointerPosition(
+        ironrdp::pdu::pointer::PointerPositionAttribute {
+          x: x.clamp(0, u16::MAX as i32) as u16,
+          y: y.clamp(0, u16::MAX as i32) as u16,
+        },
+      ));
+    }
   }
 
   pub fn get_display_size() -> (u16, u16) {
