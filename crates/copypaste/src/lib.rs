@@ -4,17 +4,14 @@ use std::{
   fs::File,
   io::{Read, Seek, SeekFrom, Write},
   path::PathBuf,
-  sync::{
-    Arc, Mutex,
-    atomic::{AtomicBool, Ordering},
-  },
+  sync::{Arc, Mutex},
   thread::JoinHandle,
   time::{SystemTime, UNIX_EPOCH},
 };
 
 use clipboard_rs::{
   Clipboard, ClipboardContext, ClipboardHandler, ClipboardWatcher, ClipboardWatcherContext,
-  RustImageData, common::RustImage,
+  RustImageData, WatcherShutdown, common::RustImage,
 };
 use image::{ColorType, ImageFormat};
 #[cfg(feature = "server")]
@@ -48,12 +45,17 @@ pub type Event = ServerEvent;
 #[cfg(not(feature = "server"))]
 pub type Event = RdpInputEvent;
 
+struct WatcherState {
+  thread: Option<JoinHandle<()>>,
+  shutdown: Option<WatcherShutdown>,
+}
+
 #[derive(Clone)]
 pub struct CliprdrHandler {
-  sender: Option<UnboundedSender<Event>>,
-  state: Arc<Mutex<ClipboardState>>,
-  watcher_started: Arc<AtomicBool>,
   clipboard: Arc<ClipboardContext>,
+  watcher: Arc<Mutex<WatcherState>>,
+  state: Arc<Mutex<ClipboardState>>,
+  sender: Option<UnboundedSender<Event>>,
   download_state: Arc<Mutex<DownloadState>>,
 }
 
@@ -64,9 +66,6 @@ struct CliprdrHandlerBackend {
   clipboard: Arc<ClipboardContext>,
   sender: Option<UnboundedSender<Event>>,
   capabilities: ClipboardGeneralCapabilityFlags,
-
-  watcher_started: Arc<AtomicBool>,
-  _thread: Option<Arc<JoinHandle<()>>>,
 }
 
 impl Debug for CliprdrHandlerBackend {
@@ -98,12 +97,6 @@ impl CliprdrBackendFactory for CliprdrHandler {
 }
 
 impl CliprdrHandler {
-  pub fn start_watcher(&self) {
-    tracing::debug!("Requesting clipboard watcher startup");
-    let mut backend = self.build_backend();
-    backend.start_watcher();
-  }
-
   fn build_backend(&self) -> CliprdrHandlerBackend {
     let sender = self.sender.clone();
 
@@ -115,11 +108,9 @@ impl CliprdrHandler {
     CliprdrHandlerBackend {
       sender,
       temp_dir,
-      _thread: None,
       handler: self.clone(),
-      watcher_started: self.watcher_started.clone(),
-      capabilities: ClipboardGeneralCapabilityFlags::empty(),
       clipboard: self.clipboard.clone(),
+      capabilities: ClipboardGeneralCapabilityFlags::empty(),
     }
   }
 }
@@ -129,101 +120,7 @@ impl CliprdrServerFactory for CliprdrHandler {}
 
 impl_as_any!(CliprdrHandlerBackend);
 
-impl ClipboardHandler for CliprdrHandlerBackend {
-  fn on_clipboard_change(&mut self) {
-    let mut state = self.handler.state.lock().unwrap();
-
-    if !state.active_locks.is_empty() {
-      tracing::debug!("Ignoring local clipboard change while clipboard locks are active");
-      return;
-    }
-
-    state.clear();
-
-    if let Ok(files) = self.clipboard.get_files() {
-      state.files.extend(files.into_iter().map(|file| {
-        let path = std::path::Path::new(&file);
-        let name = path
-          .file_name()
-          .map(|name| name.to_string_lossy().into_owned());
-        let metadata = path.symlink_metadata().ok();
-        let size = metadata.as_ref().map(|metadata| metadata.len());
-        let modified = metadata
-          .as_ref()
-          .and_then(|metadata| metadata.modified().ok());
-
-        ClipboardFile {
-          name,
-          size,
-          modified,
-          path: path.to_path_buf(),
-        }
-      }));
-    }
-
-    if let Ok(image) = self.clipboard.get_image() {
-      match image.encode_image(ColorType::Rgb8, ImageFormat::Bmp) {
-        Ok(bytes) => {
-          let bytes = bytes.get_bytes();
-          let data = &bytes[14..];
-          state.image = Some(data.to_vec());
-        }
-        Err(error) => {
-          tracing::error!(?error, "Failed to encode image");
-        }
-      };
-    }
-
-    if let Ok(text) = self.clipboard.get_text() {
-      state.text = Some(text);
-    }
-
-    if let Ok(html) = self.clipboard.get_html() {
-      state.html = Some(html);
-    }
-
-    if let Ok(rtf) = self.clipboard.get_rich_text() {
-      state.rich_text = Some(rtf);
-    }
-
-    tracing::debug!(
-      text = state.text.is_some(),
-      html = state.html.is_some(),
-      rich_text = state.rich_text.is_some(),
-      image = state.image.is_some(),
-      files = state.files.len(),
-      "Local clipboard changed; sending format list"
-    );
-    self.handler.send_format_list();
-  }
-}
-
 impl CliprdrHandlerBackend {
-  fn start_watcher(&mut self) {
-    if self.watcher_started.swap(true, Ordering::AcqRel) {
-      tracing::debug!("Clipboard watcher already started");
-      return;
-    }
-
-    tracing::info!("Starting clipboard watcher after cliprdr ready");
-    let thread = std::thread::spawn({
-      let this = self.clone();
-      move || {
-        let Ok(mut watcher) = ClipboardWatcherContext::new() else {
-          tracing::error!("Failed to create clipboard watcher context");
-          return;
-        };
-
-        tracing::info!("Clipboard watcher started");
-        watcher.add_handler(this);
-        watcher.start_watch();
-        tracing::warn!("Clipboard watcher stopped");
-      }
-    });
-
-    self._thread = Some(Arc::new(thread));
-  }
-
   fn request_next_download_chunk(&mut self) {
     let download_state = self.handler.download_state.clone();
     let mut download_state = download_state.lock().unwrap();
@@ -315,9 +212,8 @@ impl CliprdrBackend for CliprdrHandlerBackend {
   }
 
   fn on_ready(&mut self) {
-    tracing::info!("cliprdr backend is ready; starting clipboard watcher");
-    self.start_watcher();
-    self.on_clipboard_change();
+    self.handler.start_watcher();
+    self.handler.on_clipboard_change();
   }
 
   fn on_request_format_list(&mut self) {
@@ -334,8 +230,6 @@ impl CliprdrBackend for CliprdrHandlerBackend {
 
     let mut format_to_request = None;
     for format in available_formats {
-      // File transfers use the named FileGroupDescriptorW format.  Its numeric
-      // id is registered by the OS and is therefore not necessarily CF_HDROP.
       if format
         .name
         .as_ref()
@@ -567,8 +461,8 @@ impl CliprdrBackend for CliprdrHandlerBackend {
       let chunk_data = response.data();
 
       if chunk_data.is_empty() && task.size > 0 {
-        tracing::error!("Received empty chunk for file download, aborting task");
         download_state.current = None;
+        tracing::error!("Received empty chunk for file download, aborting task");
       } else if let Some(ref mut file) = task.file {
         match file.write_all(chunk_data) {
           Ok(()) => {
@@ -665,13 +559,11 @@ impl CliprdrBackend for CliprdrHandlerBackend {
   }
 
   fn on_lock(&mut self, data_id: LockDataId) {
-    tracing::debug!(?data_id, "Clipboard lock requested");
     let mut state = self.handler.state.lock().unwrap();
     state.active_locks.push(data_id);
   }
 
   fn on_unlock(&mut self, data_id: LockDataId) {
-    tracing::debug!(?data_id, "Clipboard unlock requested");
     let mut state = self.handler.state.lock().unwrap();
     state.active_locks.retain(|id| id != &data_id);
   }
@@ -683,14 +575,78 @@ impl CliprdrBackend for CliprdrHandlerBackend {
   }
 }
 
+impl ClipboardHandler for CliprdrHandler {
+  fn on_clipboard_change(&mut self) {
+    let mut state = self.state.lock().unwrap();
+
+    if !state.active_locks.is_empty() {
+      tracing::debug!("Ignoring local clipboard change while clipboard locks are active");
+      return;
+    }
+
+    state.clear();
+
+    if let Ok(files) = self.clipboard.get_files() {
+      state.files.extend(files.into_iter().map(|file| {
+        let path = std::path::Path::new(&file);
+        let name = path
+          .file_name()
+          .map(|name| name.to_string_lossy().into_owned());
+        let metadata = path.symlink_metadata().ok();
+        let size = metadata.as_ref().map(|metadata| metadata.len());
+        let modified = metadata
+          .as_ref()
+          .and_then(|metadata| metadata.modified().ok());
+
+        ClipboardFile {
+          name,
+          size,
+          modified,
+          path: path.to_path_buf(),
+        }
+      }));
+    }
+
+    if let Ok(image) = self.clipboard.get_image() {
+      match image.encode_image(ColorType::Rgb8, ImageFormat::Bmp) {
+        Ok(bytes) => {
+          let bytes = bytes.get_bytes();
+          let data = &bytes[14..];
+          state.image = Some(data.to_vec());
+        }
+        Err(error) => {
+          tracing::error!(?error, "Failed to encode image");
+        }
+      };
+    }
+
+    if let Ok(text) = self.clipboard.get_text() {
+      state.text = Some(text);
+    }
+
+    if let Ok(html) = self.clipboard.get_html() {
+      state.html = Some(html);
+    }
+
+    if let Ok(rtf) = self.clipboard.get_rich_text() {
+      state.rich_text = Some(rtf);
+    }
+
+    self.send_format_list();
+  }
+}
+
 impl CliprdrHandler {
   pub fn new() -> Self {
     Self {
       sender: None,
-      watcher_started: Arc::new(AtomicBool::new(false)),
       state: Arc::new(Mutex::new(ClipboardState::default())),
       download_state: Arc::new(Mutex::new(DownloadState::default())),
       clipboard: Arc::new(ClipboardContext::new().expect("creating clipboard instance failed")),
+      watcher: Arc::new(Mutex::new(WatcherState {
+        shutdown: None,
+        thread: None,
+      })),
     }
   }
 
@@ -705,15 +661,9 @@ impl CliprdrHandler {
   pub fn send_format_list(&self) {
     let state = self.state.lock().unwrap();
 
-    // File clipboard data has a separate CLIPRDR flow.  In particular,
-    // initiate_file_copy() stores the descriptors inside IronRDP and advertises
-    // FileGroupDescriptorW/Preferred DropEffect.  Sending CF_HDROP through
-    // initiate_copy() leaves the file list unregistered, so subsequent
-    // FileContentsRequest messages are rejected or never generated.
     if !state.files.is_empty() {
       match state.file_descriptors() {
         Ok(files) => {
-          tracing::info!(file_count = files.len(), "Advertising clipboard file list");
           if let Err(error) = self.send(Event::Clipboard(ClipboardMessage::SendInitiateFileCopy(
             files,
           ))) {
@@ -810,6 +760,56 @@ impl CliprdrHandler {
         OwnedFormatDataResponse::new_data(Cow::Owned(image.clone())),
       ))) {
         eprintln!("failed to send file lists {error}");
+      }
+    }
+  }
+
+  pub fn start_watcher(&self) {
+    if self.watcher.lock().unwrap().thread.is_some() {
+      tracing::debug!("Clipboard watcher already started");
+      return;
+    }
+
+    tracing::info!("Starting clipboard watcher after cliprdr ready");
+    let Ok(mut watcher) = ClipboardWatcherContext::new() else {
+      tracing::error!("Failed to create clipboard watcher context");
+      return;
+    };
+
+    let shutdown = watcher.get_shutdown_channel();
+
+    let thread = std::thread::spawn({
+      let this = self.clone();
+
+      move || {
+        tracing::info!("Clipboard watcher started");
+        watcher.add_handler(this);
+        watcher.start_watch();
+
+        tracing::warn!("Clipboard watcher stopped");
+      }
+    });
+
+    let mut watcher_state = self.watcher.lock().unwrap();
+    watcher_state.thread = Some(thread);
+    watcher_state.shutdown = Some(shutdown);
+  }
+}
+
+impl Drop for CliprdrHandler {
+  fn drop(&mut self) {
+    let (shutdown, thread) = {
+      let mut watcher = self.watcher.lock().unwrap();
+      (watcher.shutdown.take(), watcher.thread.take())
+    };
+
+    if let Some(shutdown) = shutdown {
+      shutdown.stop();
+    }
+
+    if let Some(thread) = thread {
+      if thread.thread().id() != std::thread::current().id() {
+        let _ = thread.join();
       }
     }
   }

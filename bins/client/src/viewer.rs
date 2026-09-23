@@ -118,9 +118,6 @@ impl Desk0Viewer {
       .with_desktop_width(width)
       .with_desktop_height(height)
       .with_clipboard(ClipboardType::Enable)
-      // Receive remote pointer bitmaps so the window can install the actual
-      // cursor shape (including resize cursors) instead of baking the pointer
-      // into the framebuffer.
       .with_pointer_software_rendering(false)
       .with_client_name(Self::client_name())
       .with_client_build(Self::client_build())
@@ -136,8 +133,6 @@ impl Desk0Viewer {
     let input = client.input_sender();
 
     clipboard_handler.set_sender(input.clone());
-    // Start listening immediately; on_ready() also calls this method, and
-    // the shared guard prevents duplicate watcher threads.
     clipboard_handler.start_watcher();
 
     Ok(Self {
