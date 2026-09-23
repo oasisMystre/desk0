@@ -1,6 +1,6 @@
 use std::{
   num::{NonZeroU16, NonZeroUsize},
-  sync::{Arc, atomic::Ordering},
+  sync::{Arc, Mutex, atomic::Ordering},
 };
 
 use display_info::DisplayInfo;
@@ -71,6 +71,8 @@ impl DisplayHandler {
     let sender = self.sender.clone();
     let first_frame = Arc::new(std::sync::atomic::AtomicBool::new(true));
     let first_frame_clone = first_frame.clone();
+    let last_pointer_shape = Arc::new(Mutex::new(None::<PointerShape>));
+    let last_pointer_shape_clone = last_pointer_shape.clone();
 
     let capture = ScreenCapture::with_callback_arc(
       ScreenCaptureConfig {
@@ -92,7 +94,7 @@ impl DisplayHandler {
           Self::get_frame_updates_from_metadata(&frame.data, width, height, &frame.metadata)
         };
 
-        Self::append_pointer_updates(&mut updates, &frame.metadata);
+        Self::append_pointer_updates(&mut updates, &frame.metadata, &last_pointer_shape_clone);
 
         for update in updates {
           if sender.send(update).is_err() {
@@ -177,27 +179,28 @@ impl DisplayHandler {
     updates
   }
 
-  fn append_pointer_updates(updates: &mut Vec<DisplayUpdate>, metadata: &FrameMetadata) {
+  fn append_pointer_updates(
+    updates: &mut Vec<DisplayUpdate>,
+    metadata: &FrameMetadata,
+    last_pointer_shape: &Arc<Mutex<Option<PointerShape>>>,
+  ) {
     if let Some(pointer) = &metadata.pointer_shape {
+      let Ok(mut last_pointer_shape) = last_pointer_shape.lock() else {
+        return;
+      };
+      if last_pointer_shape.as_ref() == Some(pointer) {
+        return;
+      }
+      *last_pointer_shape = Some(pointer.clone());
+
       match pointer {
         PointerShape::Hidden => {
-          tracing::debug!("Sending RDP hidden-pointer update");
           updates.push(DisplayUpdate::HidePointer);
         }
         PointerShape::Default => {
-          tracing::debug!("Sending RDP default-pointer update");
           updates.push(DisplayUpdate::DefaultPointer);
         }
         PointerShape::Color(pointer) => {
-          tracing::debug!(
-            width = pointer.width,
-            height = pointer.height,
-            hotspot_x = pointer.hot_x,
-            hotspot_y = pointer.hot_y,
-            and_bytes = pointer.and_mask.len(),
-            xor_bytes = pointer.xor_mask.len(),
-            "Sending RDP color-pointer bitmap"
-          );
           updates.push(DisplayUpdate::ColorPointer(ColorPointer {
             width: pointer.width,
             height: pointer.height,
@@ -209,14 +212,6 @@ impl DisplayHandler {
           }));
         }
         PointerShape::Rgba(pointer) => {
-          tracing::debug!(
-            width = pointer.width,
-            height = pointer.height,
-            hotspot_x = pointer.hot_x,
-            hotspot_y = pointer.hot_y,
-            bytes = pointer.data.len(),
-            "Sending RDP RGBA-pointer bitmap"
-          );
           updates.push(DisplayUpdate::RGBAPointer(RGBAPointer {
             width: pointer.width,
             height: pointer.height,
@@ -228,7 +223,6 @@ impl DisplayHandler {
         }
       }
     }
-
   }
 
   pub fn get_display_size() -> (u16, u16) {
