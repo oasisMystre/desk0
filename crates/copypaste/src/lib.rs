@@ -209,6 +209,8 @@ impl CliprdrBackend for CliprdrHandlerBackend {
     ClipboardGeneralCapabilityFlags::USE_LONG_FORMAT_NAMES
       | ClipboardGeneralCapabilityFlags::STREAM_FILECLIP_ENABLED
       | ClipboardGeneralCapabilityFlags::FILECLIP_NO_FILE_PATHS
+      | ClipboardGeneralCapabilityFlags::CAN_LOCK_CLIPDATA
+      | ClipboardGeneralCapabilityFlags::HUGE_FILE_SUPPORT_ENABLED
   }
 
   fn on_ready(&mut self) {
@@ -222,7 +224,13 @@ impl CliprdrBackend for CliprdrHandlerBackend {
 
   fn on_process_negotiated_capabilities(&mut self, capabilities: ClipboardGeneralCapabilityFlags) {
     self.capabilities = capabilities;
-    tracing::info!(?capabilities, "Negotiated cliprdr capabilities");
+    tracing::info!(
+      ?capabilities,
+      stream_fileclip = capabilities.contains(ClipboardGeneralCapabilityFlags::STREAM_FILECLIP_ENABLED),
+      lock_clipdata = capabilities.contains(ClipboardGeneralCapabilityFlags::CAN_LOCK_CLIPDATA),
+      huge_files = capabilities.contains(ClipboardGeneralCapabilityFlags::HUGE_FILE_SUPPORT_ENABLED),
+      "Negotiated cliprdr capabilities"
+    );
   }
 
   fn on_remote_copy(&mut self, available_formats: &[ClipboardFormat]) {
