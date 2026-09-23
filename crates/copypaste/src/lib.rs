@@ -4,12 +4,17 @@ use std::{
   fs::File,
   io::{Read, Seek, SeekFrom, Write},
   path::PathBuf,
-  sync::{Arc, Mutex},
+  sync::{
+    Arc, Mutex,
+    atomic::{AtomicBool, Ordering},
+  },
+  thread::JoinHandle,
   time::{SystemTime, UNIX_EPOCH},
 };
 
 use clipboard_rs::{
-  Clipboard, ClipboardContext, ClipboardHandler, RustImageData, common::RustImage,
+  Clipboard, ClipboardContext, ClipboardHandler, ClipboardWatcher, ClipboardWatcherContext,
+  RustImageData, common::RustImage,
 };
 use image::{ColorType, ImageFormat};
 #[cfg(feature = "server")]
@@ -46,15 +51,21 @@ pub type Event = RdpInputEvent;
 #[derive(Clone)]
 pub struct CliprdrHandler {
   sender: Option<UnboundedSender<Event>>,
+  state: Arc<Mutex<ClipboardState>>,
+  download_state: Arc<Mutex<DownloadState>>,
+  watcher_started: Arc<AtomicBool>,
 }
 
+#[derive(Clone)]
 struct CliprdrHandlerBackend {
   temp_dir: String,
-  clipboard: ClipboardContext,
-  download_state: DownloadState,
-  state: Arc<Mutex<ClipboardState>>,
+  handler: CliprdrHandler,
+  clipboard: Arc<ClipboardContext>,
   sender: Option<UnboundedSender<Event>>,
   capabilities: ClipboardGeneralCapabilityFlags,
+
+  watcher_started: Arc<AtomicBool>,
+  _thread: Option<Arc<JoinHandle<()>>>,
 }
 
 impl Debug for CliprdrHandlerBackend {
@@ -71,15 +82,23 @@ impl ServerEventSender for CliprdrHandler {
     self.sender = Some(sender);
   }
 }
+
 #[cfg(not(feature = "server"))]
 impl CliprdrHandler {
   pub fn set_sender(&mut self, sender: UnboundedSender<Event>) {
     self.sender = Some(sender);
+    self.start_watcher();
   }
 }
 
 impl CliprdrBackendFactory for CliprdrHandler {
   fn build_cliprdr_backend(&self) -> Box<dyn CliprdrBackend> {
+    Box::new(self.build_backend())
+  }
+}
+
+impl CliprdrHandler {
+  fn build_backend(&self) -> CliprdrHandlerBackend {
     let sender = self.sender.clone();
 
     let temp_dir = std::env::temp_dir()
@@ -87,14 +106,15 @@ impl CliprdrBackendFactory for CliprdrHandler {
       .to_string_lossy()
       .into_owned();
 
-    Box::new(CliprdrHandlerBackend {
+    CliprdrHandlerBackend {
       sender,
       temp_dir,
-      download_state: DownloadState::default(),
+      _thread: None,
+      handler: self.clone(),
+      watcher_started: self.watcher_started.clone(),
       capabilities: ClipboardGeneralCapabilityFlags::empty(),
-      state: Arc::new(Mutex::new(ClipboardState::default())),
-      clipboard: ClipboardContext::new().expect("creating clipboard instance failed"),
-    })
+      clipboard: Arc::new(ClipboardContext::new().expect("creating clipboard instance failed")),
+    }
   }
 }
 
@@ -105,197 +125,116 @@ impl_as_any!(CliprdrHandlerBackend);
 
 impl ClipboardHandler for CliprdrHandlerBackend {
   fn on_clipboard_change(&mut self) {
-    {
-      let mut state = self.state.lock().unwrap();
+    let mut state = self.handler.state.lock().unwrap();
 
-      if !state.active_locks.is_empty() {
-        return;
-      }
-
-      state.clear();
-
-      if let Ok(files) = self.clipboard.get_files() {
-        state.files.extend(files.into_iter().map(|file| {
-          let path = std::path::Path::new(&file);
-          let name = path
-            .file_name()
-            .map(|name| name.to_string_lossy().into_owned());
-          let metadata = path.symlink_metadata().ok();
-          let size = metadata.as_ref().map(|metadata| metadata.len());
-          let modified = metadata
-            .as_ref()
-            .and_then(|metadata| metadata.modified().ok());
-
-          ClipboardFile {
-            name,
-            size,
-            modified,
-            path: path.to_path_buf(),
-          }
-        }));
-      }
-
-      if let Ok(image) = self.clipboard.get_image() {
-        match image.encode_image(ColorType::Rgb8, ImageFormat::Bmp) {
-          Ok(bytes) => {
-            let bytes = bytes.get_bytes();
-            let data = &bytes[14..];
-            state.image = Some(data.to_vec());
-          }
-          Err(error) => {
-            tracing::error!(?error, "Failed to encode image");
-          }
-        };
-      }
-
-      if let Ok(text) = self.clipboard.get_text() {
-        state.text = Some(text);
-      }
-
-      if let Ok(html) = self.clipboard.get_html() {
-        state.html = Some(html);
-      }
-
-      if let Ok(rtf) = self.clipboard.get_rich_text() {
-        state.rich_text = Some(rtf);
-      }
+    if !state.active_locks.is_empty() {
+      return;
     }
 
-    self.send_format_list();
+    state.clear();
+
+    if let Ok(files) = self.clipboard.get_files() {
+      state.files.extend(files.into_iter().map(|file| {
+        let path = std::path::Path::new(&file);
+        let name = path
+          .file_name()
+          .map(|name| name.to_string_lossy().into_owned());
+        let metadata = path.symlink_metadata().ok();
+        let size = metadata.as_ref().map(|metadata| metadata.len());
+        let modified = metadata
+          .as_ref()
+          .and_then(|metadata| metadata.modified().ok());
+
+        ClipboardFile {
+          name,
+          size,
+          modified,
+          path: path.to_path_buf(),
+        }
+      }));
+    }
+
+    if let Ok(image) = self.clipboard.get_image() {
+      match image.encode_image(ColorType::Rgb8, ImageFormat::Bmp) {
+        Ok(bytes) => {
+          let bytes = bytes.get_bytes();
+          let data = &bytes[14..];
+          state.image = Some(data.to_vec());
+        }
+        Err(error) => {
+          tracing::error!(?error, "Failed to encode image");
+        }
+      };
+    }
+
+    if let Ok(text) = self.clipboard.get_text() {
+      state.text = Some(text);
+    }
+
+    if let Ok(html) = self.clipboard.get_html() {
+      state.html = Some(html);
+    }
+
+    if let Ok(rtf) = self.clipboard.get_rich_text() {
+      state.rich_text = Some(rtf);
+    }
+
+    self.handler.send_format_list();
   }
 }
 
 impl CliprdrHandlerBackend {
-  fn send(&self, message: Event) -> Result<(), SendError<Event>> {
-    if let Some(ref sender) = self.sender {
-      Ok(sender.send(message)?)
-    } else {
-      panic!("expected sender to be set")
-    }
-  }
-
-  fn send_format_list(&self) {
-    let state = self.state.lock().unwrap();
-
-    let mut formats = Vec::new();
-
-    if state.text.is_some() {
-      formats.push(ClipboardFormat::new(ClipboardFormatId::CF_UNICODETEXT));
+  fn start_watcher(&mut self) {
+    if self.watcher_started.swap(true, Ordering::AcqRel) {
+      return;
     }
 
-    if state.rich_text.is_some() {
-      let mut format = ClipboardFormat::new(ClipboardFormatId::new(CF_RTF));
-      format.name = Some(ClipboardFormatName::new_static("Rich Text Format"));
-      formats.push(format);
-    }
-
-    if state.html.is_some() {
-      let mut format = ClipboardFormat::new(ClipboardFormatId::new(CF_HTML));
-      format.name = Some(ClipboardFormatName::new_static("HTML Format"));
-      formats.push(format);
-    }
-
-    if state.image.is_some() {
-      formats.push(ClipboardFormat::new(ClipboardFormatId::CF_DIB));
-    }
-
-    if !state.files.is_empty() {
-      formats.push(ClipboardFormat::new(ClipboardFormatId::CF_HDROP));
-    }
-
-    if !formats.is_empty() {
-      if let Err(error) = self.send(Event::Clipboard(ClipboardMessage::SendInitiateCopy(
-        formats,
-      ))) {
-        eprintln!("Failed to send initiate copy event {error}");
-      };
-    }
-  }
-
-  fn send_text(&self, state: &mut ClipboardState) {
-    if let Some(text) = &state.text {
-      if let Err(error) = self.send(Event::Clipboard(ClipboardMessage::SendFormatData(
-        OwnedFormatDataResponse::new_unicode_string(&text),
-      ))) {
-        eprintln!("Failed to send text clipboard event {error}");
-      }
-    }
-  }
-
-  fn send_html(&self, state: &mut ClipboardState) {
-    if let Some(html) = &state.html {
-      if let Err(error) = self.send(Event::Clipboard(ClipboardMessage::SendFormatData(
-        OwnedFormatDataResponse::new_data(Cow::Owned(html.as_bytes().to_vec())),
-      ))) {
-        eprintln!("Failed to send html clipboard event {error}");
-      }
-    }
-  }
-
-  fn send_rich_text(&self, state: &mut ClipboardState) {
-    if let Some(rich_text) = &state.rich_text {
-      if let Err(error) = self.send(Event::Clipboard(ClipboardMessage::SendFormatData(
-        OwnedFormatDataResponse::new_data(Cow::Owned(rich_text.as_bytes().to_vec())),
-      ))) {
-        eprintln!("Failed to send rich_text clipboard event {error}");
-      }
-    }
-  }
-
-  fn send_file_list(&self, state: &mut ClipboardState) {
-    if !state.files.is_empty() {
-      let files = match state.file_descriptors() {
-        Ok(files) => files,
-        Err(error) => {
-          eprintln!("reading clipboard files failed {error}");
+    let thread = std::thread::spawn({
+      let this = self.clone();
+      move || {
+        let Ok(mut watcher) = ClipboardWatcherContext::new() else {
+          tracing::error!("Failed to create clipboard watcher");
           return;
-        }
-      };
+        };
 
-      if let Err(error) = self.send(Event::Clipboard(ClipboardMessage::SendFormatData(
-        OwnedFormatDataResponse::new_file_list(&PackedFileList { files }).unwrap(),
-      ))) {
-        eprintln!("failed to send file lists {error}");
+        watcher.add_handler(this);
+        watcher.start_watch();
       }
-    }
-  }
+    });
 
-  fn send_image(&self, state: &mut ClipboardState) {
-    if let Some(image) = &state.image {
-      if let Err(error) = self.send(Event::Clipboard(ClipboardMessage::SendFormatData(
-        OwnedFormatDataResponse::new_data(Cow::Owned(image.clone())),
-      ))) {
-        eprintln!("failed to send file lists {error}");
-      }
-    }
+    self._thread = Some(Arc::new(thread));
   }
 
   fn request_next_download_chunk(&mut self) {
-    if self.download_state.current.is_none() {
-      if let Some(mut task) = self.download_state.queue.pop() {
+    let download_state = self.handler.download_state.clone();
+    let mut download_state = download_state.lock().unwrap();
+
+    if download_state.current.is_none() {
+      if let Some(mut task) = download_state.queue.pop() {
         if task.size == 0 {
           if let Err(error) = File::create(&task.path) {
             tracing::warn!(?error, "Failed to create local file for download");
           } else {
-            self.download_state.downloaded.push(task.path);
+            download_state.downloaded.push(task.path);
           }
 
+          drop(download_state);
           self.request_next_download_chunk();
           return;
         }
 
         if let Ok(file) = File::create(&task.path) {
           task.file = Some(file);
-          self.download_state.current = Some(task);
+          download_state.current = Some(task);
         } else {
           tracing::error!(?task.path,"Failed to create local file for download");
+          drop(download_state);
           self.request_next_download_chunk();
           return;
         }
       } else {
-        if !self.download_state.downloaded.is_empty() {
-          let paths: Vec<String> = self
-            .download_state
+        if !download_state.downloaded.is_empty() {
+          let paths: Vec<String> = download_state
             .downloaded
             .iter()
             .map(|path| path.to_string_lossy().into_owned())
@@ -305,33 +244,38 @@ impl CliprdrHandlerBackend {
             tracing::error!(?error, "Failed to set downloaded files to clipboard");
           }
 
-          self.download_state.downloaded.clear();
+          download_state.downloaded.clear();
         }
       }
     }
 
-    if let Some(task) = &self.download_state.current {
+    if let Some(task) = &download_state.current {
       let remaining = task.size.saturating_sub(task.received);
       if remaining == 0 {
-        if let Some(task) = self.download_state.current.take() {
-          self.download_state.downloaded.push(task.path);
+        if let Some(task) = download_state.current.take() {
+          download_state.downloaded.push(task.path);
         }
 
+        drop(download_state);
         self.request_next_download_chunk();
         return;
       }
 
       let chunk_size = remaining.min(MAX_CLIPBOARD_CHUNK as u64) as u32;
-      if let Err(error) = self.send(Event::Clipboard(ClipboardMessage::SendFileContentsRequest(
-        FileContentsRequest {
-          data_id: None,
-          stream_id: task.index,
-          index: task.index as i32,
-          position: task.received,
-          requested_size: chunk_size,
-          flags: FileContentsFlags::RANGE,
-        },
-      ))) {
+      if let Err(error) =
+        self
+          .handler
+          .send(Event::Clipboard(ClipboardMessage::SendFileContentsRequest(
+            FileContentsRequest {
+              data_id: None,
+              stream_id: task.index,
+              index: task.index as i32,
+              position: task.received,
+              requested_size: chunk_size,
+              flags: FileContentsFlags::RANGE,
+            },
+          )))
+      {
         tracing::error!(?error, "Failed to send file contents request");
       }
     }
@@ -350,11 +294,12 @@ impl CliprdrBackend for CliprdrHandlerBackend {
   }
 
   fn on_ready(&mut self) {
+    self.start_watcher();
     self.on_clipboard_change();
   }
 
   fn on_request_format_list(&mut self) {
-    self.send_format_list();
+    self.handler.send_format_list();
   }
 
   fn on_process_negotiated_capabilities(&mut self, capabilities: ClipboardGeneralCapabilityFlags) {
@@ -396,32 +341,35 @@ impl CliprdrBackend for CliprdrHandlerBackend {
     }
 
     if let Some(format_id) = format_to_request {
-      if let Err(error) = self.send(Event::Clipboard(ClipboardMessage::SendInitiatePaste(
-        format_id,
-      ))) {
+      if let Err(error) = self
+        .handler
+        .send(Event::Clipboard(ClipboardMessage::SendInitiatePaste(
+          format_id,
+        )))
+      {
         eprintln!("Failed to initiate paste from remote {error}");
       }
     }
   }
 
   fn on_format_data_request(&mut self, request: FormatDataRequest) {
-    let mut state = self.state.lock().unwrap();
+    let mut state = self.handler.state.lock().unwrap();
 
     match request.format {
       ClipboardFormatId::CF_UNICODETEXT => {
-        self.send_text(&mut state);
+        self.handler.send_text(&mut state);
       }
       ClipboardFormatId::CF_HDROP => {
-        self.send_file_list(&mut state);
+        self.handler.send_file_list(&mut state);
       }
       ClipboardFormatId::CF_DIB => {
-        self.send_image(&mut state);
+        self.handler.send_image(&mut state);
       }
       ClipboardFormatId(CF_RTF) => {
-        self.send_rich_text(&mut state);
+        self.handler.send_rich_text(&mut state);
       }
       ClipboardFormatId(CF_HTML) => {
-        self.send_html(&mut state);
+        self.handler.send_html(&mut state);
       }
       _ => {}
     }
@@ -504,7 +452,7 @@ impl CliprdrBackend for CliprdrHandlerBackend {
 
   fn on_file_contents_request(&mut self, request: FileContentsRequest) {
     let path = {
-      let state = self.state.lock().unwrap();
+      let state = self.handler.state.lock().unwrap();
       let file_index = request.index;
 
       let Some(file_info) = state.files.get(file_index as usize) else {
@@ -528,7 +476,7 @@ impl CliprdrBackend for CliprdrHandlerBackend {
 
     match result {
       Ok(buffer) => {
-        if let Err(error) = self.send(Event::Clipboard(
+        if let Err(error) = self.handler.send(Event::Clipboard(
           ClipboardMessage::SendFileContentsResponse(FileContentsResponse::new_data_response(
             request.stream_id,
             Cow::Owned(buffer),
@@ -543,7 +491,7 @@ impl CliprdrBackend for CliprdrHandlerBackend {
           ?error,
           "failed to read clipboard file"
         );
-        if let Err(error) = self.send(Event::Clipboard(
+        if let Err(error) = self.handler.send(Event::Clipboard(
           ClipboardMessage::SendFileContentsResponse(FileContentsResponse::new_error(
             request.stream_id,
           )),
@@ -555,7 +503,9 @@ impl CliprdrBackend for CliprdrHandlerBackend {
   }
 
   fn on_file_contents_response<'a>(&mut self, response: FileContentsResponse<'a>) {
-    if let Some(task) = &mut self.download_state.current {
+    let mut download_state = self.handler.download_state.lock().unwrap();
+
+    if let Some(task) = &mut download_state.current {
       if response.stream_id() != task.index {
         return;
       }
@@ -564,7 +514,7 @@ impl CliprdrBackend for CliprdrHandlerBackend {
 
       if chunk_data.is_empty() && task.size > 0 {
         tracing::error!("Received empty chunk for file download, aborting task");
-        self.download_state.current = None;
+        download_state.current = None;
       } else if let Some(ref mut file) = task.file {
         match file.write_all(chunk_data) {
           Ok(()) => {
@@ -572,17 +522,18 @@ impl CliprdrBackend for CliprdrHandlerBackend {
           }
           Err(error) => {
             tracing::error!(?error, "file write error, aborting download task");
-            self.download_state.current = None;
+            download_state.current = None;
           }
         }
       }
     }
 
+    drop(download_state);
     self.request_next_download_chunk();
   }
 
   fn on_remote_file_list(&mut self, files: &[FileDescriptor], _: Option<u32>) {
-    self.download_state.clear();
+    self.handler.download_state.lock().unwrap().clear();
     let timestamp = SystemTime::now()
       .duration_since(UNIX_EPOCH)
       .unwrap()
@@ -621,7 +572,13 @@ impl CliprdrBackend for CliprdrHandlerBackend {
           tracing::error!(?error, "Failed to create directory");
         }
 
-        self.download_state.downloaded.push(path);
+        self
+          .handler
+          .download_state
+          .lock()
+          .unwrap()
+          .downloaded
+          .push(path);
         continue;
       } else {
         if let Some(parent) = path.parent() {
@@ -631,13 +588,19 @@ impl CliprdrBackend for CliprdrHandlerBackend {
         }
       }
 
-      self.download_state.queue.push(DownloadTask {
-        path,
-        file: None,
-        received: 0,
-        index: index as u32,
-        size: fd.file_size.unwrap_or(0),
-      });
+      self
+        .handler
+        .download_state
+        .lock()
+        .unwrap()
+        .queue
+        .push(DownloadTask {
+          path,
+          file: None,
+          received: 0,
+          index: index as u32,
+          size: fd.file_size.unwrap_or(0),
+        });
     }
 
     self.request_next_download_chunk();
@@ -645,24 +608,134 @@ impl CliprdrBackend for CliprdrHandlerBackend {
 
   fn on_lock(&mut self, data_id: LockDataId) {
     tracing::debug!(?data_id, "Clipboard lock requested");
-    let mut state = self.state.lock().unwrap();
+    let mut state = self.handler.state.lock().unwrap();
     state.active_locks.push(data_id);
   }
 
   fn on_unlock(&mut self, data_id: LockDataId) {
     tracing::debug!(?data_id, "Clipboard unlock requested");
-    let mut state = self.state.lock().unwrap();
+    let mut state = self.handler.state.lock().unwrap();
     state.active_locks.retain(|id| id != &data_id);
   }
 
   fn on_outgoing_locks_cleared(&mut self, _: &[LockDataId]) {
-    self.download_state.queue.clear();
-    self.download_state.current = None;
+    let mut download_state = self.handler.download_state.lock().unwrap();
+    download_state.queue.clear();
+    download_state.current = None;
   }
 }
 
 impl CliprdrHandler {
   pub fn new() -> Self {
-    Self { sender: None }
+    Self {
+      sender: None,
+      watcher_started: Arc::new(AtomicBool::new(false)),
+      state: Arc::new(Mutex::new(ClipboardState::default())),
+      download_state: Arc::new(Mutex::new(DownloadState::default())),
+    }
+  }
+
+  pub fn send(&self, message: Event) -> Result<(), SendError<Event>> {
+    if let Some(ref sender) = self.sender {
+      Ok(sender.send(message)?)
+    } else {
+      panic!("expected sender to be set")
+    }
+  }
+
+  pub fn send_format_list(&self) {
+    let state = self.state.lock().unwrap();
+
+    let mut formats = Vec::new();
+
+    if state.text.is_some() {
+      formats.push(ClipboardFormat::new(ClipboardFormatId::CF_UNICODETEXT));
+    }
+
+    if state.rich_text.is_some() {
+      let mut format = ClipboardFormat::new(ClipboardFormatId::new(CF_RTF));
+      format.name = Some(ClipboardFormatName::new_static("Rich Text Format"));
+      formats.push(format);
+    }
+
+    if state.html.is_some() {
+      let mut format = ClipboardFormat::new(ClipboardFormatId::new(CF_HTML));
+      format.name = Some(ClipboardFormatName::new_static("HTML Format"));
+      formats.push(format);
+    }
+
+    if state.image.is_some() {
+      formats.push(ClipboardFormat::new(ClipboardFormatId::CF_DIB));
+    }
+
+    if !state.files.is_empty() {
+      formats.push(ClipboardFormat::new(ClipboardFormatId::CF_HDROP));
+    }
+
+    if !formats.is_empty() {
+      if let Err(error) = self.send(Event::Clipboard(ClipboardMessage::SendInitiateCopy(
+        formats,
+      ))) {
+        eprintln!("Failed to send initiate copy event {error}");
+      };
+    }
+  }
+
+  pub fn send_text(&self, state: &mut ClipboardState) {
+    if let Some(text) = &state.text {
+      if let Err(error) = self.send(Event::Clipboard(ClipboardMessage::SendFormatData(
+        OwnedFormatDataResponse::new_unicode_string(&text),
+      ))) {
+        eprintln!("Failed to send text clipboard event {error}");
+      }
+    }
+  }
+
+  pub fn send_html(&self, state: &mut ClipboardState) {
+    if let Some(html) = &state.html {
+      if let Err(error) = self.send(Event::Clipboard(ClipboardMessage::SendFormatData(
+        OwnedFormatDataResponse::new_data(Cow::Owned(html.as_bytes().to_vec())),
+      ))) {
+        eprintln!("Failed to send html clipboard event {error}");
+      }
+    }
+  }
+
+  pub fn send_rich_text(&self, state: &mut ClipboardState) {
+    if let Some(rich_text) = &state.rich_text {
+      if let Err(error) = self.send(Event::Clipboard(ClipboardMessage::SendFormatData(
+        OwnedFormatDataResponse::new_data(Cow::Owned(rich_text.as_bytes().to_vec())),
+      ))) {
+        eprintln!("Failed to send rich_text clipboard event {error}");
+      }
+    }
+  }
+
+  pub fn send_file_list(&self, state: &mut ClipboardState) {
+    if !state.files.is_empty() {
+      let files = match state.file_descriptors() {
+        Ok(files) => files,
+        Err(error) => {
+          eprintln!("reading clipboard files failed {error}");
+          return;
+        }
+      };
+
+      if let Err(error) = self.send(Event::Clipboard(ClipboardMessage::SendFormatData(
+        OwnedFormatDataResponse::new_file_list(&PackedFileList { files }).unwrap(),
+      ))) {
+        eprintln!("failed to send file lists {error}");
+      }
+    }
+  }
+
+  pub fn send_image(&self, state: &mut ClipboardState) {
+    if let Some(image) = &state.image {
+      if let Err(error) = self.send(Event::Clipboard(ClipboardMessage::SendFormatData(
+        OwnedFormatDataResponse::new_data(Cow::Owned(image.clone())),
+      ))) {
+        eprintln!("failed to send file lists {error}");
+      }
+    }
   }
 }

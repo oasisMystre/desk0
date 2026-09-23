@@ -27,7 +27,7 @@ fn service_main(_args: Vec<OsString>) {
 
   rt.block_on(async {
     if let Err(error) = run_service().await {
-      eprintln!("Run service error: {error:?}");
+      tracing::error!(?error, "Run service error");
     }
   });
 }
@@ -39,7 +39,7 @@ pub async fn run_service() -> anyhow::Result<()> {
       ServiceControl::Stop => match shutdown_tx.try_send(()) {
         Ok(()) => ServiceControlHandlerResult::NoError,
         Err(error) => {
-          eprintln!("Stop service error: {error:?}");
+          tracing::error!(?error, "Stop service error");
           ServiceControlHandlerResult::Other(0)
         }
       },
@@ -65,7 +65,7 @@ pub async fn run_service() -> anyhow::Result<()> {
           let _ = child.wait().await;
       },
       status = child.wait() => {
-        eprintln!("desk0 exited: {status:?}");
+          tracing::info!(?status, "desk0 exited");
       }
   }
 
@@ -202,7 +202,10 @@ pub fn install() -> anyhow::Result<()> {
     manager.create_service(&service_info, ServiceAccess::START | ServiceAccess::STOP)?;
 
   if let Err(error) = service.start::<OsString>(&[]) {
-    eprintln!("Warning: Service registered but could not be started immediately: {error:?}");
+    tracing::warn!(
+      ?error,
+      "Service registered but could not be started immediately"
+    );
   }
 
   if current_exe != target_exe {

@@ -1,6 +1,6 @@
 use std::{
   num::{NonZeroU16, NonZeroUsize},
-  sync::{Arc, Mutex, atomic::Ordering},
+  sync::{Arc, atomic::Ordering},
 };
 
 use display_info::DisplayInfo;
@@ -70,9 +70,6 @@ impl DisplayHandler {
   pub async fn capture(&self) -> anyhow::Result<()> {
     let sender = self.sender.clone();
     let first_frame = Arc::new(std::sync::atomic::AtomicBool::new(true));
-    let first_frame_clone = first_frame.clone();
-    let last_pointer_shape = Arc::new(Mutex::new(None::<PointerShape>));
-    let last_pointer_shape_clone = last_pointer_shape.clone();
 
     let capture = ScreenCapture::with_callback_arc(
       ScreenCaptureConfig {
@@ -80,27 +77,34 @@ impl DisplayHandler {
         backend: Some(CaptureBackend::Auto),
         pixel_format: Some(CapturePixelFormat::Bgra),
       },
-      Arc::new(move |frame: rs_capture::FrameData, this: &ScreenCapture| {
-        let width = frame.width as usize;
-        let height = frame.height as usize;
-        let is_first = first_frame_clone.swap(false, Ordering::Relaxed);
+      Arc::new({
+        let first_frame = first_frame.clone();
 
-        let mut updates = if is_first {
-          match Self::get_full_frame_update(&frame.data, width, height) {
-            Some(update) => vec![update],
-            None => return,
-          }
-        } else {
-          Self::get_frame_updates_from_metadata(&frame.data, width, height, &frame.metadata)
-        };
+        move |frame: rs_capture::FrameData, this: &ScreenCapture| {
+          let width = frame.width as usize;
+          let height = frame.height as usize;
+          let is_first = first_frame.swap(false, Ordering::Relaxed);
 
-        Self::append_pointer_updates(&mut updates, &frame.metadata, &last_pointer_shape_clone);
+          let mut updates = if is_first {
+            match Self::get_full_frame_update(&frame.data, width, height) {
+              Some(update) => vec![update],
+              None => return,
+            }
+          } else {
+            Self::get_frame_updates_from_metadata(&frame.data, width, height, &frame.metadata)
+          };
 
-        for update in updates {
-          if sender.send(update).is_err() {
-            println!("Display update receiver disconnected. Stopping capture.");
-            let _ = this.stop();
-            break;
+          Self::append_pointer_updates(&mut updates, &frame.metadata);
+
+          for update in updates {
+            if sender.send(update).is_err() {
+              tracing::warn!("Display update receiver disconnected. Stopping capture.");
+
+              if let Err(error) = this.stop() {
+                tracing::error!(?error, "Failed to gracefully exit screen capture");
+              }
+              break;
+            }
           }
         }
       }),
@@ -144,7 +148,13 @@ impl DisplayHandler {
       let h = (bottom - top) as usize;
 
       if x + w > width || y + h > height {
-        eprintln!("rect ({left},{top},{right},{bottom}) out of frame bounds, skipping");
+        tracing::warn!(
+          left,
+          top,
+          right,
+          bottom,
+          "rect out of frame bounds, skipping"
+        );
         continue;
       }
 
@@ -179,20 +189,8 @@ impl DisplayHandler {
     updates
   }
 
-  fn append_pointer_updates(
-    updates: &mut Vec<DisplayUpdate>,
-    metadata: &FrameMetadata,
-    last_pointer_shape: &Arc<Mutex<Option<PointerShape>>>,
-  ) {
+  fn append_pointer_updates(updates: &mut Vec<DisplayUpdate>, metadata: &FrameMetadata) {
     if let Some(pointer) = &metadata.pointer_shape {
-      let Ok(mut last_pointer_shape) = last_pointer_shape.lock() else {
-        return;
-      };
-      if last_pointer_shape.as_ref() == Some(pointer) {
-        return;
-      }
-      *last_pointer_shape = Some(pointer.clone());
-
       match pointer {
         PointerShape::Hidden => {
           updates.push(DisplayUpdate::HidePointer);
