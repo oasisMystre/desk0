@@ -51,6 +51,5 @@ pub async fn handle_agent(mut socket: WebSocket, claims: Claims, registry: Arc<D
     }
   }
 
-  tracing::info!(org = %claims.org_id, device = %claims.device_id, "agent WebSocket disconnected");
   registry.unregister(&claims.org_id, &claims.device_id);
 }

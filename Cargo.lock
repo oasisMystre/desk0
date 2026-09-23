@@ -19,20 +19,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "366ffbaa4442f4684d91e2cd7c5ea7c4ed8add41959a31447066e279e432b618"
 
 [[package]]
-name = "abstract-client"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "ironrdp",
- "ironrdp-client",
- "smallvec",
- "softbuffer",
- "tokio",
- "url",
- "winit",
-]
-
-[[package]]
 name = "addchain"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2162,6 +2148,7 @@ dependencies = [
  "softbuffer",
  "thiserror 2.0.20",
  "tokio",
+ "tokio-util",
  "tracing",
  "tracing-subscriber",
  "url",

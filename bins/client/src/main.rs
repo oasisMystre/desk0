@@ -1,5 +1,5 @@
 use clap::Parser;
-use ironrdp::client::rdp::RdpOutputEvent;
+use ironrdp::{client::rdp::RdpOutputEvent, session::GracefulDisconnectReason};
 use tokio::sync::mpsc::channel;
 use winit::{dpi::PhysicalSize, event_loop::EventLoop};
 
@@ -86,36 +86,24 @@ fn main() -> anyhow::Result<()> {
       };
 
       rt.block_on(async move {
-        while let Some(event) = output_event_receiver.recv().await {
-          match &event {
-            RdpOutputEvent::Image { width, height, .. } => {
-              tracing::debug!(?width, ?height, "RDP image received");
+        tokio::select! {
+            _ = tokio::signal::ctrl_c() => {
+                if let Err(error) = proxy.send_event(RdpOutputEvent::Terminated(Ok(GracefulDisconnectReason::UserInitiated))) {
+                    tracing::error!(?error, "proxy closed");
+                }
             }
-            RdpOutputEvent::PointerBitmap(pointer) => {
-              tracing::debug!(
-                width = pointer.width,
-                height = pointer.height,
-                "RDP pointer bitmap received"
-              );
+            _ = async {
+                while let Some(event) = output_event_receiver.recv().await {
+                  if proxy.send_event(event).is_err() {
+                    tracing::warn!("RDP UI event loop closed");
+                    break;
+                  }
+                }
+            } => {
+                tracing::info!("RDP output event bridge stopped");
             }
-            RdpOutputEvent::PointerPosition { x, y } => {
-              tracing::debug!(x, y, "RDP pointer position received");
-            }
-            RdpOutputEvent::PointerHidden => tracing::debug!("RDP pointer hidden"),
-            RdpOutputEvent::PointerDefault => tracing::debug!("RDP default pointer received"),
-            RdpOutputEvent::ConnectionFailure(error) => {
-              tracing::error!(?error, "RDP connection failure event received");
-            }
-            RdpOutputEvent::Terminated(reason) => {
-              tracing::info!(?reason, "RDP terminated event received")
-            }
-          }
-          if proxy.send_event(event).is_err() {
-            tracing::warn!("RDP UI event loop closed");
-            break;
-          }
-        }
-        tracing::info!("RDP output event bridge stopped");
+        };
+
       });
     })?;
 

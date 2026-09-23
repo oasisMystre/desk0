@@ -12,6 +12,7 @@ use ironrdp::{
   pdu::rdp::capability_sets::MajorPlatformType,
 };
 use tokio::sync::mpsc::{Receiver, Sender, UnboundedSender, channel};
+use tokio_util::sync::CancellationToken;
 
 pub type RdpOutputEventCallback = fn(event: RdpOutputEvent);
 
@@ -39,6 +40,7 @@ pub struct Desk0Viewer {
   pub clipboard: CliprdrHandler,
   pub thread: Option<thread::JoinHandle<()>>,
   pub input: UnboundedSender<RdpInputEvent>,
+  _cancellation_token: CancellationToken,
 }
 
 impl Desk0Viewer {
@@ -137,6 +139,7 @@ impl Desk0Viewer {
       thread: None,
       client: Some(client),
       clipboard: clipboard_handler,
+      _cancellation_token: CancellationToken::new(),
     })
   }
 
@@ -152,9 +155,7 @@ impl Desk0Viewer {
           .name(Self::THREAD_NAME.into())
           .spawn({
             let input = self.input.clone();
-
             move || {
-              tracing::info!("RDP client worker started");
               rt.block_on(async move {
                 let (callback, mut receiver) = callback;
                 let runner = client.run();
@@ -174,7 +175,6 @@ impl Desk0Viewer {
 
                 drop(input);
               });
-              tracing::info!("RDP client worker stopped");
             }
           })
           .map_err(|error| {
@@ -182,10 +182,20 @@ impl Desk0Viewer {
             Desk0ViewerError::InputClosed
           })?
       } else {
+        let input = self.input.clone();
+        let cancellation_token = self._cancellation_token.clone();
         thread::spawn(move || {
-          tracing::info!("RDP client worker started");
-          let result = rt.block_on(client.run());
-          tracing::info!(?result, "RDP client worker stopped");
+          rt.block_on(async {
+            tokio::select! {
+                result = client.run() => result,
+                _ = cancellation_token.cancelled() => {
+                    if let Err(error) = input.send(RdpInputEvent::Close) {
+                       tracing::error!(?error, "failed to gracefully close client");
+                    }
+                    return;
+                }
+            }
+          });
         })
       };
 
@@ -217,8 +227,9 @@ impl Desk0Viewer {
   }
 
   pub fn shutdown(&mut self) {
+    self._cancellation_token.cancel();
     if let Err(error) = self.input.send(RdpInputEvent::Close) {
-      tracing::error!(?error, "input channel closed");
+      tracing::debug!(?error, "input channel closed");
     }
 
     if let Some(thread) = self.thread.take() {

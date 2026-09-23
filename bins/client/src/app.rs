@@ -2,11 +2,7 @@ use std::{num::NonZeroU32, rc::Rc, time::Duration};
 
 use ironrdp::{
   client::rdp::{RdpInputEvent, RdpOutputEvent},
-  input::{
-    Database, MousePosition,
-    Operation::{self, KeyReleased},
-    Scancode, WheelRotations,
-  },
+  input::{Database, MousePosition, Operation, Scancode, WheelRotations},
 };
 use smallvec::SmallVec;
 use softbuffer::{Context, Surface};
@@ -25,6 +21,11 @@ use crate::{
   viewer::Desk0Viewer,
 };
 
+pub enum ViewerEvent {
+  Shutdown,
+  FrameAvailable,
+}
+
 pub enum AppState {
   Initial,
   Suspended {
@@ -37,6 +38,10 @@ pub enum AppState {
 }
 
 pub struct Desk0App {
+  inner: Desk0InnerApp,
+}
+
+pub struct Desk0InnerApp {
   state: AppState,
   viewer: Desk0Viewer,
   input_database: Database,
@@ -52,6 +57,26 @@ pub struct Desk0App {
 impl Desk0App {
   pub fn new(
     event_loop: &EventLoop<RdpOutputEvent>,
+    viewer: Desk0Viewer,
+    initial_size: Option<PhysicalSize<u32>>,
+  ) -> anyhow::Result<Self> {
+    Ok(Self {
+      inner: Desk0InnerApp::new_inner(event_loop, viewer, initial_size)?,
+    })
+  }
+}
+
+impl Desk0InnerApp {
+  pub fn new(
+    event_loop: &EventLoop<ViewerEvent>,
+    viewer: Desk0Viewer,
+    initial_size: Option<PhysicalSize<u32>>,
+  ) -> anyhow::Result<Self> {
+    Self::new_inner(event_loop, viewer, initial_size)
+  }
+
+  pub fn new_inner<T: 'static>(
+    event_loop: &EventLoop<T>,
     viewer: Desk0Viewer,
     initial_size: Option<PhysicalSize<u32>>,
   ) -> anyhow::Result<Self> {
@@ -102,6 +127,13 @@ impl Desk0App {
     };
   }
 
+  fn handle_viewer_event(&mut self, event_loop: &ActiveEventLoop, event: ViewerEvent) {
+    match event {
+      ViewerEvent::FrameAvailable => {}
+      ViewerEvent::Shutdown => event_loop.exit(),
+    }
+  }
+
   pub fn handle_output_event(&mut self, event_loop: &ActiveEventLoop, event: RdpOutputEvent) {
     let AppState::Running { surface, window } = &mut self.state else {
       return;
@@ -118,15 +150,15 @@ impl Desk0App {
       RdpOutputEvent::Terminated(graceful_disconnect_reason) => {
         match graceful_disconnect_reason {
           Ok(reason) => {
-            tracing::info!(?reason, "rdp exitted");
+            tracing::info!(?reason, "rdp exited");
           }
           Err(error) => {
             tracing::error!(?error, "force exit rdp");
           }
         };
 
-        self.viewer.shutdown();
         event_loop.exit();
+        self.viewer.shutdown();
       }
       RdpOutputEvent::Image {
         buffer,
@@ -138,9 +170,15 @@ impl Desk0App {
         self.buffer = buffer;
         self.buffer_size = (width.get(), height.get());
 
-        surface
-          .resize(NonZeroU32::from(width), NonZeroU32::from(height))
-          .expect("surface resize");
+        let window_size = window.inner_size();
+        if let (Some(surface_width), Some(surface_height)) = (
+          NonZeroU32::new(window_size.width),
+          NonZeroU32::new(window_size.height),
+        ) {
+          surface
+            .resize(surface_width, surface_height)
+            .expect("surface resize");
+        }
 
         window.request_redraw();
       }
@@ -169,6 +207,22 @@ impl Desk0App {
         }
 
         window.set_cursor_visible(true);
+      }
+    }
+  }
+
+  fn on_new_events(&mut self, event_loop: &ActiveEventLoop, cause: StartCause) {
+    if let StartCause::Init = cause {
+      let mut window_attributes = Window::default_attributes();
+      if let Some(size) = self.last_size {
+        window_attributes = window_attributes.with_inner_size(size);
+        self.resize_timeout = Some(Instant::now() + Duration::from_secs(1));
+      }
+      let window = event_loop
+        .create_window(window_attributes)
+        .expect("failed creating window");
+      self.state = AppState::Suspended {
+        window: Rc::new(window),
       }
     }
   }
@@ -332,14 +386,14 @@ impl Desk0App {
             if delta_x.abs() > 0.001 {
               operations.push(Operation::WheelRotations(WheelRotations {
                 is_vertical: false,
-                rotation_units: (delta_x * 100.0) as i16,
+                rotation_units: wheel_units(f64::from(delta_x) * 100.0),
               }));
             }
 
             if delta_y.abs() > 0.001 {
               operations.push(Operation::WheelRotations(WheelRotations {
                 is_vertical: true,
-                rotation_units: (delta_y * 100.0) as i16,
+                rotation_units: wheel_units(f64::from(delta_y) * 100.0),
               }));
             }
           }
@@ -347,14 +401,14 @@ impl Desk0App {
             if delta.x.abs() > 0.001 {
               operations.push(Operation::WheelRotations(WheelRotations {
                 is_vertical: false,
-                rotation_units: delta.x as i16,
+                rotation_units: wheel_units(delta.x),
               }));
             }
 
             if delta.y.abs() > 0.001 {
               operations.push(Operation::WheelRotations(WheelRotations {
                 is_vertical: true,
-                rotation_units: delta.y as i16,
+                rotation_units: wheel_units(delta.y),
               }));
             }
           }
@@ -394,12 +448,28 @@ impl Desk0App {
           return;
         }
 
-        let AppState::Running { surface, .. } = &mut self.state else {
+        let AppState::Running { surface, window } = &mut self.state else {
           return;
         };
 
+        let window_size = window.inner_size();
+        let destination_width = window_size.width as usize;
+        let destination_height = window_size.height as usize;
+        let source_width = self.buffer_size.0 as usize;
+        let source_height = self.buffer_size.1 as usize;
         let mut buffer = surface.buffer_mut().expect("surface buffer");
-        buffer.copy_from_slice(&self.buffer.as_slice());
+
+        if destination_width == source_width && destination_height == source_height {
+          buffer.copy_from_slice(&self.buffer);
+        } else if destination_width > 0 && destination_height > 0 {
+          for y in 0..destination_height {
+            let source_y = y * source_height / destination_height;
+            for x in 0..destination_width {
+              let source_x = x * source_width / destination_width;
+              buffer[y * destination_width + x] = self.buffer[source_y * source_width + source_x];
+            }
+          }
+        }
         buffer.present().expect("buffer present");
       }
       _ => {}
@@ -407,17 +477,9 @@ impl Desk0App {
   }
 }
 
-impl ApplicationHandler<RdpOutputEvent> for Desk0App {
+impl ApplicationHandler<ViewerEvent> for Desk0InnerApp {
   fn new_events(&mut self, event_loop: &ActiveEventLoop, cause: winit::event::StartCause) {
-    if let StartCause::Init = cause {
-      let window_attributes = Window::default_attributes();
-      let window = event_loop
-        .create_window(window_attributes)
-        .expect("failed creating window");
-      self.state = AppState::Suspended {
-        window: Rc::new(window),
-      }
-    }
+    self.on_new_events(event_loop, cause);
   }
 
   fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
@@ -432,8 +494,35 @@ impl ApplicationHandler<RdpOutputEvent> for Desk0App {
     self.on_suspended(event_loop);
   }
 
-  fn user_event(&mut self, event_loop: &ActiveEventLoop, event: RdpOutputEvent) {
-    self.handle_output_event(event_loop, event);
+  fn window_event(
+    &mut self,
+    event_loop: &ActiveEventLoop,
+    window_id: WindowId,
+    event: WindowEvent,
+  ) {
+    self.on_window_event(event_loop, window_id, event);
+  }
+
+  fn user_event(&mut self, event_loop: &ActiveEventLoop, event: ViewerEvent) {
+    self.handle_viewer_event(event_loop, event);
+  }
+}
+
+impl ApplicationHandler<RdpOutputEvent> for Desk0App {
+  fn new_events(&mut self, event_loop: &ActiveEventLoop, cause: winit::event::StartCause) {
+    self.inner.on_new_events(event_loop, cause);
+  }
+
+  fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
+    self.inner.on_about_to_wait(event_loop);
+  }
+
+  fn resumed(&mut self, _: &ActiveEventLoop) {
+    self.inner.on_resumed();
+  }
+
+  fn suspended(&mut self, event_loop: &ActiveEventLoop) {
+    self.inner.on_suspended(event_loop);
   }
 
   fn window_event(
@@ -442,7 +531,11 @@ impl ApplicationHandler<RdpOutputEvent> for Desk0App {
     window_id: WindowId,
     event: WindowEvent,
   ) {
-    self.on_window_event(event_loop, window_id, event);
+    self.inner.on_window_event(event_loop, window_id, event);
+  }
+
+  fn user_event(&mut self, event_loop: &ActiveEventLoop, event: RdpOutputEvent) {
+    self.inner.handle_output_event(event_loop, event);
   }
 }
 
@@ -458,4 +551,8 @@ fn apply_and_send_fast_path_events(
       tracing::error!(?error, "rdp input closed");
     }
   }
+}
+
+fn wheel_units(value: f64) -> i16 {
+  value.round().clamp(-256.0, 255.0) as i16
 }

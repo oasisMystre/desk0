@@ -12,6 +12,8 @@ use crate::routes::ws::{
   registry::{AgentSession, DeviceInfo, DeviceRegistry},
 };
 
+const RESET_RDP_SESSION: &[u8] = b"desk0:reset-rdp-session";
+
 pub async fn handle_viewer(
   mut socket: WebSocket,
   auth: Auth,
@@ -75,7 +77,15 @@ pub async fn handle_viewer(
           if agent.sender.send(Message::Binary(bytes)).is_err() { break; }
         }
         Some(Ok(Message::Ping(bytes))) => { if socket.send(Message::Pong(bytes)).await.is_err() { break; } }
-        Some(Ok(Message::Close(_))) | None | Some(Err(_)) => break,
+        Some(Ok(Message::Close(_)))  => {
+            tracing::info!("rdp disconnected");
+            break;
+        },
+        None => break,
+         Some(Err(error)) => {
+            tracing::info!(?error, "rdp disconnected weird");
+            break;
+        },
         Some(Ok(_)) => {}
       },
       result = agent_reader.recv() => match result {
@@ -87,6 +97,11 @@ pub async fn handle_viewer(
       }
     }
   }
+
+  tracing::info!("viewer disconnected; resetting agent RDP session");
+  let _ = agent
+    .sender
+    .send(Message::Ping(RESET_RDP_SESSION.to_vec().into()));
 }
 
 async fn read_rdcleanpath_request(
