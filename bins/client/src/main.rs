@@ -112,7 +112,7 @@ fn main() -> anyhow::Result<()> {
 fn init_tracing() {
   let filter = tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| {
     tracing_subscriber::EnvFilter::new(
-      "info,desk0_client=debug,copypaste=debug,ironrdp=debug,ironrdp_client=debug",
+      "info,desk0_client=debug,copypaste=debug",
     )
   });
 

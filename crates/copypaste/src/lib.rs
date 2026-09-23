@@ -226,9 +226,11 @@ impl CliprdrBackend for CliprdrHandlerBackend {
     self.capabilities = capabilities;
     tracing::info!(
       ?capabilities,
-      stream_fileclip = capabilities.contains(ClipboardGeneralCapabilityFlags::STREAM_FILECLIP_ENABLED),
+      stream_fileclip =
+        capabilities.contains(ClipboardGeneralCapabilityFlags::STREAM_FILECLIP_ENABLED),
       lock_clipdata = capabilities.contains(ClipboardGeneralCapabilityFlags::CAN_LOCK_CLIPDATA),
-      huge_files = capabilities.contains(ClipboardGeneralCapabilityFlags::HUGE_FILE_SUPPORT_ENABLED),
+      huge_files =
+        capabilities.contains(ClipboardGeneralCapabilityFlags::HUGE_FILE_SUPPORT_ENABLED),
       "Negotiated cliprdr capabilities"
     );
   }
