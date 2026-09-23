@@ -87,7 +87,6 @@ impl ServerEventSender for CliprdrHandler {
 impl CliprdrHandler {
   pub fn set_sender(&mut self, sender: UnboundedSender<Event>) {
     self.sender = Some(sender);
-    self.start_watcher();
   }
 }
 
@@ -128,6 +127,7 @@ impl ClipboardHandler for CliprdrHandlerBackend {
     let mut state = self.handler.state.lock().unwrap();
 
     if !state.active_locks.is_empty() {
+      tracing::debug!("Ignoring local clipboard change while clipboard locks are active");
       return;
     }
 
@@ -179,6 +179,14 @@ impl ClipboardHandler for CliprdrHandlerBackend {
       state.rich_text = Some(rtf);
     }
 
+    tracing::debug!(
+      text = state.text.is_some(),
+      html = state.html.is_some(),
+      rich_text = state.rich_text.is_some(),
+      image = state.image.is_some(),
+      files = state.files.len(),
+      "Local clipboard changed; sending format list"
+    );
     self.handler.send_format_list();
   }
 }
@@ -186,19 +194,23 @@ impl ClipboardHandler for CliprdrHandlerBackend {
 impl CliprdrHandlerBackend {
   fn start_watcher(&mut self) {
     if self.watcher_started.swap(true, Ordering::AcqRel) {
+      tracing::debug!("Clipboard watcher already started");
       return;
     }
 
+    tracing::info!("Starting clipboard watcher after cliprdr ready");
     let thread = std::thread::spawn({
       let this = self.clone();
       move || {
         let Ok(mut watcher) = ClipboardWatcherContext::new() else {
-          tracing::error!("Failed to create clipboard watcher");
+          tracing::error!("Failed to create clipboard watcher context");
           return;
         };
 
+        tracing::info!("Clipboard watcher started");
         watcher.add_handler(this);
         watcher.start_watch();
+        tracing::warn!("Clipboard watcher stopped");
       }
     });
 
@@ -294,6 +306,7 @@ impl CliprdrBackend for CliprdrHandlerBackend {
   }
 
   fn on_ready(&mut self) {
+    tracing::info!("cliprdr backend is ready; starting clipboard watcher");
     self.start_watcher();
     self.on_clipboard_change();
   }
@@ -304,7 +317,7 @@ impl CliprdrBackend for CliprdrHandlerBackend {
 
   fn on_process_negotiated_capabilities(&mut self, capabilities: ClipboardGeneralCapabilityFlags) {
     self.capabilities = capabilities;
-    tracing::debug!(?capabilities, "Negotiated cliprdr capabilities");
+    tracing::info!(?capabilities, "Negotiated cliprdr capabilities");
   }
 
   fn on_remote_copy(&mut self, available_formats: &[ClipboardFormat]) {
