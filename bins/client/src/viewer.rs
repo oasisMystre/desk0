@@ -124,7 +124,10 @@ impl Desk0Viewer {
       .with_client_dir("C:\\Windows\\System32\\mstscax.dll")
       .with_static_channel({
         let clipboard_handler = clipboard_handler.clone();
-        move |_| Some(Cliprdr::new(clipboard_handler.build_cliprdr_backend()))
+        move |_| {
+          tracing::info!("Registering client cliprdr static channel");
+          Some(Cliprdr::new(clipboard_handler.build_cliprdr_backend()))
+        }
       })
       .build()
       .map_err(Desk0ViewerError::Configuration)?;

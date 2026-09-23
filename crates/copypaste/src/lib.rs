@@ -92,6 +92,7 @@ impl CliprdrHandler {
 
 impl CliprdrBackendFactory for CliprdrHandler {
   fn build_cliprdr_backend(&self) -> Box<dyn CliprdrBackend> {
+    tracing::info!("Building cliprdr backend for RDP connection");
     Box::new(self.build_backend())
   }
 }
@@ -214,6 +215,7 @@ impl CliprdrBackend for CliprdrHandlerBackend {
   }
 
   fn on_ready(&mut self) {
+    tracing::info!("cliprdr channel is ready");
     self.handler.start_watcher();
     self.handler.on_clipboard_change();
   }
