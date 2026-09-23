@@ -92,7 +92,6 @@ impl CliprdrHandler {
 
 impl CliprdrBackendFactory for CliprdrHandler {
   fn build_cliprdr_backend(&self) -> Box<dyn CliprdrBackend> {
-    tracing::info!("Building cliprdr backend for RDP connection");
     Box::new(self.build_backend())
   }
 }
@@ -121,86 +120,6 @@ impl CliprdrServerFactory for CliprdrHandler {}
 
 impl_as_any!(CliprdrHandlerBackend);
 
-impl CliprdrHandlerBackend {
-  fn request_next_download_chunk(&mut self) {
-    let download_state = self.handler.download_state.clone();
-    let mut download_state = download_state.lock().unwrap();
-
-    if download_state.current.is_none() {
-      if let Some(mut task) = download_state.queue.pop() {
-        if task.size == 0 {
-          if let Err(error) = File::create(&task.path) {
-            tracing::warn!(?error, "Failed to create local file for download");
-          } else {
-            download_state.downloaded.push(task.path);
-          }
-
-          drop(download_state);
-          self.request_next_download_chunk();
-          return;
-        }
-
-        if let Ok(file) = File::create(&task.path) {
-          task.file = Some(file);
-          download_state.current = Some(task);
-        } else {
-          tracing::error!(?task.path,"Failed to create local file for download");
-          drop(download_state);
-          self.request_next_download_chunk();
-          return;
-        }
-      } else {
-        if !download_state.downloaded.is_empty() {
-          let paths: Vec<String> = download_state
-            .downloaded
-            .iter()
-            .map(|path| path.to_string_lossy().into_owned())
-            .collect();
-
-          if let Err(error) = self.clipboard.set_files(paths) {
-            tracing::error!(?error, "Failed to set downloaded files to clipboard");
-          } else {
-            tracing::info!("Downloaded clipboard files and published them to the local clipboard");
-          }
-
-          download_state.downloaded.clear();
-        }
-      }
-    }
-
-    if let Some(task) = &download_state.current {
-      let remaining = task.size.saturating_sub(task.received);
-      if remaining == 0 {
-        if let Some(task) = download_state.current.take() {
-          download_state.downloaded.push(task.path);
-        }
-
-        drop(download_state);
-        self.request_next_download_chunk();
-        return;
-      }
-
-      let chunk_size = remaining.min(MAX_CLIPBOARD_CHUNK as u64) as u32;
-      if let Err(error) =
-        self
-          .handler
-          .send(Event::Clipboard(ClipboardMessage::SendFileContentsRequest(
-            FileContentsRequest {
-              data_id: None,
-              stream_id: task.index,
-              index: task.index as i32,
-              position: task.received,
-              requested_size: chunk_size,
-              flags: FileContentsFlags::RANGE,
-            },
-          )))
-      {
-        tracing::error!(?error, "Failed to send file contents request");
-      }
-    }
-  }
-}
-
 impl CliprdrBackend for CliprdrHandlerBackend {
   fn temporary_directory(&self) -> &str {
     &self.temp_dir
@@ -215,12 +134,13 @@ impl CliprdrBackend for CliprdrHandlerBackend {
   }
 
   fn on_ready(&mut self) {
-    tracing::info!("cliprdr channel is ready");
+    tracing::info!("CliprdrBackend::on_ready");
     self.handler.start_watcher();
     self.handler.on_clipboard_change();
   }
 
   fn on_request_format_list(&mut self) {
+    tracing::debug!("CliprdrBackend::on_request_format_list");
     self.handler.send_format_list();
   }
 
@@ -318,6 +238,11 @@ impl CliprdrBackend for CliprdrHandlerBackend {
   }
 
   fn on_format_data_response(&mut self, response: FormatDataResponse<'_>) {
+    tracing::debug!(
+      bytes = response.data().len(),
+      is_error = response.is_error(),
+      "CliprdrBackend::on_format_data_response"
+    );
     if let Ok(text) = response.to_string() {
       if !text.is_empty() {
         if let Err(error) = self.clipboard.set_text(text) {
@@ -489,7 +414,7 @@ impl CliprdrBackend for CliprdrHandlerBackend {
     }
 
     drop(download_state);
-    self.request_next_download_chunk();
+    self.handler.request_next_download_chunk();
   }
 
   fn on_remote_file_list(&mut self, files: &[FileDescriptor], _: Option<u32>) {
@@ -567,20 +492,23 @@ impl CliprdrBackend for CliprdrHandlerBackend {
         });
     }
 
-    self.request_next_download_chunk();
+    self.handler.request_next_download_chunk();
   }
 
   fn on_lock(&mut self, data_id: LockDataId) {
+    tracing::debug!(?data_id, "CliprdrBackend::on_lock");
     let mut state = self.handler.state.lock().unwrap();
     state.active_locks.push(data_id);
   }
 
   fn on_unlock(&mut self, data_id: LockDataId) {
+    tracing::debug!(?data_id, "CliprdrBackend::on_unlock");
     let mut state = self.handler.state.lock().unwrap();
     state.active_locks.retain(|id| id != &data_id);
   }
 
-  fn on_outgoing_locks_cleared(&mut self, _: &[LockDataId]) {
+  fn on_outgoing_locks_cleared(&mut self, data_ids: &[LockDataId]) {
+    tracing::debug!(count = data_ids.len(), "CliprdrBackend::on_outgoing_locks_cleared");
     let mut download_state = self.handler.download_state.lock().unwrap();
     download_state.queue.clear();
     download_state.current = None;
@@ -772,6 +700,80 @@ impl CliprdrHandler {
         OwnedFormatDataResponse::new_data(Cow::Owned(image.clone())),
       ))) {
         eprintln!("failed to send file lists {error}");
+      }
+    }
+  }
+
+  fn request_next_download_chunk(&mut self) {
+    let download_state = self.download_state.clone();
+    let mut download_state = download_state.lock().unwrap();
+
+    if download_state.current.is_none() {
+      if let Some(mut task) = download_state.queue.pop() {
+        if task.size == 0 {
+          if let Err(error) = File::create(&task.path) {
+            tracing::warn!(?error, "Failed to create local file for download");
+          } else {
+            download_state.downloaded.push(task.path);
+          }
+
+          drop(download_state);
+          self.request_next_download_chunk();
+          return;
+        }
+
+        if let Ok(file) = File::create(&task.path) {
+          task.file = Some(file);
+          download_state.current = Some(task);
+        } else {
+          tracing::error!(?task.path,"Failed to create local file for download");
+          drop(download_state);
+          self.request_next_download_chunk();
+          return;
+        }
+      } else {
+        if !download_state.downloaded.is_empty() {
+          let paths: Vec<String> = download_state
+            .downloaded
+            .iter()
+            .map(|path| path.to_string_lossy().into_owned())
+            .collect();
+
+          if let Err(error) = self.clipboard.set_files(paths) {
+            tracing::error!(?error, "Failed to set downloaded files to clipboard");
+          } else {
+            tracing::info!("Downloaded clipboard files and published them to the local clipboard");
+          }
+
+          download_state.downloaded.clear();
+        }
+      }
+    }
+
+    if let Some(task) = &download_state.current {
+      let remaining = task.size.saturating_sub(task.received);
+      if remaining == 0 {
+        if let Some(task) = download_state.current.take() {
+          download_state.downloaded.push(task.path);
+        }
+
+        drop(download_state);
+        self.request_next_download_chunk();
+        return;
+      }
+
+      let chunk_size = remaining.min(MAX_CLIPBOARD_CHUNK as u64) as u32;
+      if let Err(error) = self.send(Event::Clipboard(ClipboardMessage::SendFileContentsRequest(
+        FileContentsRequest {
+          data_id: None,
+          stream_id: task.index,
+          index: task.index as i32,
+          position: task.received,
+          requested_size: chunk_size,
+          flags: FileContentsFlags::RANGE,
+        },
+      ))) {
+        tracing::error!(?error, "Failed to send file contents request");
       }
     }
   }
