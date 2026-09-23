@@ -12,6 +12,7 @@ pub struct DeviceInfo {
 
 #[derive(Clone)]
 pub struct AgentSession {
+  pub id: uuid::Uuid,
   pub info: DeviceInfo,
   pub sender: UnboundedSender<Message>,
   inbound: Arc<Mutex<Vec<UnboundedSender<Message>>>>,
@@ -56,6 +57,7 @@ impl DeviceRegistry {
 
   pub fn register(&self, info: DeviceInfo, sender: UnboundedSender<Message>) -> AgentSession {
     let session = AgentSession {
+      id: uuid::Uuid::new_v4(),
       info,
       sender,
       inbound: Arc::new(Mutex::new(Vec::new())),
@@ -81,12 +83,19 @@ impl DeviceRegistry {
     receiver
   }
 
-  pub fn unregister(&self, org_id: &str, device_id: &str) {
-    self.sessions.remove(&Self::session_key(org_id, device_id));
+  pub fn unregister(&self, session: &AgentSession) {
+    let key = Self::session_key(&session.info.org_id, &session.info.device_id);
+    if self
+      .sessions
+      .get(&key)
+      .is_some_and(|current| current.id == session.id)
+    {
+      self.sessions.remove(&key);
+    }
   }
 
   pub fn get_by_org_and_device_id(&self, org_id: &str, device_id: &str) -> Option<AgentSession> {
-      self
+    self
       .sessions
       .get(&Self::session_key(org_id, device_id))
       .map(|value| value.clone())

@@ -82,26 +82,30 @@ pub async fn handle_viewer(
             break;
         },
         None => break,
-         Some(Err(error)) => {
-            tracing::info!(?error, "rdp disconnected weird");
+        Some(Err(error)) => {
+            tracing::error!(?error, "rdp disconnected");
             break;
         },
         Some(Ok(_)) => {}
       },
       result = agent_reader.recv() => match result {
         Some(message) => {
-          if let Message::Binary(ref bytes) = message { tracing::debug!(bytes = bytes.len(), prefix = ?&bytes[..bytes.len().min(8)], "agent -> viewer RDP bytes"); }
-          if socket.send(message).await.is_err() { break; }
+          if let Err(error) = socket.send(message).await {
+              tracing::error!(?error, "rdp disconnected");
+              break;
+          }
         }
         None => break,
       }
     }
   }
 
-  tracing::info!("viewer disconnected; resetting agent RDP session");
-  let _ = agent
+  if let Err(error) = agent
     .sender
-    .send(Message::Ping(RESET_RDP_SESSION.to_vec().into()));
+    .send(Message::Ping(RESET_RDP_SESSION.to_vec().into()))
+  {
+    tracing::warn!(?error, "resetting agent RDP session failed");
+  }
 }
 
 async fn read_rdcleanpath_request(
@@ -112,7 +116,9 @@ async fn read_rdcleanpath_request(
     let Some(message) = socket.next().await else {
       anyhow::bail!("viewer closed during RDCleanPath authentication")
     };
+
     match message? {
+      Message::Ping(bytes) => socket.send(Message::Pong(bytes)).await?,
       Message::Binary(bytes) => {
         let pdu = ironrdp_rdcleanpath::RDCleanPathPdu::from_der(&bytes)?;
         let ironrdp_rdcleanpath::RDCleanPath::Request {
@@ -126,9 +132,8 @@ async fn read_rdcleanpath_request(
         let claims = auth.authenticate(&proxy_auth)?;
         return Ok((x224_connection_request.as_bytes().to_vec(), claims));
       }
-      Message::Ping(bytes) => socket.send(Message::Pong(bytes)).await?,
-      Message::Close(_) => anyhow::bail!("viewer closed during RDCleanPath authentication"),
       Message::Pong(_) | Message::Text(_) => {}
+      Message::Close(_) => anyhow::bail!("viewer closed during RDCleanPath authentication"),
     }
   }
 }

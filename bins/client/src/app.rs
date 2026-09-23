@@ -150,9 +150,10 @@ impl Desk0InnerApp {
       RdpOutputEvent::Terminated(graceful_disconnect_reason) => {
         match graceful_disconnect_reason {
           Ok(reason) => {
-            tracing::info!(?reason, "rdp exited");
+            tracing::debug!(?reason, "rdp exited");
           }
           Err(error) => {
+            //todo: write retry logic here
             tracing::error!(?error, "force exit rdp");
           }
         };
@@ -194,7 +195,6 @@ impl Desk0InnerApp {
         }
       }
       RdpOutputEvent::PointerBitmap(pointer) => {
-        tracing::debug!(width = ?pointer.width, height = ?pointer.height, "Received pointer bitmap");
         match CustomCursor::from_rgba(
           pointer.bitmap_data.clone(),
           pointer.width,

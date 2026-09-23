@@ -5,11 +5,12 @@ use std::{
 
 use display_info::DisplayInfo;
 use ironrdp::server::{
-  BitmapUpdate, DesktopSize, DisplayUpdate, PixelFormat, RdpServerDisplay, RdpServerDisplayUpdates,
+  BitmapUpdate, ColorPointer, DesktopSize, DisplayUpdate, PixelFormat, RGBAPointer,
+  RdpServerDisplay, RdpServerDisplayUpdates,
 };
 use rs_capture::{
   CaptureBackend, FrameMetadata, PixelFormat as CapturePixelFormat, ScreenCapture,
-  ScreenCaptureConfig,
+  ScreenCaptureConfig, backend::PointerShape,
 };
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 
@@ -159,6 +160,30 @@ impl DisplayHandler {
       ) else {
         continue;
       };
+
+      if let Some(pointer) = &metadata.pointer_shape {
+        match pointer {
+          PointerShape::Hidden => updates.push(DisplayUpdate::HidePointer),
+          PointerShape::Default => updates.push(DisplayUpdate::DefaultPointer),
+          PointerShape::Color(pointer) => updates.push(DisplayUpdate::ColorPointer(ColorPointer {
+            width: pointer.width,
+            height: pointer.height,
+            hot_x: pointer.hot_x,
+            hot_y: pointer.hot_y,
+            cache_index: pointer.cache_index,
+            and_mask: pointer.and_mask.to_vec(),
+            xor_mask: pointer.xor_mask.to_vec(),
+          })),
+          PointerShape::Rgba(pointer) => updates.push(DisplayUpdate::RGBAPointer(RGBAPointer {
+            width: pointer.width,
+            height: pointer.height,
+            hot_x: pointer.hot_x,
+            hot_y: pointer.hot_y,
+            data: pointer.data.to_vec(),
+            cache_index: pointer.cache_index,
+          })),
+        }
+      }
 
       updates.push(DisplayUpdate::Bitmap(BitmapUpdate {
         x: x as u16,

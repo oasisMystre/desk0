@@ -51,5 +51,5 @@ pub async fn handle_agent(mut socket: WebSocket, claims: Claims, registry: Arc<D
     }
   }
 
-  registry.unregister(&claims.org_id, &claims.device_id);
+  registry.unregister(&agent_session);
 }

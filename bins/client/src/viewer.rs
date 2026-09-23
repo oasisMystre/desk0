@@ -118,7 +118,10 @@ impl Desk0Viewer {
       .with_desktop_width(width)
       .with_desktop_height(height)
       .with_clipboard(ClipboardType::Enable)
-      .with_pointer_software_rendering(true)
+      // Receive remote pointer bitmaps so the window can install the actual
+      // cursor shape (including resize cursors) instead of baking the pointer
+      // into the framebuffer.
+      .with_pointer_software_rendering(false)
       .with_client_name(Self::client_name())
       .with_client_build(Self::client_build())
       .with_client_dir("C:\\Windows\\System32\\mstscax.dll")
@@ -182,16 +185,12 @@ impl Desk0Viewer {
             Desk0ViewerError::InputClosed
           })?
       } else {
-        let input = self.input.clone();
         let cancellation_token = self._cancellation_token.clone();
         thread::spawn(move || {
           rt.block_on(async {
             tokio::select! {
                 result = client.run() => result,
                 _ = cancellation_token.cancelled() => {
-                    if let Err(error) = input.send(RdpInputEvent::Close) {
-                       tracing::error!(?error, "failed to gracefully close client");
-                    }
                     return;
                 }
             }
@@ -228,10 +227,6 @@ impl Desk0Viewer {
 
   pub fn shutdown(&mut self) {
     self._cancellation_token.cancel();
-    if let Err(error) = self.input.send(RdpInputEvent::Close) {
-      tracing::debug!(?error, "input channel closed");
-    }
-
     if let Some(thread) = self.thread.take() {
       if let Err(error) = thread.join() {
         tracing::error!(?error, "closing input thread error");
