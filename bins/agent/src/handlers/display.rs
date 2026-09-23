@@ -229,14 +229,6 @@ impl DisplayHandler {
       }
     }
 
-    if let Some((x, y)) = metadata.pointer_position {
-      updates.push(DisplayUpdate::PointerPosition(
-        ironrdp::pdu::pointer::PointerPositionAttribute {
-          x: x.clamp(0, u16::MAX as i32) as u16,
-          y: y.clamp(0, u16::MAX as i32) as u16,
-        },
-      ));
-    }
   }
 
   pub fn get_display_size() -> (u16, u16) {
