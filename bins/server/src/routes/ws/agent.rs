@@ -27,7 +27,6 @@ pub async fn handle_agent(mut socket: WebSocket, claims: Claims, registry: Arc<D
       }
       result = socket.recv() => match result {
         Some(Ok(Message::Binary(bytes))) => {
-          tracing::debug!(bytes = bytes.len(), prefix = ?&bytes[..bytes.len().min(8)], "agent -> relay RDP bytes");
           agent_session.publish_inbound(Message::Binary(bytes));
         }
         Some(Ok(Message::Ping(bytes))) => {

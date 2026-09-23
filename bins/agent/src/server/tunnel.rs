@@ -94,7 +94,6 @@ impl AgentTunnel {
             if count == 0 {
               break false;
             }
-            tracing::debug!(bytes = count, prefix = ?&bytes[..count.min(8)], "agent -> server RDP bytes");
             websocket_writer
               .send(Message::Binary(bytes[..count].to_vec().into()))
               .await?;
