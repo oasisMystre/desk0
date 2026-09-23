@@ -52,8 +52,9 @@ pub type Event = RdpInputEvent;
 pub struct CliprdrHandler {
   sender: Option<UnboundedSender<Event>>,
   state: Arc<Mutex<ClipboardState>>,
-  download_state: Arc<Mutex<DownloadState>>,
   watcher_started: Arc<AtomicBool>,
+  clipboard: Arc<ClipboardContext>,
+  download_state: Arc<Mutex<DownloadState>>,
 }
 
 #[derive(Clone)]
@@ -97,6 +98,12 @@ impl CliprdrBackendFactory for CliprdrHandler {
 }
 
 impl CliprdrHandler {
+  pub fn start_watcher(&self) {
+    tracing::debug!("Requesting clipboard watcher startup");
+    let mut backend = self.build_backend();
+    backend.start_watcher();
+  }
+
   fn build_backend(&self) -> CliprdrHandlerBackend {
     let sender = self.sender.clone();
 
@@ -112,7 +119,7 @@ impl CliprdrHandler {
       handler: self.clone(),
       watcher_started: self.watcher_started.clone(),
       capabilities: ClipboardGeneralCapabilityFlags::empty(),
-      clipboard: Arc::new(ClipboardContext::new().expect("creating clipboard instance failed")),
+      clipboard: self.clipboard.clone(),
     }
   }
 }
@@ -325,6 +332,18 @@ impl CliprdrBackend for CliprdrHandlerBackend {
 
     let mut format_to_request = None;
     for format in available_formats {
+      // File transfers use the named FileGroupDescriptorW format.  Its numeric
+      // id is registered by the OS and is therefore not necessarily CF_HDROP.
+      if format
+        .name
+        .as_ref()
+        .map(|name| name.value() == ClipboardFormatName::FILE_LIST.value())
+        .unwrap_or(false)
+      {
+        format_to_request = Some(format.id);
+        break;
+      }
+
       match format.id {
         ClipboardFormatId::CF_HDROP => {
           format_to_request = Some(format.id);
@@ -366,6 +385,7 @@ impl CliprdrBackend for CliprdrHandlerBackend {
   }
 
   fn on_format_data_request(&mut self, request: FormatDataRequest) {
+    tracing::debug!(format = ?request.format, "Remote requested clipboard format data");
     let mut state = self.handler.state.lock().unwrap();
 
     match request.format {
@@ -464,6 +484,13 @@ impl CliprdrBackend for CliprdrHandlerBackend {
   }
 
   fn on_file_contents_request(&mut self, request: FileContentsRequest) {
+    tracing::debug!(
+      stream_id = request.stream_id,
+      index = request.index,
+      position = request.position,
+      requested_size = request.requested_size,
+      "Remote requested clipboard file contents"
+    );
     let path = {
       let state = self.handler.state.lock().unwrap();
       let file_index = request.index;
@@ -489,6 +516,11 @@ impl CliprdrBackend for CliprdrHandlerBackend {
 
     match result {
       Ok(buffer) => {
+        tracing::debug!(
+          stream_id = request.stream_id,
+          bytes = buffer.len(),
+          "Sending clipboard file contents"
+        );
         if let Err(error) = self.handler.send(Event::Clipboard(
           ClipboardMessage::SendFileContentsResponse(FileContentsResponse::new_data_response(
             request.stream_id,
@@ -516,6 +548,12 @@ impl CliprdrBackend for CliprdrHandlerBackend {
   }
 
   fn on_file_contents_response<'a>(&mut self, response: FileContentsResponse<'a>) {
+    tracing::debug!(
+      stream_id = response.stream_id(),
+      bytes = response.data().len(),
+      is_error = response.is_error(),
+      "Received clipboard file contents"
+    );
     let mut download_state = self.handler.download_state.lock().unwrap();
 
     if let Some(task) = &mut download_state.current {
@@ -546,6 +584,10 @@ impl CliprdrBackend for CliprdrHandlerBackend {
   }
 
   fn on_remote_file_list(&mut self, files: &[FileDescriptor], _: Option<u32>) {
+    tracing::info!(
+      file_count = files.len(),
+      "Received remote clipboard file list"
+    );
     self.handler.download_state.lock().unwrap().clear();
     let timestamp = SystemTime::now()
       .duration_since(UNIX_EPOCH)
@@ -645,6 +687,7 @@ impl CliprdrHandler {
       watcher_started: Arc::new(AtomicBool::new(false)),
       state: Arc::new(Mutex::new(ClipboardState::default())),
       download_state: Arc::new(Mutex::new(DownloadState::default())),
+      clipboard: Arc::new(ClipboardContext::new().expect("creating clipboard instance failed")),
     }
   }
 
@@ -658,6 +701,26 @@ impl CliprdrHandler {
 
   pub fn send_format_list(&self) {
     let state = self.state.lock().unwrap();
+
+    // File clipboard data has a separate CLIPRDR flow.  In particular,
+    // initiate_file_copy() stores the descriptors inside IronRDP and advertises
+    // FileGroupDescriptorW/Preferred DropEffect.  Sending CF_HDROP through
+    // initiate_copy() leaves the file list unregistered, so subsequent
+    // FileContentsRequest messages are rejected or never generated.
+    if !state.files.is_empty() {
+      match state.file_descriptors() {
+        Ok(files) => {
+          tracing::info!(file_count = files.len(), "Advertising clipboard file list");
+          if let Err(error) = self.send(Event::Clipboard(ClipboardMessage::SendInitiateFileCopy(
+            files,
+          ))) {
+            eprintln!("Failed to send initiate file copy event {error}");
+          }
+        }
+        Err(error) => eprintln!("Reading clipboard files failed {error}"),
+      }
+      return;
+    }
 
     let mut formats = Vec::new();
 
@@ -679,10 +742,6 @@ impl CliprdrHandler {
 
     if state.image.is_some() {
       formats.push(ClipboardFormat::new(ClipboardFormatId::CF_DIB));
-    }
-
-    if !state.files.is_empty() {
-      formats.push(ClipboardFormat::new(ClipboardFormatId::CF_HDROP));
     }
 
     if !formats.is_empty() {

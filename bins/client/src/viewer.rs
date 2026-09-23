@@ -136,6 +136,9 @@ impl Desk0Viewer {
     let input = client.input_sender();
 
     clipboard_handler.set_sender(input.clone());
+    // Start listening immediately; on_ready() also calls this method, and
+    // the shared guard prevents duplicate watcher threads.
+    clipboard_handler.start_watcher();
 
     Ok(Self {
       input,
