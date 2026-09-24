@@ -1640,8 +1640,10 @@ dependencies = [
  "image",
  "ironrdp",
  "ironrdp-client",
+ "ironrdp-cliprdr-format",
  "tokio",
  "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]
@@ -3791,6 +3793,16 @@ dependencies = [
  "ironrdp-pdu",
  "ironrdp-svc",
  "tracing",
+]
+
+[[package]]
+name = "ironrdp-cliprdr-format"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f8c1d85feb9e3af4d3a17797994a29796de1dd44c51f7c3dcf72a50fa18f5ba5"
+dependencies = [
+ "ironrdp-core",
+ "png",
 ]
 
 [[package]]

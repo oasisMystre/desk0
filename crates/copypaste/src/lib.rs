@@ -30,6 +30,11 @@ use ironrdp::{
 };
 #[cfg(not(feature = "server"))]
 use ironrdp_client::rdp::RdpInputEvent;
+use ironrdp_cliprdr_format::{
+  bitmap::dibv5_to_png,
+  bitmap::png_to_cf_dibv5,
+  html::{cf_html_to_plain_html, plain_html_to_cf_html},
+};
 use tokio::sync::mpsc::{UnboundedSender, error::SendError};
 
 use crate::types::{ClipboardFile, ClipboardState, DownloadState, DownloadTask};
@@ -243,6 +248,7 @@ impl CliprdrBackend for CliprdrHandlerBackend {
       is_error = response.is_error(),
       "CliprdrBackend::on_format_data_response"
     );
+
     if let Ok(text) = response.to_string() {
       if !text.is_empty() {
         if let Err(error) = self.clipboard.set_text(text) {
@@ -253,22 +259,22 @@ impl CliprdrBackend for CliprdrHandlerBackend {
       }
     }
 
-    let raw_data = response.data();
-    if raw_data.is_empty() {
+    let data = response.data();
+    if data.is_empty() {
       return;
     }
 
-    if let Ok(str_data) = std::str::from_utf8(raw_data) {
-      if str_data.starts_with("Version:") || str_data.contains("<html") {
-        if let Err(error) = self.clipboard.set_html(str_data.to_string()) {
-          eprintln!("Failed to paste HTML {error}");
-        }
-
-        return;
+    if let Ok(data) = cf_html_to_plain_html(data) {
+      if let Err(error) = self.clipboard.set_html(data.to_string()) {
+        eprintln!("Failed to paste HTML {error}");
       }
 
-      if str_data.starts_with("{\\rtf1") {
-        if let Err(error) = self.clipboard.set_rich_text(str_data.to_string()) {
+      return;
+    }
+
+    if let Ok(data) = std::str::from_utf8(data) {
+      if data.starts_with("{\\rtf1") {
+        if let Err(error) = self.clipboard.set_rich_text(data.to_string()) {
           eprintln!("Failed to paste rich text {error}");
         }
 
@@ -276,44 +282,14 @@ impl CliprdrBackend for CliprdrHandlerBackend {
       }
     }
 
-    if raw_data.len() >= 40 {
-      let header_size = u32::from_le_bytes(raw_data[0..4].try_into().unwrap_or([0u8; 4])) as usize;
-      if header_size == 40 || header_size == 108 || header_size == 124 {
-        let bit_count = if raw_data.len() >= 16 {
-          u16::from_le_bytes(raw_data[14..16].try_into().unwrap_or([0u8; 2]))
-        } else {
-          0
-        };
-        let clr_used = if raw_data.len() >= 36 {
-          u32::from_le_bytes(raw_data[32..36].try_into().unwrap_or([0u8; 4]))
-        } else {
-          0
-        };
-        let num_colors = if clr_used > 0 {
-          clr_used as usize
-        } else if bit_count <= 8 && bit_count > 0 {
-          1 << bit_count
-        } else {
-          0
-        };
-        let off_bits = (14 + header_size + num_colors * 4) as u32;
-
-        let mut bmp = Vec::with_capacity(14 + raw_data.len());
-        bmp.extend_from_slice(b"BM");
-        let file_size = (14 + raw_data.len()) as u32;
-        bmp.extend_from_slice(&file_size.to_le_bytes());
-        bmp.extend_from_slice(&[0u8; 4]);
-        bmp.extend_from_slice(&off_bits.to_le_bytes());
-        bmp.extend_from_slice(raw_data);
-
-        if let Ok(image) = image::load_from_memory_with_format(&bmp, image::ImageFormat::Bmp) {
-          let rust_image = RustImageData::from_dynamic_image(image);
-          if let Err(error) = self.clipboard.set_image(rust_image) {
-            eprintln!("Failed to paste image {error}");
-          }
+    if let Ok(data) = dibv5_to_png(data) {
+      if let Ok(image) = image::load_from_memory_with_format(&data, ImageFormat::Png) {
+        let rust_image = RustImageData::from_dynamic_image(image);
+        if let Err(error) = self.clipboard.set_image(rust_image) {
+          eprintln!("Failed to paste image {error}");
         }
-        return;
       }
+      return;
     }
   }
 
@@ -508,7 +484,10 @@ impl CliprdrBackend for CliprdrHandlerBackend {
   }
 
   fn on_outgoing_locks_cleared(&mut self, data_ids: &[LockDataId]) {
-    tracing::debug!(count = data_ids.len(), "CliprdrBackend::on_outgoing_locks_cleared");
+    tracing::debug!(
+      count = data_ids.len(),
+      "CliprdrBackend::on_outgoing_locks_cleared"
+    );
     let mut download_state = self.handler.download_state.lock().unwrap();
     download_state.queue.clear();
     download_state.current = None;
@@ -548,11 +527,13 @@ impl ClipboardHandler for CliprdrHandler {
     }
 
     if let Ok(image) = self.clipboard.get_image() {
-      match image.encode_image(ColorType::Rgb8, ImageFormat::Bmp) {
+      match image.to_png() {
         Ok(bytes) => {
           let bytes = bytes.get_bytes();
-          let data = &bytes[14..];
-          state.image = Some(data.to_vec());
+          match png_to_cf_dibv5(bytes) {
+            Ok(bytes) => state.image = Some(bytes),
+            Err(error) => tracing::error!(?error, "failed to convert png to cf dibv5"),
+          }
         }
         Err(error) => {
           tracing::error!(?error, "Failed to encode image");
@@ -565,12 +546,14 @@ impl ClipboardHandler for CliprdrHandler {
     }
 
     if let Ok(html) = self.clipboard.get_html() {
-      state.html = Some(html);
+      state.html = Some(plain_html_to_cf_html(&html));
     }
 
     if let Ok(rtf) = self.clipboard.get_rich_text() {
       state.rich_text = Some(rtf);
     }
+
+    drop(state);
 
     self.send_format_list();
   }
@@ -776,6 +759,8 @@ impl CliprdrHandler {
         tracing::error!(?error, "Failed to send file contents request");
       }
     }
+
+    drop(download_state);
   }
 
   pub fn start_watcher(&self) {
@@ -807,6 +792,8 @@ impl CliprdrHandler {
     let mut watcher_state = self.watcher.lock().unwrap();
     watcher_state.thread = Some(thread);
     watcher_state.shutdown = Some(shutdown);
+
+    drop(watcher_state);
   }
 }
 
