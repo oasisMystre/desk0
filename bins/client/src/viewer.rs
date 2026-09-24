@@ -1,4 +1,7 @@
-use std::thread;
+use std::{
+  sync::{Arc, Mutex},
+  thread,
+};
 
 use anyhow::Context;
 use copypaste::CliprdrHandler;
@@ -83,7 +86,7 @@ impl Desk0Viewer {
       endpoint.set_scheme("wss").ok();
     }
 
-    let mut clipboard_handler = CliprdrHandler::new();
+    let mut clipboard_handler = Arc::new(Mutex::new(CliprdrHandler::new()));
 
     let displays = DisplayInfo::all().map_err(Desk0ViewerError::Display)?;
 
@@ -125,8 +128,12 @@ impl Desk0Viewer {
       .with_static_channel({
         let clipboard_handler = clipboard_handler.clone();
         move |_| {
+          let backend = {
+            let handler = clipboard_handler.lock().unwrap();
+            handler.build_cliprdr_backend()
+          };
           tracing::info!("Registering client cliprdr static channel");
-          Some(Cliprdr::new(clipboard_handler.build_cliprdr_backend()))
+          Some(Cliprdr::new(backend))
         }
       })
       .build()
@@ -135,14 +142,14 @@ impl Desk0Viewer {
     let client = RdpClient::new(config, output_event_sender);
     let input = client.input_sender();
 
+    let mut clipboard_handler = clipboard_handler.lock().unwrap();
     clipboard_handler.set_sender(input.clone());
-    clipboard_handler.start_watcher();
-
+    
     Ok(Self {
       input,
       thread: None,
       client: Some(client),
-      clipboard: clipboard_handler,
+      clipboard: clipboard_handler.clone(),
       _cancellation_token: CancellationToken::new(),
     })
   }

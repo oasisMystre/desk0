@@ -18,9 +18,8 @@ pub async fn main() {
   let (rx, mut tx) = unbounded_channel();
 
   let mut handler = CliprdrHandler::new();
-  let backend = handler.build_cliprdr_backend();
+  handler.build_cliprdr_backend();
   handler.set_sender(rx);
-  handler.start_watcher();
 
   while let Some(data) = tx.recv().await {
     tracing::debug!(?data, "data");
