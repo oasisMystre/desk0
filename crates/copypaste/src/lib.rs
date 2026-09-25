@@ -4,10 +4,7 @@ use std::{
   fs::File,
   io::{Read, Seek, SeekFrom, Write},
   path::PathBuf,
-  sync::{
-    Arc, Mutex,
-    atomic::{AtomicBool, Ordering},
-  },
+  sync::{Arc, Mutex},
   thread::JoinHandle,
   time::{SystemTime, UNIX_EPOCH},
 };
@@ -57,29 +54,35 @@ struct WatcherState {
   shutdown: Option<WatcherShutdown>,
 }
 
+#[derive(Clone, Copy)]
+pub enum CliprdrState {
+  Ready,
+  Paste,
+  Initialize,
+}
+
 #[derive(Clone)]
 pub struct CliprdrHandler {
-  ready: Arc<AtomicBool>,
-  suppress_next_watcher_event: Arc<AtomicBool>,
+  state: Arc<Mutex<CliprdrState>>,
   clipboard: Arc<ClipboardContext>,
   watcher: Arc<Mutex<WatcherState>>,
-  state: Arc<Mutex<ClipboardState>>,
   sender: Option<UnboundedSender<Event>>,
   download_state: Arc<Mutex<DownloadState>>,
+  clipboard_state: Arc<Mutex<ClipboardState>>,
 }
 
 struct CliprdrHandlerBackend {
   temp_dir: String,
   handler: CliprdrHandler,
   clipboard: Arc<ClipboardContext>,
-  sender: Option<UnboundedSender<Event>>,
   capabilities: ClipboardGeneralCapabilityFlags,
 }
 
 impl Debug for CliprdrHandlerBackend {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     f.debug_struct("CliprdrHandlerBackend")
-      .field("sender", &self.sender)
+      .field("temp_dir", &self.temp_dir)
+      .field("capabilites", &self.capabilities)
       .finish()
   }
 }
@@ -89,7 +92,7 @@ impl Drop for CliprdrHandlerBackend {
     // Stop the watcher from publishing into a channel whose RDP backend has
     // already been torn down. A later connection will set this back to false
     // during construction and true from on_ready.
-    self.handler.ready.store(false, Ordering::Release);
+    self.handler.set_state(CliprdrState::Initialize);
     tracing::debug!("CLIPRDR backend dropped; clipboard events disabled");
   }
 }
@@ -98,8 +101,8 @@ impl Drop for CliprdrHandlerBackend {
 impl ServerEventSender for CliprdrHandler {
   fn set_sender(&mut self, sender: UnboundedSender<Event>) {
     self.sender = Some(sender);
-    #[cfg(feature = "watcher")]
-    self.start_watcher();
+    // #[cfg(feature = "watcher")]
+    // self.start_watcher();
   }
 }
 
@@ -123,9 +126,7 @@ impl CliprdrHandler {
     // A backend is created for each RDP connection. The clipboard watcher can
     // outlive the previous backend, so do not publish events while the new
     // CLIPRDR channel is still negotiating.
-    self.ready.store(false, Ordering::Release);
-
-    let sender = self.sender.clone();
+    self.set_state(CliprdrState::Initialize);
 
     let temp_dir = std::env::temp_dir()
       .join("cliprdr")
@@ -133,7 +134,6 @@ impl CliprdrHandler {
       .into_owned();
 
     CliprdrHandlerBackend {
-      sender,
       temp_dir,
       handler: self.clone(),
       clipboard: self.clipboard.clone(),
@@ -161,7 +161,7 @@ impl CliprdrBackend for CliprdrHandlerBackend {
   }
 
   fn on_ready(&mut self) {
-    self.handler.on_ready();
+    self.handler.set_state(CliprdrState::Ready);
 
     tracing::info!("CliprdrBackend::on_ready");
     #[cfg(feature = "watcher")]
@@ -203,7 +203,7 @@ impl CliprdrBackend for CliprdrHandlerBackend {
   fn on_remote_copy(&mut self, available_formats: &[ClipboardFormat]) {
     tracing::debug!(?available_formats, "Remote copied formats");
 
-    if !self.handler.ready.load(Ordering::Acquire) {
+    if !matches!(self.handler.get_state(), CliprdrState::Ready) {
       tracing::debug!("clipboard is not ready yet");
     }
 
@@ -266,7 +266,7 @@ impl CliprdrBackend for CliprdrHandlerBackend {
 
   fn on_format_data_request(&mut self, request: FormatDataRequest) {
     tracing::debug!(format = ?request.format, "Remote requested clipboard format data");
-    let mut state = self.handler.state.lock().unwrap();
+    let mut state = self.handler.clipboard_state.lock().unwrap();
 
     match request.format {
       ClipboardFormatId::CF_UNICODETEXT => {
@@ -292,6 +292,7 @@ impl CliprdrBackend for CliprdrHandlerBackend {
   }
 
   fn on_format_data_response(&mut self, response: FormatDataResponse<'_>) {
+    self.handler.set_state(CliprdrState::Paste);
     tracing::debug!(
       bytes = response.data().len(),
       is_error = response.is_error(),
@@ -366,7 +367,7 @@ impl CliprdrBackend for CliprdrHandlerBackend {
       "Remote requested clipboard file contents"
     );
     let path = {
-      let state = self.handler.state.lock().unwrap();
+      let state = self.handler.clipboard_state.lock().unwrap();
       let file_index = request.index;
 
       let Some(file_info) = state.files.get(file_index as usize) else {
@@ -539,13 +540,13 @@ impl CliprdrBackend for CliprdrHandlerBackend {
 
   fn on_lock(&mut self, data_id: LockDataId) {
     tracing::debug!(?data_id, "CliprdrBackend::on_lock");
-    let mut state = self.handler.state.lock().unwrap();
+    let mut state = self.handler.clipboard_state.lock().unwrap();
     state.active_locks.push(data_id);
   }
 
   fn on_unlock(&mut self, data_id: LockDataId) {
     tracing::debug!(?data_id, "CliprdrBackend::on_unlock");
-    let mut state = self.handler.state.lock().unwrap();
+    let mut state = self.handler.clipboard_state.lock().unwrap();
     state.active_locks.retain(|id| id != &data_id);
   }
 
@@ -568,24 +569,25 @@ impl ClipboardHandler for CliprdrHandler {
     // Publishing a completed remote download with set_files() also produces a
     // local clipboard notification. Do not echo that downloaded file back to
     // the peer as a new clipboard copy operation.
-    if self
-      .suppress_next_watcher_event
-      .swap(false, Ordering::AcqRel)
-    {
+    if matches!(self.get_state(), CliprdrState::Paste) {
+      self.set_state(CliprdrState::Ready);
       tracing::debug!("Ignoring clipboard change generated by remote download");
       return;
     }
+
+    #[cfg(feature = "server")]
+    let state = self.get_state();
 
     // ClipboardWatcherContext may report a change before IronRDP has moved
     // CLIPRDR into Ready. Sending a file-copy event during that window makes
     // ironrdp-cliprdr reject it and the RDP server drops the connection.
     #[cfg(feature = "server")]
-    if !self.ready.load(Ordering::Acquire) {
+    if !matches!(state, CliprdrState::Ready) {
       tracing::debug!("Ignoring clipboard change until cliprdr is ready");
       return;
     }
 
-    let mut state = self.state.lock().unwrap();
+    let mut state = self.clipboard_state.lock().unwrap();
 
     if !state.active_locks.is_empty() {
       tracing::debug!("Ignoring local clipboard change while clipboard locks are active");
@@ -613,6 +615,15 @@ impl ClipboardHandler for CliprdrHandler {
           path: path.to_path_buf(),
         }
       }));
+    }
+
+    // A file clipboard is already complete. Do not query unrelated Windows
+    // clipboard formats (especially DIB/RTF) because providers may expose
+    // malformed or very large payloads alongside CF_HDROP.
+    if !state.files.is_empty() {
+      drop(state);
+      self.send_format_list();
+      return;
     }
 
     if let Ok(image) = self.clipboard.get_image() {
@@ -652,9 +663,8 @@ impl CliprdrHandler {
   pub fn new() -> Self {
     Self {
       sender: None,
-      ready: Arc::new(AtomicBool::new(false)),
-      suppress_next_watcher_event: Arc::new(AtomicBool::new(false)),
-      state: Arc::new(Mutex::new(ClipboardState::default())),
+      state: Arc::new(Mutex::new(CliprdrState::Initialize)),
+      clipboard_state: Arc::new(Mutex::new(ClipboardState::default())),
       download_state: Arc::new(Mutex::new(DownloadState::default())),
       clipboard: Arc::new(ClipboardContext::new().expect("creating clipboard instance failed")),
       watcher: Arc::new(Mutex::new(WatcherState {
@@ -664,8 +674,15 @@ impl CliprdrHandler {
     }
   }
 
-  pub fn on_ready(&self) {
-    self.ready.store(true, Ordering::Release);
+  pub fn set_state(&self, state: CliprdrState) {
+    let mut lock = self.state.lock().unwrap();
+    *lock = state;
+    drop(lock);
+  }
+
+  pub fn get_state(&self) -> CliprdrState {
+    let lock = { self.state.lock().unwrap() };
+    *lock
   }
 
   pub fn send(&self, message: Event) -> Result<(), SendError<Event>> {
@@ -677,7 +694,7 @@ impl CliprdrHandler {
   }
 
   pub fn send_format_list(&self) {
-    let state = self.state.lock().unwrap();
+    let state = self.clipboard_state.lock().unwrap();
 
     if !state.files.is_empty() {
       match state.file_descriptors() {
@@ -727,7 +744,9 @@ impl CliprdrHandler {
 
     // An empty list is still required during client CLIPRDR initialization so
     // the peer can acknowledge the list and transition the channel to Ready.
-    if let Err(error) = self.send(Event::Clipboard(ClipboardMessage::SendInitiateCopy(formats))) {
+    if let Err(error) = self.send(Event::Clipboard(ClipboardMessage::SendInitiateCopy(
+      formats,
+    ))) {
       eprintln!("Failed to send initiate copy event {error}");
     }
   }
@@ -825,14 +844,9 @@ impl CliprdrHandler {
             .map(|path| path.to_string_lossy().into_owned())
             .collect();
 
-          self
-            .suppress_next_watcher_event
-            .store(true, Ordering::Release);
-
+          self.set_state(CliprdrState::Paste);
           if let Err(error) = self.clipboard.set_files(paths) {
-            self
-              .suppress_next_watcher_event
-              .store(false, Ordering::Release);
+            self.set_state(CliprdrState::Ready);
             tracing::error!(?error, "Failed to set downloaded files to clipboard");
           } else {
             tracing::info!("Downloaded clipboard files and published them to the local clipboard");
@@ -876,7 +890,7 @@ impl CliprdrHandler {
   #[cfg(feature = "watcher")]
   fn start_watcher(&self) {
     if self.watcher.lock().unwrap().thread.is_some() {
-      tracing::debug!("Clipboard watcher already started");
+      tracing::warn!("Clipboard watcher already started");
       return;
     }
 
@@ -900,11 +914,11 @@ impl CliprdrHandler {
       }
     });
 
-    let mut watcher_state = self.watcher.lock().unwrap();
-    watcher_state.thread = Some(thread);
-    watcher_state.shutdown = Some(shutdown);
+    let mut watcher = self.watcher.lock().unwrap();
+    watcher.thread = Some(thread);
+    watcher.shutdown = Some(shutdown);
 
-    drop(watcher_state);
+    drop(watcher);
   }
 }
 
