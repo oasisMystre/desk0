@@ -289,6 +289,10 @@ impl CliprdrBackend for CliprdrHandlerBackend {
       }
       _ => {}
     }
+
+    if let Err(error) = self.handler.clipboard.clear() {
+      tracing::error!(?error, "failed to clear clipboard");
+    };
   }
 
   fn on_format_data_response(&mut self, response: FormatDataResponse<'_>) {
