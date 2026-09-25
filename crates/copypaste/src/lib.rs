@@ -31,7 +31,8 @@ use ironrdp::{
 #[cfg(not(feature = "server"))]
 use ironrdp_client::rdp::RdpInputEvent;
 use ironrdp_cliprdr_format::{
-  bitmap::{dib_to_png, dibv5_to_png, png_to_cf_dibv5}, html::{cf_html_to_plain_html, plain_html_to_cf_html},
+  bitmap::{dib_to_png, dibv5_to_png, png_to_cf_dibv5},
+  html::{cf_html_to_plain_html, plain_html_to_cf_html},
 };
 use tokio::sync::mpsc::{UnboundedSender, error::SendError};
 
@@ -90,6 +91,7 @@ impl ServerEventSender for CliprdrHandler {
 impl CliprdrHandler {
   pub fn set_sender(&mut self, sender: UnboundedSender<Event>) {
     self.sender = Some(sender);
+    #[cfg(feature = "watcher")]
     self.start_watcher();
   }
 }
@@ -139,8 +141,11 @@ impl CliprdrBackend for CliprdrHandlerBackend {
 
   fn on_ready(&mut self) {
     tracing::info!("CliprdrBackend::on_ready");
-    self.handler.start_watcher();
-    self.handler.on_clipboard_change();
+    #[cfg(feature = "watcher")]
+    {
+      self.handler.start_watcher();
+      self.handler.on_clipboard_change();
+    }
   }
 
   fn on_request_format_list(&mut self) {
@@ -161,10 +166,6 @@ impl CliprdrBackend for CliprdrHandlerBackend {
     );
   }
 
-  #[cfg(not(feature = "server"))]
-  fn on_remote_copy(&mut self, available_formats: &[ClipboardFormat]) {}
-
-  #[cfg(feature = "server")]
   fn on_remote_copy(&mut self, available_formats: &[ClipboardFormat]) {
     tracing::debug!(?available_formats, "Remote copied formats");
 
@@ -303,7 +304,7 @@ impl CliprdrBackend for CliprdrHandlerBackend {
       }
       return;
     }
-    
+
     if let Ok(data) = dib_to_png(data) {
       tracing::info!("pasting image");
       if let Ok(image) = image::load_from_memory_with_format(&data, ImageFormat::Png) {
@@ -521,8 +522,11 @@ impl CliprdrBackend for CliprdrHandlerBackend {
   }
 }
 
+#[cfg(feature = "watcher")]
 impl ClipboardHandler for CliprdrHandler {
   fn on_clipboard_change(&mut self) {
+    tracing::debug!("clipboard change");
+
     let mut state = self.state.lock().unwrap();
 
     if !state.active_locks.is_empty() {
@@ -795,6 +799,7 @@ impl CliprdrHandler {
     drop(download_state);
   }
 
+  #[cfg(feature = "watcher")]
   fn start_watcher(&self) {
     if self.watcher.lock().unwrap().thread.is_some() {
       tracing::debug!("Clipboard watcher already started");
