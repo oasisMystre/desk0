@@ -4,7 +4,10 @@ use std::{
   fs::File,
   io::{Read, Seek, SeekFrom, Write},
   path::PathBuf,
-  sync::{Arc, Mutex},
+  sync::{
+    Arc, Mutex,
+    atomic::{AtomicBool, Ordering},
+  },
   thread::JoinHandle,
   time::{SystemTime, UNIX_EPOCH},
 };
@@ -56,6 +59,7 @@ struct WatcherState {
 
 #[derive(Clone)]
 pub struct CliprdrHandler {
+  ready: Arc<AtomicBool>,
   clipboard: Arc<ClipboardContext>,
   watcher: Arc<Mutex<WatcherState>>,
   state: Arc<Mutex<ClipboardState>>,
@@ -84,8 +88,6 @@ impl Debug for CliprdrHandlerBackend {
 impl ServerEventSender for CliprdrHandler {
   fn set_sender(&mut self, sender: UnboundedSender<Event>) {
     self.sender = Some(sender);
-    #[cfg(feature = "watcher")]
-    self.start_watcher();
   }
 }
 
@@ -142,6 +144,8 @@ impl CliprdrBackend for CliprdrHandlerBackend {
   }
 
   fn on_ready(&mut self) {
+    self.handler.on_ready();
+
     tracing::info!("CliprdrBackend::on_ready");
     #[cfg(feature = "watcher")]
     {
@@ -596,6 +600,7 @@ impl CliprdrHandler {
   pub fn new() -> Self {
     Self {
       sender: None,
+      ready: Arc::new(AtomicBool::new(false)),
       state: Arc::new(Mutex::new(ClipboardState::default())),
       download_state: Arc::new(Mutex::new(DownloadState::default())),
       clipboard: Arc::new(ClipboardContext::new().expect("creating clipboard instance failed")),
@@ -606,7 +611,14 @@ impl CliprdrHandler {
     }
   }
 
+  pub fn on_ready(&self) {
+    self.ready.store(true, Ordering::Relaxed);
+  }
+
   pub fn send(&self, message: Event) -> Result<(), SendError<Event>> {
+    if !self.ready.load(Ordering::Acquire) {
+      tracing::debug!("clipboard is not ready yet");
+    }
     if let Some(ref sender) = self.sender {
       Ok(sender.send(message)?)
     } else {
@@ -657,7 +669,9 @@ impl CliprdrHandler {
       formats.push(ClipboardFormat::new(ClipboardFormatId::CF_DIB));
     }
 
-    if !formats.is_empty() {
+    if formats.is_empty() {
+      tracing::info!("format is empty");
+    } else {
       tracing::info!("sending formats");
       if let Err(error) = self.send(Event::Clipboard(ClipboardMessage::SendInitiateCopy(
         formats,
