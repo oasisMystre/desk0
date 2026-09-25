@@ -177,6 +177,10 @@ impl CliprdrBackend for CliprdrHandlerBackend {
   fn on_remote_copy(&mut self, available_formats: &[ClipboardFormat]) {
     tracing::debug!(?available_formats, "Remote copied formats");
 
+    if !self.handler.ready.load(Ordering::Acquire) {
+      tracing::debug!("clipboard is not ready yet");
+    }
+
     let mut format_to_request = None;
     for format in available_formats {
       if format
@@ -618,9 +622,6 @@ impl CliprdrHandler {
   }
 
   pub fn send(&self, message: Event) -> Result<(), SendError<Event>> {
-    if !self.ready.load(Ordering::Acquire) {
-      tracing::debug!("clipboard is not ready yet");
-    }
     if let Some(ref sender) = self.sender {
       Ok(sender.send(message)?)
     } else {
