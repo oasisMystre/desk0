@@ -7,7 +7,7 @@ edition = "2024"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-copypaste = { workspace = true, features=["client"] }
+copypaste = { workspace = true, features=["client", "watcher"] }
 anyhow.workspace = true
 ironrdp = { workspace = true, features = ["client", "connector", "cliprdr", "input", "session", "client-clipboard"] }
 tokio.workspace = true

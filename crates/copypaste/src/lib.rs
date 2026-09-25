@@ -67,7 +67,6 @@ pub struct CliprdrHandler {
   download_state: Arc<Mutex<DownloadState>>,
 }
 
-#[derive(Clone)]
 struct CliprdrHandlerBackend {
   temp_dir: String,
   handler: CliprdrHandler,
@@ -81,6 +80,16 @@ impl Debug for CliprdrHandlerBackend {
     f.debug_struct("CliprdrHandlerBackend")
       .field("sender", &self.sender)
       .finish()
+  }
+}
+
+impl Drop for CliprdrHandlerBackend {
+  fn drop(&mut self) {
+    // Stop the watcher from publishing into a channel whose RDP backend has
+    // already been torn down. A later connection will set this back to false
+    // during construction and true from on_ready.
+    self.handler.ready.store(false, Ordering::Release);
+    tracing::debug!("CLIPRDR backend dropped; clipboard events disabled");
   }
 }
 
@@ -110,6 +119,11 @@ impl CliprdrBackendFactory for CliprdrHandler {
 
 impl CliprdrHandler {
   fn build_backend(&self) -> CliprdrHandlerBackend {
+    // A backend is created for each RDP connection. The clipboard watcher can
+    // outlive the previous backend, so do not publish events while the new
+    // CLIPRDR channel is still negotiating.
+    self.ready.store(false, Ordering::Release);
+
     let sender = self.sender.clone();
 
     let temp_dir = std::env::temp_dir()
@@ -158,6 +172,17 @@ impl CliprdrBackend for CliprdrHandlerBackend {
 
   fn on_request_format_list(&mut self) {
     tracing::debug!("CliprdrBackend::on_request_format_list");
+
+    // On the client, this is the bootstrap request that must produce the
+    // first FormatList. `on_ready` is called only after that list is accepted,
+    // so waiting for on_ready here would deadlock CLIPRDR initialization.
+    #[cfg(feature = "client")]
+    {
+      #[cfg(feature = "watcher")]
+      self.handler.on_clipboard_change();
+    }
+
+    #[cfg(not(feature = "client"))]
     self.handler.send_format_list();
   }
 
@@ -539,6 +564,15 @@ impl ClipboardHandler for CliprdrHandler {
   fn on_clipboard_change(&mut self) {
     tracing::debug!("clipboard change");
 
+    // ClipboardWatcherContext may report a change before IronRDP has moved
+    // CLIPRDR into Ready. Sending a file-copy event during that window makes
+    // ironrdp-cliprdr reject it and the RDP server drops the connection.
+    #[cfg(feature = "server")]
+    if !self.ready.load(Ordering::Acquire) {
+      tracing::debug!("Ignoring clipboard change until cliprdr is ready");
+      return;
+    }
+
     let mut state = self.state.lock().unwrap();
 
     if !state.active_locks.is_empty() {
@@ -618,7 +652,7 @@ impl CliprdrHandler {
   }
 
   pub fn on_ready(&self) {
-    self.ready.store(true, Ordering::Relaxed);
+    self.ready.store(true, Ordering::Release);
   }
 
   pub fn send(&self, message: Event) -> Result<(), SendError<Event>> {
@@ -673,14 +707,15 @@ impl CliprdrHandler {
     }
 
     if formats.is_empty() {
-      tracing::info!("format is empty");
+      tracing::info!("format is empty; sending empty format list");
     } else {
       tracing::info!("sending formats");
-      if let Err(error) = self.send(Event::Clipboard(ClipboardMessage::SendInitiateCopy(
-        formats,
-      ))) {
-        eprintln!("Failed to send initiate copy event {error}");
-      };
+    }
+
+    // An empty list is still required during client CLIPRDR initialization so
+    // the peer can acknowledge the list and transition the channel to Ready.
+    if let Err(error) = self.send(Event::Clipboard(ClipboardMessage::SendInitiateCopy(formats))) {
+      eprintln!("Failed to send initiate copy event {error}");
     }
   }
 
