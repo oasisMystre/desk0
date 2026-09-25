@@ -672,8 +672,8 @@ impl CliprdrHandler {
       download_state: Arc::new(Mutex::new(DownloadState::default())),
       clipboard: Arc::new(ClipboardContext::new().expect("creating clipboard instance failed")),
       watcher: Arc::new(Mutex::new(WatcherState {
-        shutdown: None,
         thread: None,
+        shutdown: None,
       })),
     }
   }
@@ -743,15 +743,14 @@ impl CliprdrHandler {
     if formats.is_empty() {
       tracing::info!("format is empty; sending empty format list");
     } else {
+      // An empty list is still required during client CLIPRDR initialization so
+      // the peer can acknowledge the list and transition the channel to Ready.
+      if let Err(error) = self.send(Event::Clipboard(ClipboardMessage::SendInitiateCopy(
+        formats,
+      ))) {
+        eprintln!("Failed to send initiate copy event {error}");
+      }
       tracing::info!("sending formats");
-    }
-
-    // An empty list is still required during client CLIPRDR initialization so
-    // the peer can acknowledge the list and transition the channel to Ready.
-    if let Err(error) = self.send(Event::Clipboard(ClipboardMessage::SendInitiateCopy(
-      formats,
-    ))) {
-      eprintln!("Failed to send initiate copy event {error}");
     }
   }
 
