@@ -111,8 +111,8 @@ impl Drop for CliprdrHandlerBackend {
 impl ServerEventSender for CliprdrHandler {
   fn set_sender(&mut self, sender: UnboundedSender<Event>) {
     self.sender = Some(sender);
-    // #[cfg(feature = "watcher")]
-    // self.start_watcher();
+    #[cfg(feature = "watcher")]
+    self.start_watcher();
   }
 }
 
