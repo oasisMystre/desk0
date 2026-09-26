@@ -9,7 +9,7 @@ use softbuffer::{Context, Surface};
 use tokio::time::Instant;
 use winit::{
   application::ApplicationHandler,
-  dpi::{LogicalPosition, PhysicalSize},
+  dpi::PhysicalSize,
   event::{MouseScrollDelta, StartCause, WindowEvent},
   event_loop::{ActiveEventLoop, ControlFlow, EventLoop, OwnedDisplayHandle},
   keyboard::PhysicalKey,
@@ -190,9 +190,10 @@ impl Desk0InnerApp {
         window.set_cursor(CursorIcon::default());
       }
       RdpOutputEvent::PointerPosition { x, y } => {
-        if let Err(error) = window.set_cursor_position(LogicalPosition::new(x, y)) {
-          tracing::error!(?error, "Failed to set cursor position");
-        }
+        // Do not warp the local OS cursor from a remote pointer update.
+        // set_cursor_position() emits CursorMoved, which is sent back as RDP
+        // input and creates a feedback loop that pushes the cursor away.
+        tracing::trace!(x, y, "Received remote pointer position");
       }
       RdpOutputEvent::PointerBitmap(pointer) => {
         match CustomCursor::from_rgba(
@@ -208,6 +209,7 @@ impl Desk0InnerApp {
 
         window.set_cursor_visible(true);
       }
+      _ => {}
     }
   }
 

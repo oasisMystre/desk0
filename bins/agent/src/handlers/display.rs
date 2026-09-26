@@ -135,6 +135,25 @@ impl DisplayHandler {
     metadata: &FrameMetadata,
   ) -> Vec<DisplayUpdate> {
     let stride = width * 4;
+
+    // DXGI can deliver a frame for a cursor-only change without desktop dirty
+    // or move rectangles. The capture buffer is not a new desktop image in
+    // that case; treating it as a full-screen bitmap can preserve a previous
+    // resize cursor in the streamed video. Pointer updates are emitted
+    // separately by append_pointer_updates().
+    let full_frame_fallback = metadata.dirty_rects.len() == 1
+      && metadata.dirty_rects[0]
+        == (0, 0, width as i32, height as i32);
+    let pointer_only_frame = metadata.move_rects.is_empty()
+      && (metadata.pointer_shape.is_some()
+        || metadata.pointer_position.is_some()
+        || !metadata.pointer_visible)
+      && (metadata.dirty_rects.is_empty() || full_frame_fallback);
+
+    if pointer_only_frame {
+      return Vec::new();
+    }
+
     let rects = metadata
       .dirty_rects
       .iter()
