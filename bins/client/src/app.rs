@@ -188,6 +188,7 @@ impl Desk0InnerApp {
       }
       RdpOutputEvent::PointerDefault => {
         window.set_cursor(CursorIcon::default());
+        window.set_cursor_visible(true);
       }
       RdpOutputEvent::PointerPosition { x, y } => {
         // Do not warp the local OS cursor from a remote pointer update.

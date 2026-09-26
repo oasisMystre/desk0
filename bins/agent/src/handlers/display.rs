@@ -136,18 +136,13 @@ impl DisplayHandler {
   ) -> Vec<DisplayUpdate> {
     let stride = width * 4;
 
-    // DXGI can deliver a frame for a cursor-only change without desktop dirty
-    // or move rectangles. The capture buffer is not a new desktop image in
-    // that case; treating it as a full-screen bitmap can preserve a previous
-    // resize cursor in the streamed video. Pointer updates are emitted
-    // separately by append_pointer_updates().
+    // rs-capture uses a full-screen fallback rectangle when DXGI reports a
+    // cursor-only update. Do not resend that stale capture buffer as desktop
+    // pixels; the cursor is sent separately below.
     let full_frame_fallback = metadata.dirty_rects.len() == 1
-      && metadata.dirty_rects[0]
-        == (0, 0, width as i32, height as i32);
+      && metadata.dirty_rects[0] == (0, 0, width as i32, height as i32);
     let pointer_only_frame = metadata.move_rects.is_empty()
-      && (metadata.pointer_shape.is_some()
-        || metadata.pointer_position.is_some()
-        || !metadata.pointer_visible)
+      && metadata.pointer_shape.is_some()
       && (metadata.dirty_rects.is_empty() || full_frame_fallback);
 
     if pointer_only_frame {
@@ -212,16 +207,14 @@ impl DisplayHandler {
   fn append_pointer_updates(updates: &mut Vec<DisplayUpdate>, metadata: &FrameMetadata) {
     if metadata.pointer_visible {
       if let Some((x, y)) = metadata.pointer_position {
-        let (Ok(x), Ok(y)) = (u16::try_from(x), u16::try_from(y)) else {
+        if let (Ok(x), Ok(y)) = (u16::try_from(x), u16::try_from(y)) {
+          updates.push(DisplayUpdate::PointerPosition(PointerPositionAttribute { x, y }));
+        } else {
           tracing::warn!(x, y, "pointer position is outside RDP coordinate range");
-          return;
-        };
-
-        updates.push(DisplayUpdate::PointerPosition(PointerPositionAttribute {
-          x,
-          y,
-        }));
+        }
       }
+    } else {
+      updates.push(DisplayUpdate::HidePointer);
     }
 
     if let Some(pointer) = &metadata.pointer_shape {
