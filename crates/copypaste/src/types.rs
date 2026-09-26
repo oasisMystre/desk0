@@ -36,8 +36,8 @@ pub struct DownloadTask {
 #[derive(Default)]
 pub struct DownloadState {
   pub queue: Vec<DownloadTask>,
-  pub current: Option<DownloadTask>,
   pub downloaded: Vec<PathBuf>,
+  pub current: Option<DownloadTask>,
 }
 
 impl ClipboardState {
