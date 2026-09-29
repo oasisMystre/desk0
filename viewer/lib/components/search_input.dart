@@ -85,7 +85,6 @@ class SearchInputState extends State<SearchInput> {
               focusNode: focusNode,
               placeholder: 'Search',
               decoration: null,
-              
             ),
           ),
       ],

@@ -29,9 +29,9 @@ class ConnectionCardState extends State<ConnectionCard> {
       return;
     }
 
-      setState(() {
-        hovered = !hovered;
-      });
+    setState(() {
+      hovered = !hovered;
+    });
   }
 
   @override

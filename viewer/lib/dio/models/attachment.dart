@@ -32,7 +32,7 @@ class Attachment {
         'created_at': String createdAt,
         'content_type': String contentType,
         'organization': String organization,
-        'metadata': Map<String, dynamic> ? metadata
+        'metadata': Map<String, dynamic>? metadata,
       } =>
         Attachment(
           id: id,

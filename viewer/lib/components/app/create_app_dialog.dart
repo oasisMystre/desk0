@@ -8,7 +8,7 @@ class CreateAppDialog extends StatelessWidget {
     return SizedBox(
       width: MediaQuery.sizeOf(context).width * 0.5,
       height: MediaQuery.sizeOf(context).height * 0.7,
-     
+
       child: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,

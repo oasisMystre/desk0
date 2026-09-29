@@ -88,7 +88,7 @@ class SideNavState extends State<SideNav> {
 
       final bool isOpened = appState.isSideNavOpened.value;
       final double sidebarWidth = MediaQuery.sizeOf(context).width * 0.3;
-     
+
       return AnimatedContainer(
         duration: duration,
         curve: curve,
