@@ -142,7 +142,6 @@ impl Desk0InnerApp {
     match event {
       RdpOutputEvent::ConnectionFailure(error) => {
         tracing::error!(?error, "rdp connection error");
-        eprintln!("Connection error: {}", error.report());
 
         self.viewer.shutdown();
         event_loop.exit();
@@ -166,8 +165,6 @@ impl Desk0InnerApp {
         width,
         height,
       } => {
-        tracing::trace!(?width, ?height, "Received image with sized");
-        tracing::trace!(window_physical_size = ?window.inner_size(), "Drawing image to the window with size");
         self.buffer = buffer;
         self.buffer_size = (width.get(), height.get());
 
@@ -189,12 +186,6 @@ impl Desk0InnerApp {
       RdpOutputEvent::PointerDefault => {
         window.set_cursor(CursorIcon::default());
         window.set_cursor_visible(true);
-      }
-      RdpOutputEvent::PointerPosition { x, y } => {
-        // Do not warp the local OS cursor from a remote pointer update.
-        // set_cursor_position() emits CursorMoved, which is sent back as RDP
-        // input and creates a feedback loop that pushes the cursor away.
-        tracing::trace!(x, y, "Received remote pointer position");
       }
       RdpOutputEvent::PointerBitmap(pointer) => {
         match CustomCursor::from_rgba(
@@ -342,7 +333,7 @@ impl Desk0InnerApp {
           }
         };
 
-        apply_and_send_fast_path_events(&self.viewer, &mut self.input_database, operations);
+        self.viewer.apply_and_send_fast_path_events(operations);
       }
       WindowEvent::ModifiersChanged(modifiers) => {
         const ALT_LEFT: Scancode = Scancode::from_u8(false, 0x38);
@@ -366,7 +357,7 @@ impl Desk0InnerApp {
         add_operations(modifiers.state().shift_key(), SHIFT_LEFT);
         add_operations(modifiers.state().control_key(), CONTROL_LEFT);
 
-        apply_and_send_fast_path_events(&self.viewer, &mut self.input_database, operations);
+        self.viewer.apply_and_send_fast_path_events(operations);
       }
       WindowEvent::CursorMoved { position, .. } => {
         let window_size = window.inner_size();
@@ -375,11 +366,9 @@ impl Desk0InnerApp {
 
         let operation = Operation::MouseMove(MousePosition { x, y });
 
-        apply_and_send_fast_path_events(
-          &self.viewer,
-          &mut self.input_database,
-          core::iter::once(operation),
-        );
+        self
+          .viewer
+          .apply_and_send_fast_path_events(std::iter::once(operation));
       }
       WindowEvent::MouseWheel { delta, .. } => {
         let mut operations = SmallVec::<[Operation; 2]>::new();
@@ -417,7 +406,7 @@ impl Desk0InnerApp {
           }
         }
 
-        apply_and_send_fast_path_events(&self.viewer, &mut self.input_database, operations);
+        self.viewer.apply_and_send_fast_path_events(operations);
       }
       WindowEvent::MouseInput { state, button, .. } => {
         let button = match button {
@@ -440,11 +429,9 @@ impl Desk0InnerApp {
           winit::event::ElementState::Released => Operation::MouseButtonReleased(button),
         };
 
-        apply_and_send_fast_path_events(
-          &self.viewer,
-          &mut self.input_database,
-          core::iter::once(operation),
-        );
+        self
+          .viewer
+          .apply_and_send_fast_path_events(std::iter::once(operation));
       }
       WindowEvent::RedrawRequested => {
         if self.buffer.is_empty() {
@@ -539,20 +526,6 @@ impl ApplicationHandler<RdpOutputEvent> for Desk0App {
 
   fn user_event(&mut self, event_loop: &ActiveEventLoop, event: RdpOutputEvent) {
     self.inner.handle_output_event(event_loop, event);
-  }
-}
-
-fn apply_and_send_fast_path_events(
-  viewer: &Desk0Viewer,
-  input_database: &mut Database,
-  operations: impl IntoIterator<Item = Operation>,
-) {
-  let events = input_database.apply(operations);
-
-  if !events.is_empty() {
-    if let Err(error) = viewer.input.send(RdpInputEvent::FastPath(events)) {
-      tracing::error!(?error, "rdp input closed");
-    }
   }
 }
 

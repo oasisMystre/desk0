@@ -12,12 +12,11 @@ use ironrdp::{
     rdp::{RdpClient, RdpInputEvent, RdpOutputEvent},
   },
   cliprdr::{Cliprdr, backend::CliprdrBackendFactory},
+  input::{Database, Operation},
   pdu::rdp::capability_sets::MajorPlatformType,
 };
 use tokio::sync::mpsc::{Receiver, Sender, UnboundedSender, channel};
 use tokio_util::sync::CancellationToken;
-
-pub type RdpOutputEventCallback = fn(event: RdpOutputEvent);
 
 #[derive(Debug, thiserror::Error)]
 pub enum Desk0ViewerError {
@@ -40,7 +39,7 @@ pub struct Desk0ViewerConfig<'a> {
 
 pub struct Desk0Viewer {
   client: Option<RdpClient>,
-  pub clipboard: CliprdrHandler,
+  pub database: Database,
   pub thread: Option<thread::JoinHandle<()>>,
   pub input: UnboundedSender<RdpInputEvent>,
   _cancellation_token: CancellationToken,
@@ -51,10 +50,13 @@ impl Desk0Viewer {
   pub const THREAD_NAME: &str = "desk0-rdp-viewer";
 
   #[allow(dead_code)]
-  pub fn with_callback<'a>(
+  pub fn with_callback<'a, T>(
     config: Desk0ViewerConfig<'a>,
-    callback: RdpOutputEventCallback,
-  ) -> anyhow::Result<Self, Desk0ViewerError> {
+    callback: T,
+  ) -> anyhow::Result<Self, Desk0ViewerError>
+  where
+    T: Fn(RdpOutputEvent) + 'static + Sync + Send,
+  {
     let rt = tokio::runtime::Builder::new_multi_thread()
       .enable_all()
       .build()
@@ -86,7 +88,7 @@ impl Desk0Viewer {
       endpoint.set_scheme("wss").ok();
     }
 
-    let mut clipboard_handler = Arc::new(Mutex::new(CliprdrHandler::new()));
+    let clipboard_handler = Arc::new(Mutex::new(CliprdrHandler::new()));
 
     let displays = DisplayInfo::all().map_err(Desk0ViewerError::Display)?;
 
@@ -144,21 +146,25 @@ impl Desk0Viewer {
 
     let mut clipboard_handler = clipboard_handler.lock().unwrap();
     clipboard_handler.set_sender(input.clone());
-    
+    drop(clipboard_handler);
+
     Ok(Self {
       input,
       thread: None,
       client: Some(client),
-      clipboard: clipboard_handler.clone(),
+      database: Database::new(),
       _cancellation_token: CancellationToken::new(),
     })
   }
 
-  pub fn run(
+  pub fn run<T>(
     &mut self,
     rt: tokio::runtime::Runtime,
-    callback: Option<(RdpOutputEventCallback, Receiver<RdpOutputEvent>)>,
-  ) -> anyhow::Result<(), Desk0ViewerError> {
+    callback: Option<(T, Receiver<RdpOutputEvent>)>,
+  ) -> anyhow::Result<(), Desk0ViewerError>
+  where
+    T: Fn(RdpOutputEvent) + 'static + Send + Sync,
+  {
     let client = self.client.take();
     if let Some(client) = client {
       let thread = if let Some(callback) = callback {
@@ -238,6 +244,19 @@ impl Desk0Viewer {
     if let Some(thread) = self.thread.take() {
       if let Err(error) = thread.join() {
         tracing::error!(?error, "closing input thread error");
+      }
+    }
+  }
+
+  pub fn apply_and_send_fast_path_events(
+    &mut self,
+    operations: impl IntoIterator<Item = Operation>,
+  ) {
+    let events = self.database.apply(operations);
+
+    if !events.is_empty() {
+      if let Err(error) = self.input.send(RdpInputEvent::FastPath(events)) {
+        tracing::error!(?error, "rdp input closed");
       }
     }
   }

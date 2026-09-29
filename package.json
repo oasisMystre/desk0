@@ -4,6 +4,7 @@
   "type": "module",
   "private": true,
   "scripts": {
+    "codegen": "flutter_rust_bridge_codegen generate",
     "migrate": "drizzle-kit generate && drizzle-kit migrate"
   },
   "devDependencies": {

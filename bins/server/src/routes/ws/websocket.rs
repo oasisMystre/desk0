@@ -48,7 +48,10 @@ pub async fn ws_route(
         let claims = claims.clone();
         move |socket| agent::handle_agent(socket, claims, registry)
       }),
-      Ok(_) => Response::builder().status(401).body("invalid role".into()).unwrap(),
+      Ok(_) => Response::builder()
+        .status(401)
+        .body("invalid role".into())
+        .unwrap(),
       Err(error) => {
         tracing::error!(?error, "agent WebSocket authentication failed");
         unauthorized

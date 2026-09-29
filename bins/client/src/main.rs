@@ -58,7 +58,7 @@ fn main() -> anyhow::Result<()> {
   let rt = tokio::runtime::Builder::new_multi_thread()
     .enable_all()
     .build()?;
-  viewer.run(rt, None)?;
+  viewer.run::<fn(RdpOutputEvent)>(rt, None)?;
 
   let event_loop = EventLoop::<RdpOutputEvent>::with_user_event().build()?;
   let proxy = event_loop.create_proxy();
@@ -111,9 +111,7 @@ fn main() -> anyhow::Result<()> {
 
 fn init_tracing() {
   let filter = tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| {
-    tracing_subscriber::EnvFilter::new(
-      "info,desk0_client=debug,copypaste=debug",
-    )
+    tracing_subscriber::EnvFilter::new("info,desk0_client=debug,copypaste=debug")
   });
 
   tracing_subscriber::fmt()

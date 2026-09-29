@@ -4,11 +4,13 @@ use std::{
 };
 
 use display_info::DisplayInfo;
-use ironrdp::server::{
-  BitmapUpdate, ColorPointer, DesktopSize, DisplayUpdate, PixelFormat, RGBAPointer,
-  RdpServerDisplay, RdpServerDisplayUpdates,
+use ironrdp::{
+  pdu::pointer::PointerPositionAttribute,
+  server::{
+    BitmapUpdate, ColorPointer, DesktopSize, DisplayUpdate, PixelFormat, RGBAPointer,
+    RdpServerDisplay, RdpServerDisplayUpdates,
+  },
 };
-use ironrdp::pdu::pointer::PointerPositionAttribute;
 use rs_capture::{
   CaptureBackend, FrameMetadata, PixelFormat as CapturePixelFormat, ScreenCapture,
   ScreenCaptureConfig, backend::PointerShape,
@@ -208,7 +210,10 @@ impl DisplayHandler {
     if metadata.pointer_visible {
       if let Some((x, y)) = metadata.pointer_position {
         if let (Ok(x), Ok(y)) = (u16::try_from(x), u16::try_from(y)) {
-          updates.push(DisplayUpdate::PointerPosition(PointerPositionAttribute { x, y }));
+          updates.push(DisplayUpdate::PointerPosition(PointerPositionAttribute {
+            x,
+            y,
+          }));
         } else {
           tracing::warn!(x, y, "pointer position is outside RDP coordinate range");
         }

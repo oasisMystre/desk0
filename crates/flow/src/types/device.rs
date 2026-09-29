@@ -1,7 +1,8 @@
-use crate::schema::devices;
 use chrono::{DateTime, Utc};
 use diesel::{HasQuery, prelude::Insertable};
 use serde::{Deserialize, Serialize};
+
+use crate::schema::devices;
 
 #[derive(HasQuery, Insertable, Serialize, Deserialize, Default)]
 #[diesel(table_name = devices)]

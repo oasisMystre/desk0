@@ -1,0 +1,17 @@
+[package]
+name = "desk0-ffi"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+crate-type = ["cdylib", "staticlib", "lib"]
+
+[features]
+flutter = []
+default = ["flutter"]
+
+[dependencies]
+desk0-client = { path = "../client" }
+anyhow.workspace = true
+ironrdp = { workspace = true, features = ["client", "connector", "cliprdr", "input", "session", "client-clipboard", "graphics"] }
+flutter_rust_bridge = "=2.13.0"

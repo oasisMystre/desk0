@@ -99,11 +99,7 @@ impl Debug for CliprdrHandlerBackend {
 
 impl Drop for CliprdrHandlerBackend {
   fn drop(&mut self) {
-    // Stop the watcher from publishing into a channel whose RDP backend has
-    // already been torn down. A later connection will set this back to false
-    // during construction and true from on_ready.
     self.handler.set_state(CliprdrState::Initialize);
-    tracing::debug!("CLIPRDR backend dropped; clipboard events disabled");
   }
 }
 
@@ -111,7 +107,6 @@ impl Drop for CliprdrHandlerBackend {
 impl ServerEventSender for CliprdrHandler {
   fn set_sender(&mut self, sender: UnboundedSender<Event>) {
     self.sender = Some(sender);
-    #[cfg(feature = "watcher")]
     self.start_watcher();
   }
 }
@@ -120,7 +115,6 @@ impl ServerEventSender for CliprdrHandler {
 impl CliprdrHandler {
   pub fn set_sender(&mut self, sender: UnboundedSender<Event>) {
     self.sender = Some(sender);
-    #[cfg(feature = "watcher")]
     self.start_watcher();
   }
 }
@@ -169,51 +163,18 @@ impl CliprdrBackend for CliprdrHandlerBackend {
 
   fn on_ready(&mut self) {
     self.handler.set_state(CliprdrState::Ready);
-
-    tracing::info!("CliprdrBackend::on_ready");
-    #[cfg(feature = "watcher")]
-    {
-      self.handler.start_watcher();
-      self.handler.on_clipboard_change();
-    }
+    self.handler.start_watcher();
   }
 
   fn on_request_format_list(&mut self) {
-    //     tracing::debug!("CliprdrBackend::on_request_format_list");
-    //
-    //     // On the client, this is the bootstrap request that must produce the
-    //     // first FormatList. `on_ready` is called only after that list is accepted,
-    //     // so waiting for on_ready here would deadlock CLIPRDR initialization.
-    //     #[cfg(feature = "client")]
-    //     {
-    //       #[cfg(feature = "watcher")]
-    //       self.handler.on_clipboard_change();
-    //     }
-    //
-    #[cfg(not(feature = "client"))]
     self.handler.send_format_list();
   }
 
   fn on_process_negotiated_capabilities(&mut self, capabilities: ClipboardGeneralCapabilityFlags) {
     self.capabilities = capabilities;
-    tracing::info!(
-      ?capabilities,
-      stream_fileclip =
-        capabilities.contains(ClipboardGeneralCapabilityFlags::STREAM_FILECLIP_ENABLED),
-      lock_clipdata = capabilities.contains(ClipboardGeneralCapabilityFlags::CAN_LOCK_CLIPDATA),
-      huge_files =
-        capabilities.contains(ClipboardGeneralCapabilityFlags::HUGE_FILE_SUPPORT_ENABLED),
-      "Negotiated cliprdr capabilities"
-    );
   }
 
   fn on_remote_copy(&mut self, available_formats: &[ClipboardFormat]) {
-    tracing::debug!(?available_formats, "Remote copied formats");
-
-    if !matches!(self.handler.get_state(), CliprdrState::Ready) {
-      tracing::debug!("clipboard is not ready yet");
-    }
-
     let mut format_to_request = None;
     for format in available_formats {
       if format
@@ -259,20 +220,18 @@ impl CliprdrBackend for CliprdrHandlerBackend {
     }
 
     if let Some(format_id) = format_to_request {
-      tracing::info!(format = ?format_id, "Initiating paste for remote clipboard data");
       if let Err(error) = self
         .handler
         .send(Event::Clipboard(ClipboardMessage::SendInitiatePaste(
           format_id,
         )))
       {
-        eprintln!("Failed to initiate paste from remote {error}");
+        tracing::error!(?error, "Failed to initiate paste from remote");
       }
     }
   }
 
   fn on_format_data_request(&mut self, request: FormatDataRequest) {
-    tracing::debug!(format = ?request.format, "Remote requested clipboard format data");
     let mut state = self.handler.clipboard_state.lock().unwrap();
 
     match request.format {
@@ -297,24 +256,16 @@ impl CliprdrBackend for CliprdrHandlerBackend {
       _ => {}
     }
 
-    // if let Err(error) = self.handler.clipboard.clear() {
-    //   tracing::error!(?error, "failed to clear clipboard");
-    // };
     self.handler.set_state(CliprdrState::Copy);
   }
 
   fn on_format_data_response(&mut self, response: FormatDataResponse<'_>) {
     self.handler.set_state(CliprdrState::Paste);
-    tracing::debug!(
-      bytes = response.data().len(),
-      is_error = response.is_error(),
-      "CliprdrBackend::on_format_data_response"
-    );
 
     if let Ok(text) = response.to_string() {
       if !text.is_empty() {
         if let Err(error) = self.clipboard.set_text(text) {
-          eprintln!("Failed to paste unicode string {error}");
+          tracing::error!(?error, "Failed to paste unicode string");
         }
 
         return;
@@ -328,7 +279,7 @@ impl CliprdrBackend for CliprdrHandlerBackend {
 
     if let Ok(data) = cf_html_to_plain_html(data) {
       if let Err(error) = self.clipboard.set_html(data.to_string()) {
-        eprintln!("Failed to paste HTML {error}");
+        tracing::error!(?error, "Failed to paste HTML");
       }
 
       return;
@@ -337,7 +288,7 @@ impl CliprdrBackend for CliprdrHandlerBackend {
     if let Ok(data) = std::str::from_utf8(data) {
       if data.starts_with("{\\rtf1") {
         if let Err(error) = self.clipboard.set_rich_text(data.to_string()) {
-          eprintln!("Failed to paste rich text {error}");
+          tracing::error!(?error, "Failed to paste rich text");
         }
 
         return;
@@ -348,7 +299,7 @@ impl CliprdrBackend for CliprdrHandlerBackend {
       if let Ok(image) = image::load_from_memory_with_format(&data, ImageFormat::Png) {
         let rust_image = RustImageData::from_dynamic_image(image);
         if let Err(error) = self.clipboard.set_image(rust_image) {
-          eprintln!("Failed to paste image {error}");
+          tracing::error!(?error, "Failed to paste image");
         }
       }
       return;
@@ -358,23 +309,14 @@ impl CliprdrBackend for CliprdrHandlerBackend {
       if let Ok(image) = image::load_from_memory_with_format(&data, ImageFormat::Png) {
         let rust_image = RustImageData::from_dynamic_image(image);
         if let Err(error) = self.clipboard.set_image(rust_image) {
-          eprintln!("Failed to paste image {error}");
+          tracing::error!(?error, "Failed to paste image");
         }
       }
       return;
     }
-
-    tracing::info!("pasting not supported shame");
   }
 
   fn on_file_contents_request(&mut self, request: FileContentsRequest) {
-    tracing::debug!(
-      stream_id = request.stream_id,
-      index = request.index,
-      position = request.position,
-      requested_size = request.requested_size,
-      "Remote requested clipboard file contents"
-    );
     let path = {
       let state = self.handler.clipboard_state.lock().unwrap();
       let file_index = request.index;
@@ -386,8 +328,6 @@ impl CliprdrBackend for CliprdrHandlerBackend {
 
       file_info.path.clone()
     };
-
-    tracing::info!(?path, "path file");
 
     let result = (|| -> std::io::Result<Vec<u8>> {
       let mut file = File::open(&path)?;
@@ -402,18 +342,13 @@ impl CliprdrBackend for CliprdrHandlerBackend {
 
     match result {
       Ok(buffer) => {
-        tracing::debug!(
-          stream_id = request.stream_id,
-          bytes = buffer.len(),
-          "Sending clipboard file contents"
-        );
         if let Err(error) = self.handler.send(Event::Clipboard(
           ClipboardMessage::SendFileContentsResponse(FileContentsResponse::new_data_response(
             request.stream_id,
             Cow::Owned(buffer),
           )),
         )) {
-          eprintln!("Failed to send file content response {error}");
+          tracing::error!(?error, "Failed to send file content response");
         }
       }
       Err(error) => {
@@ -422,24 +357,19 @@ impl CliprdrBackend for CliprdrHandlerBackend {
           ?error,
           "failed to read clipboard file"
         );
+
         if let Err(error) = self.handler.send(Event::Clipboard(
           ClipboardMessage::SendFileContentsResponse(FileContentsResponse::new_error(
             request.stream_id,
           )),
         )) {
-          eprintln!("Failed to send file content response {error}");
+          tracing::error!(?error, "Failed to send file content response");
         }
       }
     }
   }
 
   fn on_file_contents_response<'a>(&mut self, response: FileContentsResponse<'a>) {
-    tracing::debug!(
-      stream_id = response.stream_id(),
-      bytes = response.data().len(),
-      is_error = response.is_error(),
-      "Received clipboard file contents"
-    );
     let mut download_state = self.handler.download_state.lock().unwrap();
 
     if let Some(task) = &mut download_state.current {
@@ -470,10 +400,6 @@ impl CliprdrBackend for CliprdrHandlerBackend {
   }
 
   fn on_remote_file_list(&mut self, files: &[FileDescriptor], _: Option<u32>) {
-    tracing::info!(
-      file_count = files.len(),
-      "Received remote clipboard file list"
-    );
     self.handler.download_state.lock().unwrap().clear();
     let timestamp = SystemTime::now()
       .duration_since(UNIX_EPOCH)
@@ -520,6 +446,7 @@ impl CliprdrBackend for CliprdrHandlerBackend {
           .unwrap()
           .downloaded
           .push(path);
+
         continue;
       } else {
         if let Some(parent) = path.parent() {
@@ -548,37 +475,38 @@ impl CliprdrBackend for CliprdrHandlerBackend {
   }
 
   fn on_lock(&mut self, data_id: LockDataId) {
-    tracing::debug!(?data_id, "CliprdrBackend::on_lock");
     let mut state = self.handler.clipboard_state.lock().unwrap();
     state.active_locks.push(data_id);
+    drop(state);
   }
 
   fn on_unlock(&mut self, data_id: LockDataId) {
-    tracing::debug!(?data_id, "CliprdrBackend::on_unlock");
     let mut state = self.handler.clipboard_state.lock().unwrap();
     state.active_locks.retain(|id| id != &data_id);
+    drop(state);
   }
 
   fn on_outgoing_locks_cleared(&mut self, data_ids: &[LockDataId]) {
-    tracing::debug!(
-      count = data_ids.len(),
-      "CliprdrBackend::on_outgoing_locks_cleared"
-    );
     let mut download_state = self.handler.download_state.lock().unwrap();
+    let mut clipboard_state = self.handler.clipboard_state.lock().unwrap();
+
     download_state.queue.clear();
     download_state.current = None;
+
+    clipboard_state
+      .active_locks
+      .retain(|id| !data_ids.contains(id));
+
+    drop(download_state);
+    drop(clipboard_state);
   }
 }
 
-#[cfg(feature = "watcher")]
 impl ClipboardHandler for CliprdrHandler {
   fn on_clipboard_change(&mut self) {
-    tracing::debug!("clipboard change");
-
     let state = self.get_state();
     if !state.allow_next_event() {
       self.set_state(CliprdrState::Ready);
-      tracing::debug!("Ignoring clipboard change generated by remote download");
       return;
     }
 
@@ -586,14 +514,12 @@ impl ClipboardHandler for CliprdrHandler {
     {
       let state = self.get_state();
       if !matches!(state, CliprdrState::Ready) {
-        tracing::debug!("Ignoring clipboard change until cliprdr is ready");
         return;
       }
     }
 
     let mut state = self.clipboard_state.lock().unwrap();
     if !state.active_locks.is_empty() {
-      tracing::debug!("Ignoring local clipboard change while clipboard locks are active");
       return;
     }
 
@@ -701,10 +627,10 @@ impl CliprdrHandler {
           if let Err(error) = self.send(Event::Clipboard(ClipboardMessage::SendInitiateFileCopy(
             files,
           ))) {
-            eprintln!("Failed to send initiate file copy event {error}");
+            tracing::error!(?error, "Failed to send initiate file copy event");
           }
         }
-        Err(error) => eprintln!("Reading clipboard files failed {error}"),
+        Err(error) => tracing::error!(?error, "Reading clipboard files failed"),
       }
       return;
     }
@@ -712,37 +638,29 @@ impl CliprdrHandler {
     let mut formats = Vec::new();
 
     if state.text.is_some() {
-      tracing::debug!("sending texts");
       formats.push(ClipboardFormat::new(ClipboardFormatId::CF_UNICODETEXT));
     }
 
     if state.rich_text.is_some() {
-      tracing::debug!("sending rich texts");
       let mut format = ClipboardFormat::new(ClipboardFormatId::new(CF_RTF));
       format.name = Some(ClipboardFormatName::new_static("Rich Text Format"));
       formats.push(format);
     }
 
     if state.html.is_some() {
-      tracing::debug!("sending html texts");
       let mut format = ClipboardFormat::new(ClipboardFormatId::new(CF_HTML));
       format.name = Some(ClipboardFormatName::new_static("HTML Format"));
       formats.push(format);
     }
 
     if state.image.is_some() {
-      tracing::debug!("sending images ");
       formats.push(ClipboardFormat::new(ClipboardFormatId::CF_DIB));
-    }
-
-    if formats.is_empty() {
-      tracing::info!("format is empty");
     }
 
     if let Err(error) = self.send(Event::Clipboard(ClipboardMessage::SendInitiateCopy(
       formats,
     ))) {
-      eprintln!("Failed to send initiate copy event {error}");
+      tracing::error!(?error, "Failed to send initiate copy event");
     }
   }
 
@@ -751,7 +669,7 @@ impl CliprdrHandler {
       if let Err(error) = self.send(Event::Clipboard(ClipboardMessage::SendFormatData(
         OwnedFormatDataResponse::new_string(&text),
       ))) {
-        eprintln!("Failed to send text clipboard event {error}");
+        tracing::error!(?error, "Failed to send text clipboard event");
       }
     }
   }
@@ -761,7 +679,7 @@ impl CliprdrHandler {
       if let Err(error) = self.send(Event::Clipboard(ClipboardMessage::SendFormatData(
         OwnedFormatDataResponse::new_data(Cow::Owned(html.as_bytes().to_vec())),
       ))) {
-        eprintln!("Failed to send html clipboard event {error}");
+        tracing::error!(?error, "Failed to send html clipboard event");
       }
     }
   }
@@ -771,7 +689,7 @@ impl CliprdrHandler {
       if let Err(error) = self.send(Event::Clipboard(ClipboardMessage::SendFormatData(
         OwnedFormatDataResponse::new_data(Cow::Owned(rich_text.as_bytes().to_vec())),
       ))) {
-        eprintln!("Failed to send rich_text clipboard event {error}");
+        tracing::error!(?error, "Failed to send rich_text clipboard event");
       }
     }
   }
@@ -781,7 +699,7 @@ impl CliprdrHandler {
       let files = match state.file_descriptors() {
         Ok(files) => files,
         Err(error) => {
-          eprintln!("reading clipboard files failed {error}");
+          tracing::error!(?error, "reading clipboard files failed");
           return;
         }
       };
@@ -789,7 +707,7 @@ impl CliprdrHandler {
       if let Err(error) = self.send(Event::Clipboard(ClipboardMessage::SendFormatData(
         OwnedFormatDataResponse::new_file_list(&PackedFileList { files }).unwrap(),
       ))) {
-        eprintln!("failed to send file lists {error}");
+        tracing::error!(?error, "failed to send file lists");
       }
     }
   }
@@ -799,7 +717,7 @@ impl CliprdrHandler {
       if let Err(error) = self.send(Event::Clipboard(ClipboardMessage::SendFormatData(
         OwnedFormatDataResponse::new_data(Cow::Owned(image.clone())),
       ))) {
-        eprintln!("failed to send file lists {error}");
+        tracing::error!(?error, "failed to send file lists");
       }
     }
   }
@@ -882,7 +800,6 @@ impl CliprdrHandler {
     drop(download_state);
   }
 
-  #[cfg(feature = "watcher")]
   fn start_watcher(&self) {
     if self.watcher.lock().unwrap().thread.is_some() {
       tracing::warn!("Clipboard watcher already started");
