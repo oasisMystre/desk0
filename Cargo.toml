@@ -34,8 +34,10 @@ serde_json = "1.0"
 tonic = { version = "0.12", features = ["tls", "tls-roots", "transport"] }
 uuid = { version = "1.10", features = ["v4", "serde"] }
 diesel-async = { version = "0.9.2", features = ["postgres"] }
-ironrdp = { version = "0.17.0", features = ["acceptor", "cliprdr"] }
-ironrdp-client = { version = "0.1.0", features = ["rustls", "clipboard"] }
+ironrdp-rdcleanpath = { git = "https://github.com/Devolutions/IronRDP.git" }
+ironrdp-cliprdr-format = { git = "https://github.com/Devolutions/IronRDP.git" }
+ironrdp = { git = "https://github.com/Devolutions/IronRDP.git", features = ["acceptor", "cliprdr"] }
+ironrdp-client = { git = "https://github.com/Devolutions/IronRDP.git", features = ["rustls", "clipboard"] }
 
 tokio-stream = "0.1"
 tokio-util = { version = "0.7.19", features = ["full", "codec", "io"] }

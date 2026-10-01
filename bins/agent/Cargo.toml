@@ -10,7 +10,7 @@ async-trait.workspace = true
 bytes.workspace = true
 clap.workspace = true
 display-info = "0.5.9"
-enigo = "0.3.0"
+enigo = "0.6.1"
 futures.workspace = true
 ironrdp = { workspace = true, features = ["acceptor", "server", "cliprdr"] }
 reqwest = { version = "0.13.4", features = ["json"]}

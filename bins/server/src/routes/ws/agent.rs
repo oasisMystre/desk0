@@ -64,6 +64,8 @@ impl AgentHandler {
       }
     });
 
+    let mut reset = false;
+
     loop {
       tokio::select! {
           result = socket.next() => {
@@ -83,26 +85,23 @@ impl AgentHandler {
                           break;
                       }
                   }
-                  Some(Ok(Message::Close(_))) => {
-                      tracing::info!("agent disconnected");
-                      break;
-                  }
-                  Some(Err(error)) => {
-                      tracing::error!(?error, "agent disconnected");
+                  Some(Ok(Message::Close(_))) | Some(Err(_)) | None => {
                       break;
                   }
                   Some(Ok(_)) => {}
-                  None => break,
               }
           }
           result = inbound_receiver.recv() => {
               match result {
                   Some(message) => {
                       if let Message::Ping(bytes) = &message {
-                          tracing::info!(?bytes, ?RESET_RDP_SESSION, "resetting session");
+                          if bytes == RESET_RDP_SESSION {
+                              reset = true;
+                              break;
+                          }
+
                       }
-                      if let Err(error) = socket.send(message).await {
-                          tracing::error!(?error, "agent disconnected");
+                      if socket.send(message).await.is_err() {
                           break;
                       }
                   }
@@ -122,6 +121,16 @@ impl AgentHandler {
       tracing::warn!(?error, "removing agent presence failed");
     }
 
+    // send reset connection only when server set has been reset
+    if reset {
+      socket
+        .send(Message::Ping(RESET_RDP_SESSION.into()))
+        .await
+        .ok();
+    }
+
+    tracing::info!("agent disconnected");
+
     Ok(())
   }
 
@@ -130,6 +139,7 @@ impl AgentHandler {
       tokio::select! {
           result = self.hub.is_registered(inbound) => {
               let state = result?;
+              tracing::info!(?state, "rdp state");
               if matches!(state, Some(HubConnectionState::Connected)) {
                   return Ok(true);
               }

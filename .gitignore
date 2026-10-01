@@ -4,3 +4,4 @@ node_modules
 data
 viewer/lib/ffi 
 bins/ffi/src/frb_generated.rs
+.cache

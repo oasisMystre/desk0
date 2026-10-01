@@ -9,13 +9,13 @@ use display_info::DisplayInfo;
 use ironrdp::{
   client::{
     config::{ClipboardType, ConfigBuilder, Destination, TransportKind},
-    rdp::{RdpClient, RdpInputEvent, RdpOutputEvent},
+    output_channel::{OutputEventReceiver, OutputEventSender, output_channel},
+    rdp::{RdpClient, RdpInputEvent, RdpInputSender, RdpOutputEvent},
   },
   cliprdr::{Cliprdr, backend::CliprdrBackendFactory},
   input::{Database, Operation},
   pdu::rdp::capability_sets::MajorPlatformType,
 };
-use tokio::sync::mpsc::{Receiver, Sender, UnboundedSender, channel};
 use tokio_util::sync::CancellationToken;
 use winit::dpi::PhysicalSize;
 
@@ -42,8 +42,8 @@ pub struct Desk0ViewerConfig<'a> {
 pub struct Desk0Viewer {
   client: Option<RdpClient>,
   pub database: Database,
+  pub input: RdpInputSender,
   pub thread: Option<thread::JoinHandle<()>>,
-  pub input: UnboundedSender<RdpInputEvent>,
   _cancellation_token: CancellationToken,
 }
 
@@ -64,7 +64,7 @@ impl Desk0Viewer {
       .build()
       .context("unable to create tokio runtime")?;
 
-    let (output_event_sender, output_event_receiver) = channel(32);
+    let (output_event_sender, output_event_receiver) = output_channel(32);
     let mut this = Self::build(config, output_event_sender)?;
     this.run(rt, Some((callback, output_event_receiver)))?;
 
@@ -73,14 +73,14 @@ impl Desk0Viewer {
 
   pub fn with_channel<'a>(
     config: Desk0ViewerConfig<'a>,
-    output_event_sender: Sender<RdpOutputEvent>,
+    output_event_sender: OutputEventSender,
   ) -> anyhow::Result<Self, Desk0ViewerError> {
     Self::build(config, output_event_sender)
   }
 
   fn build<'a>(
     config: Desk0ViewerConfig<'a>,
-    output_event_sender: Sender<RdpOutputEvent>,
+    output_event_sender: OutputEventSender,
   ) -> anyhow::Result<Self, Desk0ViewerError> {
     let mut endpoint =
       url::Url::parse(config.endpoint).map_err(Desk0ViewerError::InvalidEndpoint)?;
@@ -170,7 +170,7 @@ impl Desk0Viewer {
   pub fn run<T>(
     &mut self,
     rt: tokio::runtime::Runtime,
-    callback: Option<(T, Receiver<RdpOutputEvent>)>,
+    callback: Option<(T, OutputEventReceiver)>,
   ) -> anyhow::Result<(), Desk0ViewerError>
   where
     T: Fn(RdpOutputEvent) + 'static + Send + Sync,
@@ -265,7 +265,7 @@ impl Desk0Viewer {
     let events = self.database.apply(operations);
 
     if !events.is_empty() {
-      if let Err(error) = self.input.send(RdpInputEvent::FastPath(events)) {
+      if let Err(error) = self.input.try_send(RdpInputEvent::FastPath(events)) {
         tracing::error!(?error, "rdp input closed");
       }
     }

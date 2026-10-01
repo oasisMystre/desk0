@@ -29,11 +29,14 @@ use ironrdp::{
   core::impl_as_any,
 };
 #[cfg(not(feature = "server"))]
-use ironrdp_client::rdp::RdpInputEvent;
+use ironrdp_client::rdp::{RdpInputEvent, RdpInputSender};
 use ironrdp_cliprdr_format::{
   bitmap::{dib_to_png, dibv5_to_png, png_to_cf_dibv5},
   html::{cf_html_to_plain_html, plain_html_to_cf_html},
 };
+#[cfg(not(feature = "server"))]
+use tokio::sync::mpsc::error::TrySendError;
+#[cfg(feature = "server")]
 use tokio::sync::mpsc::{UnboundedSender, error::SendError};
 
 use crate::types::{ClipboardFile, ClipboardState, DownloadState, DownloadTask};
@@ -76,7 +79,10 @@ pub struct CliprdrHandler {
   state: Arc<Mutex<CliprdrState>>,
   clipboard: Arc<ClipboardContext>,
   watcher: Arc<Mutex<WatcherState>>,
+  #[cfg(feature = "server")]
   sender: Option<UnboundedSender<Event>>,
+  #[cfg(not(feature = "server"))]
+  sender: Option<RdpInputSender>,
   download_state: Arc<Mutex<DownloadState>>,
   clipboard_state: Arc<Mutex<ClipboardState>>,
 }
@@ -113,7 +119,7 @@ impl ServerEventSender for CliprdrHandler {
 
 #[cfg(not(feature = "server"))]
 impl CliprdrHandler {
-  pub fn set_sender(&mut self, sender: UnboundedSender<Event>) {
+  pub fn set_sender(&mut self, sender: RdpInputSender) {
     self.sender = Some(sender);
     self.start_watcher();
   }
@@ -610,9 +616,20 @@ impl CliprdrHandler {
     *lock
   }
 
+  #[cfg(feature = "server")]
   pub fn send(&self, message: Event) -> Result<(), SendError<Event>> {
     if let Some(ref sender) = self.sender {
       Ok(sender.send(message)?)
+    } else {
+      panic!("expected sender to be set")
+    }
+  }
+
+  #[cfg(not(feature = "server"))]
+
+  pub fn send(&self, message: Event) -> Result<(), TrySendError<Event>> {
+    if let Some(ref sender) = self.sender {
+      Ok(sender.try_send(message)?)
     } else {
       panic!("expected sender to be set")
     }

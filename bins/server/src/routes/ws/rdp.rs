@@ -5,7 +5,7 @@ use axum::extract::ws::{Message, WebSocket};
 use futures::StreamExt;
 use tokio::{
   sync::mpsc::UnboundedReceiver,
-  time::{Duration, Instant, MissedTickBehavior, interval, sleep, timeout},
+  time::{Duration, Instant, MissedTickBehavior, interval, timeout},
 };
 use tokio_util::sync::CancellationToken;
 
@@ -116,13 +116,8 @@ impl RdpHandler {
               break;
             }
           }
-          Some(Ok(Message::Close(_)))  => {
-            tracing::info!("rdp disconnected");
+          Some(Ok(Message::Close(_))) | Some(Err(_))  => {
             break;
-          },
-          Some(Err(error)) => {
-              tracing::error!(?error, "rdp disconnected");
-              break;
           },
           Some(Ok(_)) => {}
         },
@@ -143,8 +138,12 @@ impl RdpHandler {
       tracing::warn!(?error, "RDP presence task failed");
     }
 
-    tracing::info!("sending disconnect to inbound lol");
-    sleep(Duration::from_secs(5)).await;
+    self.hub.unsubscribe(inbound).await;
+
+    if let Err(error) = self.hub.unregister(upstream).await {
+      tracing::warn!(?error, "removing RDP presence failed");
+    }
+
     if let Err(error) = self
       .hub
       .send(&upstream, Message::Ping(RESET_RDP_SESSION.to_vec().into()))
@@ -153,12 +152,7 @@ impl RdpHandler {
       tracing::warn!(?error, "resetting agent RDP session failed");
     }
 
-    self.hub.unregister(inbound).await?;
-    self.hub.unsubscribe(inbound).await;
-
-    if let Err(error) = self.hub.unregister(upstream).await {
-      tracing::warn!(?error, "removing RDP presence failed");
-    }
+    tracing::info!("rdp disconnected");
 
     Ok(())
   }
@@ -172,7 +166,7 @@ impl RdpHandler {
     socket: &mut WebSocket,
     inbound: &str,
   ) -> anyhow::Result<Option<HubConnectionState>> {
-    let deadline = Instant::now() + Duration::from_secs(30);
+    let deadline = Instant::now() + Duration::from_secs(10);
 
     let mut last_state = None;
 
@@ -287,8 +281,10 @@ impl RdpHandler {
     };
 
     let response = ironrdp_rdcleanpath::RDCleanPath::Response {
-      x224_connection_response: ironrdp_rdcleanpath::der::asn1::OctetString::new(response)
-        .map_err(|error| anyhow::anyhow!("encode X.224 response: {error:?}"))?,
+      x224_connection_response: ironrdp_rdcleanpath::der::asn1::OctetString::new(
+        response.to_vec().into_boxed_slice(),
+      )
+      .map_err(|error| anyhow::anyhow!("encode X.224 response: {error:?}"))?,
       server_cert_chain: vec![
         ironrdp_rdcleanpath::der::asn1::OctetString::new(Arc::unwrap_or_clone(
           self.certificate.clone(),

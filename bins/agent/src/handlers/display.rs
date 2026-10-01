@@ -8,7 +8,8 @@ use ironrdp::{
   pdu::pointer::PointerPositionAttribute,
   server::{
     BitmapUpdate, ColorPointer, DesktopSize, DisplayUpdate, PixelFormat, RGBAPointer,
-    RdpServerDisplay, RdpServerDisplayUpdates,
+    RdpServerDisplay, RdpServerDisplayUpdates, ServerError, ServerErrorExt, ServerErrorKind,
+    ServerResult,
   },
 };
 use rs_capture::{
@@ -52,19 +53,22 @@ impl RdpServerDisplay for DisplayHandler {
     }
   }
 
-  async fn updates(&mut self) -> anyhow::Result<Box<dyn RdpServerDisplayUpdates>> {
+  async fn updates(&mut self) -> ServerResult<Box<dyn RdpServerDisplayUpdates>> {
     let mut guard = self.receiver.lock().await;
     if let Some(receiver) = guard.take() {
       Ok(Box::new(DisplayUpdates { receiver }))
     } else {
-      anyhow::bail!("Display updates channel already taken");
+      return Err(ServerError::custom(
+        "Display updates channel already taken",
+        ServerErrorKind::Custom,
+      ));
     }
   }
 }
 
 #[async_trait::async_trait]
 impl RdpServerDisplayUpdates for DisplayUpdates {
-  async fn next_update(&mut self) -> anyhow::Result<Option<DisplayUpdate>> {
+  async fn next_update(&mut self) -> ServerResult<Option<DisplayUpdate>> {
     Ok(self.receiver.recv().await)
   }
 }
@@ -100,8 +104,11 @@ impl DisplayHandler {
           Self::append_pointer_updates(&mut updates, &frame.metadata);
 
           for update in updates {
-            if sender.send(update).is_err() {
-              tracing::warn!("Display update receiver disconnected. Stopping capture.");
+            if let Err(error) = sender.send(update) {
+              tracing::warn!(
+                ?error,
+                "Display update receiver disconnected. Stopping capture."
+              );
 
               if let Err(error) = this.stop() {
                 tracing::error!(?error, "Failed to gracefully exit screen capture");

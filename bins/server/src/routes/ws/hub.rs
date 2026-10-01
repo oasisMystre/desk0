@@ -1,6 +1,6 @@
 use std::{collections::HashMap, sync::Arc};
 
-use axum::extract::ws::{CloseFrame, Message};
+use axum::extract::ws::Message;
 use deadpool_redis::redis::AsyncCommands;
 use futures_util::StreamExt;
 use tokio::{
@@ -232,6 +232,8 @@ impl Hub {
   }
 
   pub async fn unregister(&self, session: &str) -> anyhow::Result<()> {
+    self.connection_states.lock().await.remove(session);
+
     let mut redis = self.context.redis_pool.get().await?;
     let () = redis.del(self.subscriber_key(session)).await?;
 

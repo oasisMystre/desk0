@@ -44,7 +44,6 @@ pub struct Desk0App {
 pub struct Desk0InnerApp {
   state: AppState,
   viewer: Desk0Viewer,
-  input_database: Database,
   context: Context<OwnedDisplayHandle>,
 
   // window context
@@ -83,12 +82,9 @@ impl Desk0InnerApp {
     let context = Context::new(event_loop.owned_display_handle())
       .map_err(|error| anyhow::anyhow!("unable to initialize softbuffer context: {error}"))?;
 
-    let input_database = Database::new();
-
     Ok(Self {
       viewer,
       context,
-      input_database,
       buffer: vec![],
       resize_timeout: None,
       buffer_size: (0, 0),
@@ -110,7 +106,7 @@ impl Desk0InnerApp {
     let width = u16::try_from(size.width).expect("reasonable width");
     let height = u16::try_from(size.height).expect("reasonable height");
 
-    match self.viewer.input.send(RdpInputEvent::Resize {
+    match self.viewer.input.try_send(RdpInputEvent::Resize {
       width,
       height,
       scale_factor,

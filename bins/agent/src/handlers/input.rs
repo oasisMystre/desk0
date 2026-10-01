@@ -2,7 +2,7 @@ use enigo::{
   Axis, Button, Coordinate, Direction, Enigo, Key, Keyboard as EnigoKeyboard, Mouse as EnigoMouse,
   Settings,
 };
-use ironrdp::server::{KeyboardEvent, MouseEvent, RdpServerInputHandler};
+use ironrdp::server::{KeyboardEvent, MouseButton, MouseEvent, RdpServerInputHandler};
 
 pub struct InputHandler {
   enigo: Enigo,
@@ -14,6 +14,42 @@ impl InputHandler {
   pub fn new(settings: &Settings) -> anyhow::Result<Self> {
     let enigo = Enigo::new(settings)?;
     Ok(Self { enigo })
+  }
+
+  fn button(button: MouseButton) -> Option<Button> {
+    match button {
+      MouseButton::Left => Some(Button::Left),
+      MouseButton::Right => Some(Button::Right),
+      MouseButton::Middle => Some(Button::Middle),
+      MouseButton::X1 => Some(Button::Forward),
+      MouseButton::X2 => Some(Button::Back),
+      _ => None,
+    }
+  }
+
+  fn mouse_button(&mut self, button: MouseButton, pressed: bool) {
+    let Some(button) = Self::button(button) else {
+      return;
+    };
+
+    let direction = if pressed {
+      Direction::Press
+    } else {
+      Direction::Release
+    };
+
+    if let Err(error) = self.enigo.button(button, direction) {
+      tracing::error!(?error, ?button, pressed, "failed to send mouse button");
+    }
+  }
+
+  fn scroll_notches(value: i16) -> i32 {
+    let notches = (value as i32) / 120;
+    -if notches == 0 {
+      value.signum() as i32
+    } else {
+      notches
+    }
   }
 }
 
@@ -55,39 +91,30 @@ impl RdpServerInputHandler for InputHandler {
           tracing::error!(?error, x, y, "failed to move mouse");
         }
       }
-      MouseEvent::LeftPressed => {
-        if let Err(error) = self.enigo.button(Button::Left, Direction::Press) {
-          tracing::error!(?error, "failed to press left mouse button");
-        }
+      MouseEvent::Button {
+        button, pressed, ..
       }
-      MouseEvent::LeftReleased => {
-        if let Err(error) = self.enigo.button(Button::Left, Direction::Release) {
-          tracing::error!(?error, "failed to release left mouse button");
-        }
-      }
-      MouseEvent::RightPressed => {
-        if let Err(error) = self.enigo.button(Button::Right, Direction::Press) {
-          tracing::error!(?error, "failed to press right mouse button");
-        }
-      }
-      MouseEvent::RightReleased => {
-        if let Err(error) = self.enigo.button(Button::Right, Direction::Release) {
-          tracing::error!(?error, "failed to release right mouse button");
-        }
-      }
-      MouseEvent::MiddlePressed => {
-        if let Err(error) = self.enigo.button(Button::Middle, Direction::Press) {
-          tracing::error!(?error, "failed to press middle button");
-        }
-      }
-      MouseEvent::MiddleReleased => {
-        if let Err(error) = self.enigo.button(Button::Middle, Direction::Release) {
-          tracing::error!(?error, "failed to release middle button");
-        }
+      | MouseEvent::ButtonRel {
+        button, pressed, ..
+      } => {
+        self.mouse_button(button, pressed);
       }
       MouseEvent::VerticalScroll { value } => {
         if let Err(error) = self.enigo.scroll(value as i32, Axis::Vertical) {
           tracing::error!(?error, "failed to scroll vertical");
+        }
+      }
+      MouseEvent::HorizontalScroll { value } => {
+        if let Err(error) = self
+          .enigo
+          .scroll(Self::scroll_notches(value), Axis::Horizontal)
+        {
+          tracing::error!(?error, "failed to scroll horizontal");
+        }
+      }
+      MouseEvent::RelMove { x, y } => {
+        if let Err(error) = self.enigo.move_mouse(x as i32, y as i32, Coordinate::Rel) {
+          tracing::error!(?error, x, y, "failed to move mouse");
         }
       }
       _ => {}
