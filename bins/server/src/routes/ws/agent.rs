@@ -1,4 +1,10 @@
-use std::{sync::Arc, time::Duration};
+use std::{
+  sync::{
+    Arc,
+    atomic::{AtomicBool, Ordering},
+  },
+  time::Duration,
+};
 
 use axum::extract::ws::{Message, WebSocket};
 use futures::StreamExt;
@@ -41,10 +47,13 @@ impl AgentHandler {
 
     tracing::info!("agent waited for rdp");
 
+    let connected = Arc::new(AtomicBool::new(false));
     let cancellation_token = CancellationToken::new();
+
     let presence_task = tokio::spawn({
       let hub = self.hub.clone();
       let session = upstream.clone();
+      let connected = connected.clone();
       let cancellation_token = cancellation_token.clone();
 
       async move {
@@ -55,8 +64,14 @@ impl AgentHandler {
           tokio::select! {
               _ = cancellation_token.cancelled() => break,
               _ = ticker.tick() => {
-                if let Err(error) = hub.register(&session, HubConnectionState::Connected).await {
-                    tracing::warn!(?error, session = %session, "refreshing RDP presence failed");
+                let state = if connected.load(Ordering::Acquire) {
+                  HubConnectionState::Connected
+                } else {
+                  HubConnectionState::Connecting
+                };
+
+                if let Err(error) = hub.register(&session, state).await {
+                  tracing::warn!(?error, session = %session, "refreshing RDP presence failed");
                 }
               }
           }
@@ -94,16 +109,22 @@ impl AgentHandler {
           result = inbound_receiver.recv() => {
               match result {
                   Some(message) => {
-                      if let Message::Ping(bytes) = &message {
-                          if bytes == RESET_RDP_SESSION {
-                              reset = true;
-                              break;
-                          }
-
+                    if !connected.swap(true, Ordering::AcqRel) {
+                      if let Err(error) = self.hub.register(upstream, HubConnectionState::Connected).await {
+                        tracing::warn!(?error, "failed to mark agent connected");
                       }
-                      if socket.send(message).await.is_err() {
+                    }
+
+                    if let Message::Ping(bytes) = &message {
+                      if bytes == RESET_RDP_SESSION {
+                          reset = true;
                           break;
                       }
+                    }
+
+                    if socket.send(message).await.is_err() {
+                        break;
+                    }
                   }
                   None => break,
               }
@@ -139,7 +160,6 @@ impl AgentHandler {
       tokio::select! {
           result = self.hub.is_registered(inbound) => {
               let state = result?;
-              tracing::info!(?state, "rdp state");
               if matches!(state, Some(HubConnectionState::Connected)) {
                   return Ok(true);
               }

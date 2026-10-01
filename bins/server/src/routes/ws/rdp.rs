@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 
 use anyhow::Context;
 use axum::extract::ws::{Message, WebSocket};
@@ -20,6 +20,7 @@ pub struct RdpHandler {
   hub: Arc<Hub>,
   auth: Arc<Auth>,
   certificate: Arc<Vec<u8>>,
+  negotiate_responses: HashMap<String, Vec<u8>>,
 }
 
 impl RdpHandler {
@@ -28,6 +29,7 @@ impl RdpHandler {
       hub,
       auth,
       certificate,
+      negotiate_responses: HashMap::new(),
     }
   }
 
@@ -68,15 +70,19 @@ impl RdpHandler {
       anyhow::bail!("Agent not connected");
     }
 
-    if !matches!(state, Some(HubConnectionState::Connected)) {
-      if let Err(error) = self
-        .negotiate_rdcleanpath(&mut socket, request, upstream, &mut inbound_receiver)
-        .await
-      {
-        self.hub.unsubscribe(&inbound).await;
-        self.hub.unregister(&upstream).await?;
-        anyhow::bail!("RDCleanPath negotiation failed {error}");
-      }
+    if let Err(error) = self
+      .negotiate_rdcleanpath(
+        &mut socket,
+        request,
+        upstream,
+        &mut inbound_receiver,
+        matches!(state, Some(HubConnectionState::Connected)),
+      )
+      .await
+    {
+      self.hub.unsubscribe(&inbound).await;
+      self.hub.unregister(&upstream).await?;
+      anyhow::bail!("RDCleanPath negotiation failed {error}");
     }
 
     let cancellation_token = CancellationToken::new();
@@ -144,11 +150,7 @@ impl RdpHandler {
       tracing::warn!(?error, "removing RDP presence failed");
     }
 
-    if let Err(error) = self
-      .hub
-      .send(&upstream, Message::Ping(RESET_RDP_SESSION.to_vec().into()))
-      .await
-    {
+    if let Err(error) = self.hub.send(&upstream, Message::Close(None)).await {
       tracing::warn!(?error, "resetting agent RDP session failed");
     }
 
@@ -232,16 +234,22 @@ impl RdpHandler {
   }
 
   async fn negotiate_rdcleanpath(
-    &self,
+    &mut self,
     socket: &mut WebSocket,
     request: Vec<u8>,
     inbound: &str,
     inbound_reader: &mut UnboundedReceiver<Message>,
+    reconnecting: bool,
   ) -> anyhow::Result<()> {
     let mut attempts = 0;
     let mut last_error = None;
 
     let response = loop {
+      if reconnecting {
+        if let Some(response) = self.negotiate_responses.get(inbound).cloned() {
+          break response;
+        }
+      }
       let request = request.clone();
 
       if attempts > 5 {
@@ -269,7 +277,7 @@ impl RdpHandler {
       .map_err(|_| anyhow::anyhow!("timed out waiting 15s for agent RDCleanPath response"));
 
       match response {
-        Ok(Ok(value)) => break value,
+        Ok(Ok(value)) => break value.to_vec(),
         Ok(Err(error)) => {
           last_error = Some(error);
         }
@@ -280,9 +288,13 @@ impl RdpHandler {
       };
     };
 
+    self
+      .negotiate_responses
+      .insert(inbound.into(), response.clone());
+
     let response = ironrdp_rdcleanpath::RDCleanPath::Response {
       x224_connection_response: ironrdp_rdcleanpath::der::asn1::OctetString::new(
-        response.to_vec().into_boxed_slice(),
+        response.into_boxed_slice(),
       )
       .map_err(|error| anyhow::anyhow!("encode X.224 response: {error:?}"))?,
       server_cert_chain: vec![

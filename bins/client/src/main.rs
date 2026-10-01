@@ -47,7 +47,7 @@ fn main() -> anyhow::Result<()> {
     _ => anyhow::bail!("--width and --height must be provided together"),
   };
 
-  let (output_event_sender, mut output_event_receiver) = output_channel(64);
+  let (output_event_sender, mut output_event_receiver) = output_channel(1000);
 
   let mut viewer = Desk0Viewer::with_channel(
     Desk0ViewerConfig {

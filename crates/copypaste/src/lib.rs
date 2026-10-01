@@ -783,6 +783,10 @@ impl CliprdrHandler {
           }
 
           download_state.downloaded.clear();
+          {
+            let mut clipboard_state = self.clipboard_state.lock().unwrap();
+            clipboard_state.clear();
+          }
         }
       }
     }
