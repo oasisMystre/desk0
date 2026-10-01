@@ -212,6 +212,17 @@ pub fn init_redis_pool(max_size: usize) -> anyhow::Result<deadpool_redis::Pool> 
     .context("init redis pool failed")
 }
 
+#[cfg(feature = "redis")]
+#[cfg(not(feature = "sentinel"))]
+pub fn init_redis() -> anyhow::Result<deadpool_redis::redis::Client> {
+  use anyhow::Context as _;
+
+  let client = deadpool_redis::redis::Client::open(Env::RedisUrl.get()?)
+    .context("init redis client failed")?;
+
+  Ok(client)
+}
+
 pub fn load_env() {
   let workspace_env = std::env::current_dir()
     .ok()

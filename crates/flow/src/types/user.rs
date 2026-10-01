@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::users;
 
-#[derive(Queryable, Selectable, Insertable, Serialize, Deserialize, Identifiable, Default)]
+#[derive(Queryable, Selectable, Insertable, Serialize, Deserialize, Identifiable, Default, Debug)]
 #[diesel(table_name = users)]
 pub struct User {
   pub id: uuid::Uuid,

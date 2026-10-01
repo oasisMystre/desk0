@@ -1,9 +1,10 @@
-import 'package:get/get.dart';
 import 'package:flutter/widgets.dart';
-import 'package:flutter_svg/svg.dart';
+import 'package:get/get.dart' show Get, Inst, Obx;
+import 'package:flutter_svg/svg.dart' show SvgPicture;
 
-import '../../states/app_state.dart';
-import '../../components/toolbar/tab_icon_button.dart';
+import '../../states/app_state.dart' show AppState, ListType;
+import '../../components/toolbar/tab_icon_button.dart'
+    show TabIconGroupButton, TabIconData;
 
 class TabListType extends StatelessWidget {
   const TabListType({super.key});

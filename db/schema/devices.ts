@@ -1,14 +1,21 @@
-import { jsonb, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import {
+  jsonb,
+  uuid,
+  text,
+  boolean,
+  pgTable,
+  timestamp,
+} from "drizzle-orm/pg-core";
 
 import { organizations } from "./organizations";
 
 type DeviceMetadata = {
-  _version: 1,
+  _version: 1;
   size?: {
-    width: number,
-    height: number
- }
-}
+    width: number;
+    height: number;
+  };
+};
 
 export const devices = pgTable("devices", {
   id: uuid().defaultRandom().primaryKey(),
@@ -16,6 +23,7 @@ export const devices = pgTable("devices", {
   hostname: text(),
   username: text(),
   version: text(),
+  favorite: boolean().default(false),
   metadata: jsonb().$type<DeviceMetadata>(),
   organization: uuid()
     .references(() => organizations.id, { onDelete: "cascade" })

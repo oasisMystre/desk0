@@ -6,7 +6,7 @@ use hmac::{Hmac, Mac};
 use sha2::Sha256;
 use shared::{
   env::FromEnv,
-  init::{init_db_pool, init_redis_pool},
+  init::{init_db_pool, init_redis, init_redis_pool},
   types::{PgPool, RedisPool},
 };
 
@@ -15,17 +15,19 @@ use crate::env::Env;
 #[derive(Clone)]
 pub struct Context {
   pub pg: Arc<PgPool>,
-  #[allow(dead_code)]
-  pub redis: Arc<RedisPool>,
+  pub redis_pool: Arc<RedisPool>,
   pub s3: Arc<aws_sdk_s3::Client>,
   pub auth_key: Arc<Hmac<Sha256>>,
+  pub redis: Arc<deadpool_redis::redis::Client>,
 }
 
 impl Context {
   pub async fn from_env() -> anyhow::Result<Self> {
     let pg = Arc::new(init_db_pool(1000).await?);
-    let redis = Arc::new(init_redis_pool(1000)?);
     let s3 = Arc::new(Self::build_s3_from_env()?);
+
+    let redis = Arc::new(init_redis()?);
+    let redis_pool = Arc::new(init_redis_pool(1000)?);
     let auth_key = Arc::new(Hmac::new_from_slice(Env::AuthToken.get()?.as_bytes())?);
 
     Ok(Self {
@@ -33,6 +35,7 @@ impl Context {
       pg,
       redis,
       auth_key,
+      redis_pool,
     })
   }
 

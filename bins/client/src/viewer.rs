@@ -17,6 +17,7 @@ use ironrdp::{
 };
 use tokio::sync::mpsc::{Receiver, Sender, UnboundedSender, channel};
 use tokio_util::sync::CancellationToken;
+use winit::dpi::PhysicalSize;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Desk0ViewerError {
@@ -35,6 +36,7 @@ pub enum Desk0ViewerError {
 pub struct Desk0ViewerConfig<'a> {
   pub token: &'a str,
   pub endpoint: &'a str,
+  pub desktop_size: Option<PhysicalSize<u16>>,
 }
 
 pub struct Desk0Viewer {
@@ -102,9 +104,9 @@ impl Desk0Viewer {
       .and_then(|display| Some((to_u16(display.width)?, to_u16(display.height)?)))
       .unwrap_or((1920, 1080));
 
-    let destination = Destination::new("").unwrap();
+    let destination = Destination::new("127.0.0.1/0").unwrap();
 
-    let config = ConfigBuilder::new()
+    let mut config_builder = ConfigBuilder::new()
       .with_destination(destination)
       .with_username("username")
       .with_password("username")
@@ -137,7 +139,15 @@ impl Desk0Viewer {
           tracing::info!("Registering client cliprdr static channel");
           Some(Cliprdr::new(backend))
         }
-      })
+      });
+
+    if let Some(desktop_size) = config.desktop_size {
+      config_builder = config_builder
+        .with_desktop_width(desktop_size.width)
+        .with_desktop_height(desktop_size.height);
+    }
+
+    let config = config_builder
       .build()
       .map_err(Desk0ViewerError::Configuration)?;
 

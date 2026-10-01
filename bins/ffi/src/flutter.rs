@@ -4,20 +4,22 @@ use ironrdp::input::Operation;
 
 use crate::{
   frb_generated::StreamSink,
-  types::{InputEvent, SseOutputEvent},
+  types::{InputEvent, SseDesktopSize, SseOutputEvent},
 };
 
 #[frb(opaque)]
 pub struct ViewerHandle {
   token: String,
   endpoint: String,
+  size: Option<SseDesktopSize>,
   inner: Option<Desk0Viewer>,
 }
 
 impl ViewerHandle {
   #[frb(sync)]
-  pub fn new(token: String, endpoint: String) -> ViewerHandle {
+  pub fn new(token: String, endpoint: String, size: Option<SseDesktopSize>) -> ViewerHandle {
     ViewerHandle {
+      size,
       token,
       endpoint,
       inner: None,
@@ -29,6 +31,10 @@ impl ViewerHandle {
       Desk0ViewerConfig {
         token: &self.token,
         endpoint: &self.endpoint,
+        desktop_size: self.size.map(|value| winit::dpi::PhysicalSize {
+          width: value.width,
+          height: value.height,
+        }),
       },
       move |event| {
         let _ = events.add(SseOutputEvent::from(event));

@@ -51,6 +51,14 @@ fn main() -> anyhow::Result<()> {
     Desk0ViewerConfig {
       token: &args.token,
       endpoint: &args.endpoint,
+      desktop_size: if let Some(size) = initial_size {
+        Some(PhysicalSize {
+          width: size.width as u16,
+          height: size.height as u16,
+        })
+      } else {
+        None
+      },
     },
     output_event_sender,
   )?;

@@ -1,9 +1,13 @@
-import 'package:desk0/components/connection/connection_menu.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_svg/svg.dart';
+import 'package:flutter_svg/svg.dart' show SvgPicture;
+
+import '../../dio/models/device.dart' show Device;
+import '../../components/connection/connection_menu.dart' show ConnectionMenu;
 
 class ConnectionListItem extends StatelessWidget {
-  const ConnectionListItem({super.key});
+  final Device device;
+
+  const ConnectionListItem({super.key, required this.device});
 
   @override
   Widget build(BuildContext context) {

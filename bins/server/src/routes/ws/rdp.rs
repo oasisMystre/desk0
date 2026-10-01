@@ -1,179 +1,308 @@
 use std::sync::Arc;
 
+use anyhow::Context;
 use axum::extract::ws::{Message, WebSocket};
 use futures::StreamExt;
 use tokio::{
   sync::mpsc::UnboundedReceiver,
-  time::{Duration, timeout},
+  time::{Duration, Instant, MissedTickBehavior, interval, sleep, timeout},
 };
+use tokio_util::sync::CancellationToken;
 
 use crate::routes::ws::{
   auth::{Auth, Claims},
-  registry::{AgentSession, DeviceInfo, DeviceRegistry},
+  hub::{Hub, HubConnectionState},
 };
 
-const RESET_RDP_SESSION: &[u8] = b"desk0:reset-rdp-session";
+pub const RESET_RDP_SESSION: &[u8] = b"desk0:reset-rdp-session";
 
-pub async fn handle_viewer(
-  mut socket: WebSocket,
-  auth: Auth,
-  registry: Arc<DeviceRegistry>,
-  mut presence: UnboundedReceiver<DeviceInfo>,
+pub struct RdpHandler {
+  hub: Arc<Hub>,
+  auth: Arc<Auth>,
   certificate: Arc<Vec<u8>>,
-) {
-  let (request, claims) = match read_rdcleanpath_request(&mut socket, &auth).await {
-    Ok(value) => value,
-    Err(error) => {
-      tracing::debug!(?error, "RDCleanPath viewer authentication failed");
-      return;
-    }
-  };
+}
 
-  if claims.role.as_deref() != Some("organization") {
-    tracing::warn!(role = ?claims.role, "rejected non organization RDP token");
-    return;
+impl RdpHandler {
+  pub fn new(hub: Arc<Hub>, auth: Arc<Auth>, certificate: Arc<Vec<u8>>) -> Self {
+    Self {
+      hub,
+      auth,
+      certificate,
+    }
   }
 
-  let agent = loop {
-    if let Some(agent) = registry.get_by_org_and_device_id(&claims.org_id, &claims.device_id) {
-      break agent;
+  /// skip negotiation if agent is still connected
+  /// reconnect if agent is in connecting state
+  pub async fn handle(&mut self, mut socket: WebSocket) -> anyhow::Result<()> {
+    let (request, claims) = self
+      .read_rdcleanpath_request(&mut socket)
+      .await
+      .context("RDCleanPath viewer authentication failed")?;
+
+    if claims.role.as_deref() != Some("organization") {
+      anyhow::bail!("rejected non organization RDP token {:?}", claims.role);
     }
 
-    tokio::select! {
-      Some(info) = presence.recv() => {
-        if info.org_id == claims.org_id && info.device_id == claims.device_id {
-          if let Some(agent) = registry.get_by_org_and_device_id(&claims.org_id, &claims.device_id) {
-            break agent;
+    // read all message from rdp and forward to agent
+    let upstream = &format!("rdp:{}:{}", claims.org_id, claims.device_id);
+    // read all message from agent and forward to rdp
+    let inbound = &format!("agent:{}:{}", claims.org_id, claims.device_id);
+
+    // this first to prevent missing message from agent
+    let mut inbound_receiver = self.hub.subscribe(inbound).await;
+
+    // mark rdp as connected immediately
+    self
+      .hub
+      .register(upstream, HubConnectionState::Connected)
+      .await?;
+
+    let state = self.wait_for_agent(&mut socket, inbound).await?;
+    tracing::info!(?state, "rdp state");
+    if !matches!(
+      state,
+      Some(HubConnectionState::Connected | HubConnectionState::Connecting)
+    ) {
+      self.hub.unsubscribe(inbound).await;
+      self.hub.unregister(upstream).await?;
+      anyhow::bail!("Agent not connected");
+    }
+
+    if !matches!(state, Some(HubConnectionState::Connected)) {
+      if let Err(error) = self
+        .negotiate_rdcleanpath(&mut socket, request, upstream, &mut inbound_receiver)
+        .await
+      {
+        self.hub.unsubscribe(&inbound).await;
+        self.hub.unregister(&upstream).await?;
+        anyhow::bail!("RDCleanPath negotiation failed {error}");
+      }
+    }
+
+    let cancellation_token = CancellationToken::new();
+    let presence_task = tokio::spawn({
+      let hub = self.hub.clone();
+      let session = upstream.clone();
+      let cancellation_token = cancellation_token.clone();
+
+      async move {
+        let mut ticker = interval(Duration::from_secs(5));
+        ticker.set_missed_tick_behavior(MissedTickBehavior::Skip);
+
+        loop {
+          tokio::select! {
+              _ = cancellation_token.cancelled() => break,
+              _ = ticker.tick() => {
+                if let Err(error) = hub.register(&session, HubConnectionState::Connected).await {
+                    tracing::warn!(?error, session = %session, "refreshing RDP presence failed");
+                }
+              }
           }
         }
       }
-      result = socket.recv() => match result {
-        Some(Ok(Message::Ping(bytes))) => { if socket.send(Message::Pong(bytes)).await.is_err() { return; } }
-        Some(Ok(Message::Close(_))) | None | Some(Err(_)) => return,
-        Some(Ok(_)) => {}
-      }
-    }
-  };
+    });
 
-  let mut agent_reader = agent.subscribe_inbound();
-  if let Err(error) = negotiate_rdcleanpath(
-    &mut socket,
-    &agent,
-    &mut agent_reader,
-    &certificate,
-    request,
-  )
-  .await
-  {
-    tracing::debug!(?error, "RDCleanPath negotiation failed");
-    return;
-  }
-
-  loop {
-    tokio::select! {
-      result = socket.next() => match result {
-        Some(Ok(Message::Binary(bytes))) => {
-          tracing::debug!(bytes = bytes.len(), "viewer -> agent RDP bytes");
-          if agent.sender.send(Message::Binary(bytes)).is_err() { break; }
-        }
-        Some(Ok(Message::Ping(bytes))) => { if socket.send(Message::Pong(bytes)).await.is_err() { break; } }
-        Some(Ok(Message::Close(_)))  => {
+    loop {
+      tokio::select! {
+        result = socket.next() => match result {
+          None => break,
+          Some(Ok(Message::Binary(bytes))) => {
+            if let Err(error) =  self.hub.send(&upstream, Message::Binary(bytes)).await {
+                tracing::error!(?error, "rdp upstream send failed");
+            }
+          }
+          Some(Ok(Message::Ping(bytes))) => {
+            if socket.send(Message::Pong(bytes)).await.is_err() {
+              break;
+            }
+          }
+          Some(Ok(Message::Close(_)))  => {
             tracing::info!("rdp disconnected");
             break;
-        },
-        None => break,
-        Some(Err(error)) => {
-            tracing::error!(?error, "rdp disconnected");
-            break;
-        },
-        Some(Ok(_)) => {}
-      },
-      result = agent_reader.recv() => match result {
-        Some(message) => {
-          if let Err(error) = socket.send(message).await {
+          },
+          Some(Err(error)) => {
               tracing::error!(?error, "rdp disconnected");
               break;
+          },
+          Some(Ok(_)) => {}
+        },
+        result = inbound_receiver.recv() => match result {
+          Some(message) => {
+            if let Err(error) = socket.send(message).await {
+                tracing::error!(?error, "rdp disconnected");
+                break;
+            }
+          }
+          None => break,
+        }
+      }
+    }
+
+    cancellation_token.cancel();
+    if let Err(error) = presence_task.await {
+      tracing::warn!(?error, "RDP presence task failed");
+    }
+
+    tracing::info!("sending disconnect to inbound lol");
+    sleep(Duration::from_secs(5)).await;
+    if let Err(error) = self
+      .hub
+      .send(&upstream, Message::Ping(RESET_RDP_SESSION.to_vec().into()))
+      .await
+    {
+      tracing::warn!(?error, "resetting agent RDP session failed");
+    }
+
+    self.hub.unregister(inbound).await?;
+    self.hub.unsubscribe(inbound).await;
+
+    if let Err(error) = self.hub.unregister(upstream).await {
+      tracing::warn!(?error, "removing RDP presence failed");
+    }
+
+    Ok(())
+  }
+
+  /// if agent is idle, give a grace period of 10s
+  /// if agent is disconnected, give a grace period of 10s
+  /// if agent is connecting, still wait but timeout 10s
+  /// if agent is connected return
+  async fn wait_for_agent(
+    &self,
+    socket: &mut WebSocket,
+    inbound: &str,
+  ) -> anyhow::Result<Option<HubConnectionState>> {
+    let deadline = Instant::now() + Duration::from_secs(30);
+
+    let mut last_state = None;
+
+    loop {
+      if Instant::now() > deadline {
+        break Ok(last_state);
+      }
+
+      let state = self.hub.is_registered(inbound).await?;
+      if let Some(state) = state {
+        match state {
+          HubConnectionState::Connected => return Ok(Some(state)),
+          HubConnectionState::Connecting => return Ok(Some(state)),
+          HubConnectionState::Idle | HubConnectionState::Disconnected => last_state = Some(state),
+        }
+      }
+
+      let remaining = deadline.saturating_duration_since(Instant::now());
+      let wait = remaining.min(Duration::from_millis(250));
+
+      tokio::select! {
+        result = tokio::time::sleep(wait) => result,
+        result = socket.recv() => match result {
+          Some(Ok( Message::Close(_))) | None => return Ok(None),
+          Some(Ok(Message::Ping(bytes))) => {
+            socket.send(Message::Pong(bytes)).await?;
+          }
+           Some(Err(error)) => return Err(error.into()),
+          Some(Ok(_)) => {}
+        }
+      }
+    }
+  }
+
+  async fn read_rdcleanpath_request(
+    &self,
+    socket: &mut WebSocket,
+  ) -> anyhow::Result<(Vec<u8>, Claims)> {
+    loop {
+      let Some(message) = socket.next().await else {
+        anyhow::bail!("viewer closed during RDCleanPath authentication")
+      };
+
+      match message? {
+        Message::Ping(bytes) => socket.send(Message::Pong(bytes)).await?,
+        Message::Binary(bytes) => {
+          let pdu = ironrdp_rdcleanpath::RDCleanPathPdu::from_der(&bytes)?;
+          let ironrdp_rdcleanpath::RDCleanPath::Request {
+            proxy_auth,
+            x224_connection_request,
+            ..
+          } = pdu.into_enum()?
+          else {
+            anyhow::bail!("expected RDCleanPath request")
+          };
+          let claims = self.auth.authenticate(&proxy_auth)?;
+          return Ok((x224_connection_request.as_bytes().to_vec(), claims));
+        }
+        Message::Pong(_) | Message::Text(_) => {}
+        Message::Close(_) => anyhow::bail!("viewer closed during RDCleanPath authentication"),
+      }
+    }
+  }
+
+  async fn negotiate_rdcleanpath(
+    &self,
+    socket: &mut WebSocket,
+    request: Vec<u8>,
+    inbound: &str,
+    inbound_reader: &mut UnboundedReceiver<Message>,
+  ) -> anyhow::Result<()> {
+    let mut attempts = 0;
+    let mut last_error = None;
+
+    let response = loop {
+      let request = request.clone();
+
+      if attempts > 5 {
+        if let Some(error) = last_error {
+          return Err(error);
+        }
+      }
+
+      self
+        .hub
+        .send(inbound, Message::Binary(request.into()))
+        .await?;
+
+      let response = timeout(Duration::from_secs(5), async {
+        loop {
+          let Some(message) = inbound_reader.recv().await else {
+            anyhow::bail!("agent closed during RDCleanPath negotiation")
+          };
+          if let Message::Binary(bytes) = message {
+            break Ok::<_, anyhow::Error>(bytes);
           }
         }
-        None => break,
-      }
-    }
-  }
+      })
+      .await
+      .map_err(|_| anyhow::anyhow!("timed out waiting 15s for agent RDCleanPath response"));
 
-  if let Err(error) = agent
-    .sender
-    .send(Message::Ping(RESET_RDP_SESSION.to_vec().into()))
-  {
-    tracing::warn!(?error, "resetting agent RDP session failed");
-  }
-}
-
-async fn read_rdcleanpath_request(
-  socket: &mut WebSocket,
-  auth: &Auth,
-) -> anyhow::Result<(Vec<u8>, Claims)> {
-  loop {
-    let Some(message) = socket.next().await else {
-      anyhow::bail!("viewer closed during RDCleanPath authentication")
+      match response {
+        Ok(Ok(value)) => break value,
+        Ok(Err(error)) => {
+          last_error = Some(error);
+        }
+        Err(error) => {
+          attempts += 1;
+          last_error = Some(error);
+        }
+      };
     };
 
-    match message? {
-      Message::Ping(bytes) => socket.send(Message::Pong(bytes)).await?,
-      Message::Binary(bytes) => {
-        let pdu = ironrdp_rdcleanpath::RDCleanPathPdu::from_der(&bytes)?;
-        let ironrdp_rdcleanpath::RDCleanPath::Request {
-          proxy_auth,
-          x224_connection_request,
-          ..
-        } = pdu.into_enum()?
-        else {
-          anyhow::bail!("expected RDCleanPath request")
-        };
-        let claims = auth.authenticate(&proxy_auth)?;
-        return Ok((x224_connection_request.as_bytes().to_vec(), claims));
-      }
-      Message::Pong(_) | Message::Text(_) => {}
-      Message::Close(_) => anyhow::bail!("viewer closed during RDCleanPath authentication"),
-    }
-  }
-}
-
-async fn negotiate_rdcleanpath(
-  socket: &mut WebSocket,
-  agent: &AgentSession,
-  agent_reader: &mut tokio::sync::mpsc::UnboundedReceiver<Message>,
-  certificate: &[u8],
-  request: Vec<u8>,
-) -> anyhow::Result<()> {
-  agent.sender.send(Message::Binary(request.into()))?;
-
-  let response = timeout(Duration::from_secs(15), async {
-    loop {
-      let Some(message) = agent_reader.recv().await else {
-        anyhow::bail!("agent closed during RDCleanPath negotiation")
-      };
-      if let Message::Binary(bytes) = message {
-        break Ok::<_, anyhow::Error>(bytes);
-      }
-    }
-  })
-  .await
-  .map_err(|_| anyhow::anyhow!("timed out waiting 15s for agent RDCleanPath response"))??;
-
-  let response = ironrdp_rdcleanpath::RDCleanPath::Response {
-    x224_connection_response: ironrdp_rdcleanpath::der::asn1::OctetString::new(response)
-      .map_err(|error| anyhow::anyhow!("encode X.224 response: {error:?}"))?,
-    server_cert_chain: vec![
-      ironrdp_rdcleanpath::der::asn1::OctetString::new(certificate)
+    let response = ironrdp_rdcleanpath::RDCleanPath::Response {
+      x224_connection_response: ironrdp_rdcleanpath::der::asn1::OctetString::new(response)
+        .map_err(|error| anyhow::anyhow!("encode X.224 response: {error:?}"))?,
+      server_cert_chain: vec![
+        ironrdp_rdcleanpath::der::asn1::OctetString::new(Arc::unwrap_or_clone(
+          self.certificate.clone(),
+        ))
         .map_err(|error| anyhow::anyhow!("encode server certificate: {error:?}"))?,
-    ],
-    server_addr: "127.0.0.1".to_owned(),
+      ],
+      server_addr: "127.0.0.1".to_owned(),
+    }
+    .into_pdu()
+    .to_der()
+    .map_err(|error| anyhow::anyhow!("encode RDCleanPath response: {error:?}"))?;
+
+    socket.send(Message::Binary(response.into())).await?;
+
+    Ok(())
   }
-  .into_pdu()
-  .to_der()
-  .map_err(|error| anyhow::anyhow!("encode RDCleanPath response: {error:?}"))?;
-
-  socket.send(Message::Binary(response.into())).await?;
-
-  Ok(())
 }

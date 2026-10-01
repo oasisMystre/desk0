@@ -7,7 +7,7 @@ use serde::Deserialize;
 
 use crate::routes::{
   state::AppState,
-  ws::{agent, context::WsContext, rdp},
+  ws::{agent::AgentHandler, context::WsContext, rdp::RdpHandler},
 };
 
 #[derive(Deserialize)]
@@ -18,8 +18,8 @@ pub struct WebSocketQueryParams {
 pub async fn ws_route(
   State(AppState {
     ws_context: WsContext {
+      hub,
       auth,
-      registry,
       certificate,
     },
     ..
@@ -46,7 +46,12 @@ pub async fn ws_route(
     return match auth.authenticate(&token) {
       Ok(claims) if claims.role.as_deref() == Some("agent") => ws.on_upgrade({
         let claims = claims.clone();
-        move |socket| agent::handle_agent(socket, claims, registry)
+        async move |socket| {
+          let mut handler = AgentHandler::new(hub);
+          if let Err(error) = handler.handle(socket, claims).await {
+            tracing::error!(?error, "agent session ended with error");
+          }
+        }
       }),
       Ok(_) => Response::builder()
         .status(401)
@@ -60,9 +65,11 @@ pub async fn ws_route(
   }
 
   ws.on_upgrade({
-    move |socket| {
-      let presence = registry.subscribe_presence();
-      rdp::handle_viewer(socket, auth, registry, presence, certificate)
+    async move |socket| {
+      let mut handler = RdpHandler::new(hub, auth, certificate);
+      if let Err(error) = handler.handle(socket).await {
+        tracing::error!(?error, "rdp session ended with error");
+      }
     }
   })
 }

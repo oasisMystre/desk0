@@ -1,8 +1,14 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_svg/svg.dart';
-import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
+import 'package:flutter_svg/svg.dart' show SvgPicture;
+import 'package:liquid_glass_widgets/liquid_glass_widgets.dart'
+    show
+        GlassMenu,
+        GlassButton,
+        GlassMenuItem,
+        GlassContainer,
+        LiquidRoundedRectangle;
 
-import '../../theme/app_theme.dart';
+import '../../theme/app_theme.dart' show AppColors;
 
 class ConnectionMenu extends StatelessWidget {
   final Widget Function(void Function() toggle)? trigger;

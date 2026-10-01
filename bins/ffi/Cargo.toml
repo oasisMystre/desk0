@@ -11,6 +11,7 @@ flutter = []
 default = ["flutter"]
 
 [dependencies]
+winit = "0.30.13"
 desk0-client = { path = "../client" }
 anyhow.workspace = true
 ironrdp = { workspace = true, features = ["client", "connector", "cliprdr", "input", "session", "client-clipboard", "graphics"] }

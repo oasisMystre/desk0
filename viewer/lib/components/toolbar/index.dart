@@ -1,13 +1,14 @@
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_svg/svg.dart';
-import 'package:get/get.dart';
+import 'package:flutter/cupertino.dart';
+import 'package:get/get.dart' show Get, Inst;
+import 'package:flutter_svg/svg.dart' show SvgPicture;
 
-import './tab_list_type.dart';
-import '../search_input.dart';
-import './tab_icon_button.dart';
-import '../app/create_app_dialog.dart';
-import '../../states/app_state.dart';
+import './tab_list_type.dart' show TabListType;
+import '../search_input.dart' show SearchInput;
+import '../../states/app_state.dart' show AppState;
+import '../app/create_app_dialog.dart' show CreateAppDialog;
+import './tab_icon_button.dart'
+    show TabIconButton, TabIconData, TabIconGroupButton;
 
 class Toolbar extends StatelessWidget {
   const Toolbar({super.key});

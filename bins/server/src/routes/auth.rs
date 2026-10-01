@@ -18,6 +18,7 @@ pub struct AuthenticatedUser {
 
 /// all agent maybe guest user
 /// for some requests valid org_id or device_id is need
+#[allow(dead_code)]
 pub struct MaybeGuestUser {
   pub org_id: Option<uuid::Uuid>,
   pub device_id: Option<uuid::Uuid>,
@@ -70,6 +71,8 @@ impl FromRequestParts<AppState> for AuthenticatedUser {
       });
     }
 
+    tracing::info!(?org_id, "id");
+
     if let Some(org_id) = org_id {
       let org_id = org_id
         .parse::<uuid::Uuid>()
@@ -105,6 +108,7 @@ impl FromRequestParts<AppState> for AuthenticatedUser {
   }
 }
 
+#[allow(dead_code)]
 impl MaybeGuestUser {
   pub fn device_id(&self) -> Result<uuid::Uuid, StatusCode> {
     match self.device_id {

@@ -2,12 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:get/instance_manager.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:window_manager/window_manager.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 
-import 'screens/index.dart';
 import 'dio/index.dart';
+import 'screens/index.dart';
 import 'theme/app_theme.dart';
 import 'components/index.dart';
 import 'states/app_state.dart';
@@ -22,7 +22,7 @@ class InterceptFullscreenListener extends WindowListener {
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  final Api api = Api(baseUrl: 'http://0.0.0.0:8000');
+  final Api api = Api(baseUrl: 'http://0.0.0.0:8080');
   final sharedPreferences = await SharedPreferences.getInstance();
   final guestUser = sharedPreferences.getStringList('user');
 

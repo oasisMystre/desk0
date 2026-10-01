@@ -1,9 +1,10 @@
-import 'package:desk0/components/connection/connection_menu.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_svg/flutter_svg.dart';
-import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
+import 'package:flutter_svg/flutter_svg.dart' show SvgPicture;
+import 'package:liquid_glass_widgets/widgets/interactive/glass_button.dart'
+    show GlassButton;
 
-import '../../dio/models/device.dart';
+import '../../dio/models/device.dart' show Device;
+import '../../components/connection/connection_menu.dart' show ConnectionMenu;
 
 class ConnectionCard extends StatefulWidget {
   final Device device;
@@ -97,24 +98,26 @@ class ConnectionCardState extends State<ConnectionCard> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  "Unknown",
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w600,
-                    height: 1.2,
+                if (device.username != null)
+                  Text(
+                    device.username!,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w600,
+                      height: 1.2,
+                    ),
                   ),
-                ),
-                Text(
-                  "Unknown.com",
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    fontSize: 9,
-                    color: Colors.white70,
-                    fontWeight: FontWeight.w300,
-                    height: 1.0,
+                if (device.os != null)
+                  Text(
+                    device.os!,
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      fontSize: 9,
+                      color: Colors.white70,
+                      fontWeight: FontWeight.w300,
+                      height: 1.0,
+                    ),
+                    overflow: TextOverflow.ellipsis,
                   ),
-                  overflow: TextOverflow.ellipsis,
-                ),
               ],
             ),
           ),

@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::schema::organizations;
 
-#[derive(HasQuery, Insertable, Serialize, Deserialize, Identifiable, Default)]
+#[derive(HasQuery, Insertable, Serialize, Deserialize, Identifiable, Default, Debug)]
 #[diesel(table_name = organizations)]
 pub struct Organization {
   pub id: uuid::Uuid,

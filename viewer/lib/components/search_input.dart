@@ -1,9 +1,8 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_svg/flutter_svg.dart';
-import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
-import 'package:liquid_glass_widgets/widgets/containers/glass_container.dart';
-import 'package:liquid_glass_widgets/widgets/interactive/glass_button.dart';
+import 'package:flutter_svg/flutter_svg.dart' show SvgPicture;
+import 'package:liquid_glass_widgets/liquid_glass_widgets.dart'
+    show GlassContainer, GlassButton, LiquidRoundedSuperellipse;
 
 class SearchInput extends StatefulWidget {
   final bool expanded;
@@ -98,12 +97,6 @@ class SearchInputState extends State<SearchInput> {
       curve: Curves.easeInOut,
       width: expanded ? double.infinity : 48,
       constraints: const BoxConstraints(minWidth: 48, maxWidth: 180),
-      // decoration: BoxDecoration(
-      //   borderRadius: BorderRadius.circular(24),
-      //   color: expanded
-      //       ? Theme.of(context).colorScheme.surfaceContainerHighest
-      //       : null,
-      // ),
       child: expanded
           ? GlassContainer(
               shape: LiquidRoundedSuperellipse(borderRadius: 100),

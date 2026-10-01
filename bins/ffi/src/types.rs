@@ -1,3 +1,4 @@
+use flutter_rust_bridge::frb;
 use ironrdp::{client::rdp::RdpOutputEvent, session::GracefulDisconnectReason};
 use std::ffi::c_char;
 
@@ -102,11 +103,18 @@ pub enum OutputEvent {
   },
 }
 
+#[derive(Clone)]
+pub enum SseDisconnectReason {
+  UserInitiated,
+  ServerInitiated,
+  Other(String),
+}
+
 #[repr(C)]
 #[derive(Clone)]
 pub enum SseOutputEvent {
   TerminatedError(String),
-  TerminatedSuccess(GracefulDisconnectReason),
+  TerminatedSuccess(SseDisconnectReason),
   ConnectionFailure(String),
   Image {
     width: u16,
@@ -126,6 +134,23 @@ pub enum SseOutputEvent {
     hotspot_x: u16,
     hotspot_y: u16,
   },
+}
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct SseDesktopSize {
+  pub width: u16,
+  pub height: u16,
+}
+
+impl From<GracefulDisconnectReason> for SseDisconnectReason {
+  fn from(value: GracefulDisconnectReason) -> Self {
+    match value {
+      GracefulDisconnectReason::UserInitiated => Self::UserInitiated,
+      GracefulDisconnectReason::ServerInitiated => Self::ServerInitiated,
+      GracefulDisconnectReason::Other(value) => Self::Other(value),
+    }
+  }
 }
 
 impl From<RdpOutputEvent> for SseOutputEvent {
@@ -151,12 +176,12 @@ impl From<RdpOutputEvent> for SseOutputEvent {
       ironrdp::client::rdp::RdpOutputEvent::PointerBitmap(pointer) => Self::PointerBitmap {
         width: pointer.width,
         height: pointer.height,
-        bitmap_data: pointer.bitmap_data.clone(),
         hotspot_x: pointer.hotspot_x,
         hotspot_y: pointer.hotspot_y,
+        bitmap_data: pointer.bitmap_data.clone(),
       },
       ironrdp::client::rdp::RdpOutputEvent::Terminated(reason) => match reason {
-        Ok(reason) => Self::TerminatedSuccess(reason),
+        Ok(reason) => Self::TerminatedSuccess(reason.into()),
         Err(error) => Self::TerminatedError(error.to_string()),
       },
     }

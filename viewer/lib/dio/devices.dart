@@ -7,18 +7,17 @@ class DeviceApi extends ApiImpl {
   Future<List<Device>> getDevices() async {
     final response = await client.get('/devices');
     if (response.statusCode == 200) {
-      final result = response.data as List<Map<String, dynamic>>;
-      return result.map((data) => Device.fromJson(data)).toList();
+      final result = response.data as List<dynamic>;
+      return result
+          .map((data) => Device.fromJson(data as Map<String, dynamic>))
+          .toList();
     } else {
       throw Exception(response.data);
     }
   }
 
-  Future<Device> deleteDevicet(String id, bool uploaded) async {
-    final response = await client.delete(
-      '/devices/$id',
-      data: {'uploaded': uploaded},
-    );
+  Future<Device> deleteDevice(String id) async {
+    final response = await client.delete('/devices/$id');
 
     if (response.statusCode == 200) {
       final result = response.data as Map<String, dynamic>;

@@ -1,10 +1,12 @@
+use std::time::Duration;
+
 use axum::{
   Router,
   routing::{delete, get, patch, post},
 };
 use clap::Parser;
 use shared::init::{init_tracing, load_env};
-use tokio::net::TcpListener;
+use tokio::{net::TcpListener, time::sleep};
 use tower_http::trace::TraceLayer;
 
 use crate::routes::state::AppState;
@@ -76,10 +78,33 @@ pub async fn main() -> anyhow::Result<()> {
     )
     .route("/ws", get(routes::ws::websocket::ws_route))
     .layer(TraceLayer::new_for_http())
-    .with_state(state);
+    .with_state(state.clone());
+
+  let handle = tokio::spawn({
+    let state = state.clone();
+
+    async move {
+      loop {
+        match state.ws_context.hub.connect().await {
+          Ok(mut handle) => {
+            if let Err(error) = handle.run().await {
+              tracing::warn!(?error, "ws hub connection closed, reconnecting");
+            };
+          }
+
+          Err(error) => {
+            tracing::warn!(?error, "ws hub connection failed, reconnecting");
+          }
+        }
+
+        sleep(Duration::from_secs(1)).await;
+      }
+    }
+  });
 
   tokio::select! {
     result = tokio::signal::ctrl_c() => result?,
+    result = handle => result?,
     result = axum::serve(listener, app) => result?
   }
 
