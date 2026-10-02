@@ -6,6 +6,8 @@ use ironrdp::server::{KeyboardEvent, MouseButton, MouseEvent, RdpServerInputHand
 
 pub struct InputHandler {
   enigo: Enigo,
+  vertical_wheel_remainder: i32,
+  horizontal_wheel_remainder: i32,
 }
 
 unsafe impl Send for InputHandler {}
@@ -13,7 +15,11 @@ unsafe impl Send for InputHandler {}
 impl InputHandler {
   pub fn new(settings: &Settings) -> anyhow::Result<Self> {
     let enigo = Enigo::new(settings)?;
-    Ok(Self { enigo })
+    Ok(Self {
+      enigo,
+      vertical_wheel_remainder: 0,
+      horizontal_wheel_remainder: 0,
+    })
   }
 
   fn button(button: MouseButton) -> Option<Button> {
@@ -43,13 +49,11 @@ impl InputHandler {
     }
   }
 
-  fn scroll_notches(value: i16) -> i32 {
-    let notches = (value as i32) / 120;
-    -if notches == 0 {
-      value.signum() as i32
-    } else {
-      notches
-    }
+  fn scroll_notches(remainder: &mut i32, value: i16) -> i32 {
+    let total = *remainder + i32::from(value);
+    let notches = total / 120;
+    *remainder = total - notches * 120;
+    notches
   }
 }
 
@@ -101,16 +105,19 @@ impl RdpServerInputHandler for InputHandler {
         self.mouse_button(button, pressed);
       }
       MouseEvent::VerticalScroll { value } => {
-        if let Err(error) = self.enigo.scroll(Self::scroll_notches(value), Axis::Vertical) {
-          tracing::error!(?error, "failed to scroll vertical");
+        let notches = Self::scroll_notches(&mut self.vertical_wheel_remainder, value);
+        if notches != 0 {
+          if let Err(error) = self.enigo.scroll(notches, Axis::Vertical) {
+            tracing::error!(?error, ?notches, "failed to scroll vertical");
+          }
         }
       }
       MouseEvent::HorizontalScroll { value } => {
-        if let Err(error) = self
-          .enigo
-          .scroll(Self::scroll_notches(value), Axis::Horizontal)
-        {
-          tracing::error!(?error, "failed to scroll horizontal");
+        let notches = Self::scroll_notches(&mut self.horizontal_wheel_remainder, value);
+        if notches != 0 {
+          if let Err(error) = self.enigo.scroll(notches, Axis::Horizontal) {
+            tracing::error!(?error, ?notches, "failed to scroll horizontal");
+          }
         }
       }
       // MouseEvent::RelMove { x, y } => {

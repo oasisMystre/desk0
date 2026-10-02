@@ -400,14 +400,14 @@ impl Desk0InnerApp {
             if delta_x.abs() > 0.001 {
               operations.push(Operation::WheelRotations(WheelRotations {
                 is_vertical: false,
-                rotation_units: wheel_units(f64::from(delta_x) * 100.0),
+                rotation_units: wheel_units(f64::from(delta_x) * LINE_WHEEL_SCALE),
               }));
             }
 
             if delta_y.abs() > 0.001 {
               operations.push(Operation::WheelRotations(WheelRotations {
                 is_vertical: true,
-                rotation_units: wheel_units(f64::from(delta_y) * 100.0),
+                rotation_units: wheel_units(f64::from(delta_y) * LINE_WHEEL_SCALE),
               }));
             }
           }
@@ -415,14 +415,14 @@ impl Desk0InnerApp {
             if delta.x.abs() > 0.001 {
               operations.push(Operation::WheelRotations(WheelRotations {
                 is_vertical: false,
-                rotation_units: wheel_units(delta.x),
+                rotation_units: wheel_units(delta.x * PIXEL_WHEEL_SCALE),
               }));
             }
 
             if delta.y.abs() > 0.001 {
               operations.push(Operation::WheelRotations(WheelRotations {
                 is_vertical: true,
-                rotation_units: wheel_units(delta.y),
+                rotation_units: wheel_units(delta.y * PIXEL_WHEEL_SCALE),
               }));
             }
           }
@@ -550,6 +550,9 @@ impl ApplicationHandler<RdpOutputEvent> for Desk0App {
     self.inner.handle_output_event(event_loop, event);
   }
 }
+
+const LINE_WHEEL_SCALE: f64 = 40.0;
+const PIXEL_WHEEL_SCALE: f64 = 0.5;
 
 fn wheel_units(value: f64) -> i16 {
   value.round().clamp(-256.0, 255.0) as i16
