@@ -142,7 +142,7 @@ impl AgentServer {
     handles.push(tokio::task::spawn_local(async move {
       let future = if config.tunnel {
         server
-          .run_connection_with(stream, TransportTls::AlreadyDone)
+          .run_connection(stream)
           .await
       } else {
         server.run_connection(stream).await
