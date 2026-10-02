@@ -85,8 +85,6 @@ impl ClipboardWatcherHandler {
       return;
     }
 
-    tracing::info!("Starting clipboard watcher after cliprdr ready");
-
     let Ok(mut watcher) = ClipboardWatcherContext::new() else {
       tracing::error!("Failed to create clipboard watcher context");
       return;

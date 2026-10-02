@@ -54,17 +54,17 @@ impl Server for AgentServer {
           .addr
           .ok_or_else(|| anyhow::anyhow!("Server bind address is not configured"))?;
         let listener = TcpListener::bind(addr).await?;
-        println!("RDP server listening on {addr}");
+        tracing::info!(?addr, "RDP server listening");
 
         loop {
           tokio::select! {
             _ = cancellation_token.cancelled() => {
-              println!("RDP server shutting down...");
+              tracing::debug!("RDP server shutting down...");
               break;
             }
             result = listener.accept() => {
               let (stream, peer_addr) = result?;
-              println!("Accepted connection from {peer_addr}");
+              tracing::info!(?peer_addr, "Accepted connection");
 
               let config = self.config.clone();
               let cancellation_token = cancellation_token.clone();
@@ -72,7 +72,7 @@ impl Server for AgentServer {
               tokio::task::spawn_local(async move {
                 tracing::info!(%peer_addr, "RDP connection accepted");
                 if let Err(error) = Self::handle(config, stream, cancellation_token).await {
-                  eprintln!("Connection handler error for {peer_addr}: {error:?}");
+                  tracing::error!(?error, ?peer_addr, "Connection handler error");
                 }
                 tracing::info!(%peer_addr, "RDP connection handler stopped");
               });
@@ -120,7 +120,6 @@ impl AgentServer {
       .unwrap_or_else(|| SocketAddr::from(([127, 0, 0, 1], 0)));
 
     let tls_acceptor = Self::tls_acceptor()?;
-    tracing::info!("Registering agent cliprdr static channel");
     let server = RdpServer::builder()
       .with_addr(addr)
       .with_tls(tls_acceptor)
@@ -132,7 +131,7 @@ impl AgentServer {
 
     handles.push(tokio::task::spawn_local(async move {
       if let Err(error) = display_handler.capture().await {
-        eprintln!("Display handler error: {error:?}");
+        tracing::error!(?error, "Display handler error");
       }
     }));
 
@@ -146,7 +145,7 @@ impl AgentServer {
       };
 
       if let Err(error) = future {
-        eprintln!("Connection dropped: {error:?}");
+        tracing::error!(?error, "Connection dropped");
       }
     }));
 
