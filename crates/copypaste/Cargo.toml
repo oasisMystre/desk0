@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [features]
-server = []
+server = ["ironrdp/server"]
 client = ["dep:ironrdp-client"]
 
 [dependencies]
@@ -16,3 +16,4 @@ tracing.workspace = true
 ironrdp-client = { workspace = true, optional = true }
 ironrdp = { workspace = true, features = ["cliprdr"] }
 ironrdp-cliprdr-format = "0.2.0"
+tracing-subscriber.workspace = true

@@ -1717,6 +1717,7 @@ dependencies = [
  "ironrdp-cliprdr-format",
  "tokio",
  "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]

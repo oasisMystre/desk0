@@ -184,6 +184,46 @@ impl From<RdpOutputEvent> for SseOutputEvent {
         Ok(reason) => Self::TerminatedSuccess(reason.into()),
         Err(error) => Self::TerminatedError(error.to_string()),
       },
+      RdpOutputEvent::Connected => todo!(),
+      RdpOutputEvent::MonitorLayout(monitors) => todo!(),
+      RdpOutputEvent::LoginComplete => todo!(),
+      RdpOutputEvent::DesktopUpdate(desktop_update) => todo!(),
+      RdpOutputEvent::ConnectionFailure(error) => todo!(),
+      RdpOutputEvent::WindowingOrders(items) => todo!(),
+      RdpOutputEvent::RailHandshake {
+        handshake_ex_flags,
+        initialization_message_count,
+        queued_execute_count,
+      } => todo!(),
+      RdpOutputEvent::RailDesktopSynchronized {
+        released_execute_count,
+      } => todo!(),
+      RdpOutputEvent::RailPostHandshakeQueueReleased {
+        released_execute_count,
+      } => todo!(),
+      RdpOutputEvent::RailExecuteResult(execute_result_pdu) => todo!(),
+      RdpOutputEvent::RailExecuteFailed {
+        executable,
+        flags,
+        reason,
+      } => todo!(),
+      RdpOutputEvent::RailApplicationId {
+        window_id,
+        application_id,
+        process_id,
+        process_image_name,
+      } => todo!(),
+      RdpOutputEvent::RailControl(rail_control_event) => todo!(),
+      RdpOutputEvent::PostLogonDisplayRedraw => todo!(),
+      RdpOutputEvent::MalformedBitmapDisplayRedraw => todo!(),
+      RdpOutputEvent::DisplayResizeFallback(display_resize_fallback_reason) => todo!(),
+      RdpOutputEvent::AutoReconnecting {
+        disconnect_reason,
+        attempt,
+        maximum_attempts,
+        response,
+      } => todo!(),
+      RdpOutputEvent::AutoReconnected => todo!(),
     }
   }
 }

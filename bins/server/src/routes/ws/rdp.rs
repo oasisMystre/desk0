@@ -1,4 +1,4 @@
-use std::{collections::HashMap, sync::Arc};
+use std::sync::Arc;
 
 use anyhow::Context;
 use axum::extract::ws::{Message, WebSocket};
@@ -20,7 +20,6 @@ pub struct RdpHandler {
   hub: Arc<Hub>,
   auth: Arc<Auth>,
   certificate: Arc<Vec<u8>>,
-  negotiate_responses: HashMap<String, Vec<u8>>,
 }
 
 impl RdpHandler {
@@ -29,7 +28,6 @@ impl RdpHandler {
       hub,
       auth,
       certificate,
-      negotiate_responses: HashMap::new(),
     }
   }
 
@@ -71,13 +69,7 @@ impl RdpHandler {
     }
 
     if let Err(error) = self
-      .negotiate_rdcleanpath(
-        &mut socket,
-        request,
-        upstream,
-        &mut inbound_receiver,
-        matches!(state, Some(HubConnectionState::Connected)),
-      )
+      .negotiate_rdcleanpath(&mut socket, request, upstream, &mut inbound_receiver)
       .await
     {
       self.hub.unsubscribe(&inbound).await;
@@ -122,9 +114,13 @@ impl RdpHandler {
               break;
             }
           }
-          Some(Ok(Message::Close(_))) | Some(Err(_))  => {
+          Some(Ok(Message::Close(_))) => {
+            tracing::info!("rdp disconnected gracefully");
             break;
           },
+          Some(Err(error))  => {
+              tracing::error!(?error, "rdp disconnected due to error");
+          }
           Some(Ok(_)) => {}
         },
         result = inbound_receiver.recv() => match result {
@@ -239,25 +235,8 @@ impl RdpHandler {
     request: Vec<u8>,
     inbound: &str,
     inbound_reader: &mut UnboundedReceiver<Message>,
-    reconnecting: bool,
   ) -> anyhow::Result<()> {
-    let mut attempts = 0;
-    let mut last_error = None;
-
-    let response = loop {
-      if reconnecting {
-        if let Some(response) = self.negotiate_responses.get(inbound).cloned() {
-          break response;
-        }
-      }
-      let request = request.clone();
-
-      if attempts > 5 {
-        if let Some(error) = last_error {
-          return Err(error);
-        }
-      }
-
+    let response = {
       self
         .hub
         .send(inbound, Message::Binary(request.into()))
@@ -277,20 +256,22 @@ impl RdpHandler {
       .map_err(|_| anyhow::anyhow!("timed out waiting 15s for agent RDCleanPath response"));
 
       match response {
-        Ok(Ok(value)) => break value.to_vec(),
-        Ok(Err(error)) => {
-          last_error = Some(error);
-        }
-        Err(error) => {
-          attempts += 1;
-          last_error = Some(error);
-        }
-      };
-    };
+        Ok(Ok(value)) => value.to_vec(),
+        Ok(Err(error)) | Err(error) => {
+          tracing::error!(?error, "negotiate error");
 
-    self
-      .negotiate_responses
-      .insert(inbound.into(), response.clone());
+          let response = ironrdp_rdcleanpath::RDCleanPathPdu::new_tls_error(100)
+            .to_der()
+            .map_err(|error| anyhow::anyhow!("encode RDCleanPath response: {error:?}"))?;
+          self
+            .hub
+            .send(inbound, Message::Binary(response.into()))
+            .await?;
+
+          return Ok(());
+        }
+      }
+    };
 
     let response = ironrdp_rdcleanpath::RDCleanPath::Response {
       x224_connection_response: ironrdp_rdcleanpath::der::asn1::OctetString::new(
