@@ -33,8 +33,6 @@ struct DisplayUpdates {
 
 impl DisplayHandler {
   pub fn new() -> anyhow::Result<Self> {
-    // Prevent old frames from accumulating when encoding is slower than
-    // capture. A small bounded queue keeps latency low and memory bounded.
     let (sender, receiver) = channel(8);
     let (width, height) = Self::get_display_size();
 
@@ -83,7 +81,7 @@ impl DisplayHandler {
 
     let capture = ScreenCapture::with_callback_arc(
       ScreenCaptureConfig {
-        fps: Some(60),
+        fps: Some(120),
         backend: Some(CaptureBackend::Auto),
         pixel_format: Some(CapturePixelFormat::Bgra),
       },
