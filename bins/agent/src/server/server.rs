@@ -131,18 +131,15 @@ impl AgentServer {
     let mut server = server.build();
 
     handles.push(tokio::task::spawn_local(async move {
-      match display_handler.capture().await {
-        Ok(()) => println!("Display handler shut down"),
-        Err(error) => {
-          eprintln!("Display handler error: {error:?}");
-        }
+      if let Err(error) = display_handler.capture().await {
+        eprintln!("Display handler error: {error:?}");
       }
     }));
 
     handles.push(tokio::task::spawn_local(async move {
       let future = if config.tunnel {
         server
-          .run_connection(stream)
+          .run_connection_with(stream, TransportTls::AlreadyDone)
           .await
       } else {
         server.run_connection(stream).await
