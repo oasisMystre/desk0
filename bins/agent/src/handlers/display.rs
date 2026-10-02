@@ -81,7 +81,7 @@ impl DisplayHandler {
 
     let capture = ScreenCapture::with_callback_arc(
       ScreenCaptureConfig {
-        fps: Some(120),
+        fps: Some(60),
         backend: Some(CaptureBackend::Auto),
         pixel_format: Some(CapturePixelFormat::Bgra),
       },
