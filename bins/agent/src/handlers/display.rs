@@ -16,24 +16,26 @@ use rs_capture::{
   CaptureBackend, FrameMetadata, PixelFormat as CapturePixelFormat, ScreenCapture,
   ScreenCaptureConfig, backend::PointerShape,
 };
-use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
+use tokio::sync::mpsc::{Receiver, Sender, channel, error::TrySendError};
 use tokio_util::sync::CancellationToken;
 
 #[derive(Clone)]
 pub struct DisplayHandler {
   width: u16,
   height: u16,
-  sender: UnboundedSender<DisplayUpdate>,
-  receiver: Arc<tokio::sync::Mutex<Option<UnboundedReceiver<DisplayUpdate>>>>,
+  sender: Sender<DisplayUpdate>,
+  receiver: Arc<tokio::sync::Mutex<Option<Receiver<DisplayUpdate>>>>,
 }
 
 struct DisplayUpdates {
-  receiver: UnboundedReceiver<DisplayUpdate>,
+  receiver: Receiver<DisplayUpdate>,
 }
 
 impl DisplayHandler {
   pub fn new() -> anyhow::Result<Self> {
-    let (sender, receiver) = unbounded_channel();
+    // Prevent old frames from accumulating when encoding is slower than
+    // capture. A small bounded queue keeps latency low and memory bounded.
+    let (sender, receiver) = channel(8);
     let (width, height) = Self::get_display_size();
 
     Ok(Self {
@@ -105,16 +107,19 @@ impl DisplayHandler {
           Self::append_pointer_updates(&mut updates, &frame.metadata);
 
           for update in updates {
-            if let Err(error) = sender.send(update) {
-              tracing::debug!(
-                ?error,
-                "Display update receiver disconnected; stopping capture"
-              );
-
-              if let Err(error) = this.stop() {
-                tracing::error!(?error, "Failed to gracefully exit screen capture");
+            match sender.try_send(update) {
+              Ok(()) => {}
+              Err(TrySendError::Full(_)) => {
+                tracing::trace!("dropping display update because encoder is behind");
               }
-              break;
+              Err(TrySendError::Closed(_)) => {
+                tracing::debug!("Display update receiver disconnected; stopping capture");
+
+                if let Err(error) = this.stop() {
+                  tracing::error!(?error, "Failed to gracefully exit screen capture");
+                }
+                break;
+              }
             }
           }
         }
