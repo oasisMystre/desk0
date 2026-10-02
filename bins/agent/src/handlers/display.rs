@@ -17,6 +17,7 @@ use rs_capture::{
   ScreenCaptureConfig, backend::PointerShape,
 };
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
+use tokio_util::sync::CancellationToken;
 
 #[derive(Clone)]
 pub struct DisplayHandler {
@@ -74,7 +75,7 @@ impl RdpServerDisplayUpdates for DisplayUpdates {
 }
 
 impl DisplayHandler {
-  pub async fn capture(&self) -> anyhow::Result<()> {
+  pub async fn capture(&self, cancellation_token: CancellationToken) -> anyhow::Result<()> {
     let sender = self.sender.clone();
     let first_frame = Arc::new(std::sync::atomic::AtomicBool::new(true));
 
@@ -120,7 +121,14 @@ impl DisplayHandler {
       }),
     )?;
 
-    capture.start().await?;
+    tokio::select! {
+      result = capture.start() => result?,
+      _ = cancellation_token.cancelled() => {
+        if let Err(error) = capture.stop() {
+          tracing::warn!(?error, "failed to stop screen capture during session reset");
+        }
+      }
+    }
 
     Ok(())
   }
@@ -145,9 +153,6 @@ impl DisplayHandler {
   ) -> Vec<DisplayUpdate> {
     let stride = width * 4;
 
-    // rs-capture uses a full-screen fallback rectangle when DXGI reports a
-    // cursor-only update. Do not resend that stale capture buffer as desktop
-    // pixels; the cursor is sent separately below.
     let full_frame_fallback = metadata.dirty_rects.len() == 1
       && metadata.dirty_rects[0] == (0, 0, width as i32, height as i32);
     let pointer_only_frame = metadata.move_rects.is_empty()

@@ -22,6 +22,9 @@ use crate::{
   viewer::Desk0Viewer,
 };
 
+const PIXEL_WHEEL_SCALE: f64 = 1.0;
+const LINE_WHEEL_SCALE: f64 = 120.0;
+
 #[allow(dead_code)]
 pub enum ViewerEvent {
   Shutdown,
@@ -50,6 +53,7 @@ pub struct Desk0InnerApp {
 
   // window context
   buffer: Vec<u32>,
+  rdp_connected: bool,
   buffer_size: (usize, usize),
   resize_timeout: Option<Instant>,
   last_size: Option<PhysicalSize<u32>>,
@@ -91,12 +95,19 @@ impl Desk0InnerApp {
       buffer: vec![],
       resize_timeout: None,
       buffer_size: (0, 0),
+      rdp_connected: false,
       state: AppState::Initial,
       last_size: initial_size,
     })
   }
 
   fn send_resize_event(&mut self) {
+    if !self.rdp_connected {
+      self.last_size = None;
+      self.resize_timeout = None;
+      return;
+    }
+
     let Some(size) = self.last_size else {
       return;
     };
@@ -139,13 +150,18 @@ impl Desk0InnerApp {
     };
 
     match event {
+      RdpOutputEvent::Connected => {
+        self.rdp_connected = true;
+      }
       RdpOutputEvent::ConnectionFailure(error) => {
+        self.rdp_connected = false;
         tracing::error!(?error, "rdp connection error");
 
         self.viewer.shutdown();
         event_loop.exit();
       }
       RdpOutputEvent::Terminated(graceful_disconnect_reason) => {
+        self.rdp_connected = false;
         match graceful_disconnect_reason {
           Ok(reason) => {
             tracing::debug!(?reason, "rdp exited");
@@ -177,22 +193,10 @@ impl Desk0InnerApp {
         let region_width = region.width() as usize;
         let region_height = region.height() as usize;
 
-        let expected = region_width * region_height;
-
-        tracing::info!(
-          region_width,
-          region_height,
-          expected,
-          actual = src.len(),
-          "desktop update"
-        );
-
         for y in 0..region_height {
           let src_start = y * region_width;
           let src_end = src_start + region_width;
-
-          let dst_start = ((region_top + y) * width + region_left);
-
+          let dst_start = (region_top + y) * width + region_left;
           let dst_end = dst_start + region_width;
 
           self.buffer[dst_start..dst_end].copy_from_slice(&src[src_start..src_end]);
@@ -313,8 +317,10 @@ impl Desk0InnerApp {
           }
         }
 
-        self.last_size = Some(size);
-        self.resize_timeout = Some(Instant::now() + Duration::from_secs(1));
+        if self.rdp_connected {
+          self.last_size = Some(size);
+          self.resize_timeout = Some(Instant::now() + Duration::from_secs(1));
+        }
       }
       WindowEvent::CloseRequested => {
         self.viewer.shutdown();
@@ -550,9 +556,6 @@ impl ApplicationHandler<RdpOutputEvent> for Desk0App {
     self.inner.handle_output_event(event_loop, event);
   }
 }
-
-const LINE_WHEEL_SCALE: f64 = 40.0;
-const PIXEL_WHEEL_SCALE: f64 = 0.5;
 
 fn wheel_units(value: f64) -> i16 {
   value.round().clamp(-256.0, 255.0) as i16

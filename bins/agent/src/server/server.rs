@@ -143,8 +143,9 @@ impl AgentServer {
 
     let mut server = server.build();
 
+    let display_cancellation = cancellation_token.clone();
     tasks.spawn_local(async move {
-      if let Err(error) = display_handler.capture().await {
+      if let Err(error) = display_handler.capture(display_cancellation).await {
         tracing::error!(?error, "Display handler error");
       }
     });
@@ -152,9 +153,6 @@ impl AgentServer {
     tasks.spawn_local(async move {
       let future = if config.tunnel {
         server
-          // RDCleanPath has already completed the transport security upgrade
-          // from the viewer's perspective. The forwarded tunnel therefore
-          // contains the post-X.224 RDP stream, not a second TLS handshake.
           .run_connection_with(stream, TransportTls::AlreadyDone)
           .await
       } else {
