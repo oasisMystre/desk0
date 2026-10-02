@@ -7,7 +7,9 @@ use tokio::sync::mpsc::UnboundedSender;
 use ironrdp_client::rdp::{RdpInputEvent, RdpInputSender};
 
 pub mod clipboard_event;
+#[cfg(any(feature = "client", feature = "server"))]
 pub mod clipboard_file;
+#[cfg(any(feature = "client", feature = "server"))]
 pub mod download_state;
 
 #[cfg(feature = "server")]

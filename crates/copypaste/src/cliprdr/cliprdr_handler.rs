@@ -5,7 +5,7 @@ use std::{
   sync::{Arc, Mutex},
 };
 
-use clipboard_rs::ClipboardContext;
+use clipboard_rs::{Clipboard, common::RustImageData};
 use ironrdp::cliprdr::{
   backend::{ClipboardMessage, CliprdrBackend, CliprdrBackendFactory},
   pdu::{
@@ -28,6 +28,7 @@ use crate::cliprdr::{
   cliprdr_backend::{CF_HTML, CF_RTF, CliprdrHandlerBackend},
   types::{
     Event, Sender,
+    clipboard_event::ClipboardEvent,
     clipboard_file::ClipboardState,
     download_state::{DownloadEvent, DownloadState},
   },
@@ -40,6 +41,7 @@ pub struct CliprdrHandler {
   sender: Arc<Mutex<Sender>>,
   watcher: ClipboardWatcherHandler,
   download_state: Arc<Mutex<DownloadState>>,
+  callback: Option<Arc<Box<dyn Fn(ClipboardEvent) + Send + Sync>>>,
 }
 
 impl CliprdrBackendFactory for CliprdrHandler {
@@ -72,7 +74,6 @@ impl CliprdrServerFactory for CliprdrHandler {}
 impl ServerEventSender for CliprdrHandler {
   fn set_sender(&mut self, sender: UnboundedSender<Event>) {
     *self.sender.lock().unwrap() = Some(sender);
-    self.start_watcher();
   }
 }
 
@@ -85,7 +86,9 @@ impl CliprdrHandler {
 }
 
 impl CliprdrHandler {
-  pub fn new() -> Self {
+  pub fn new_inner(
+    callback: Option<Arc<Box<dyn Fn(ClipboardEvent) + Send + Sync + 'static>>>,
+  ) -> Self {
     let sender: Arc<Mutex<Sender>> = Arc::new(Mutex::new(None));
     let callback_sender = Arc::clone(&sender);
 
@@ -97,23 +100,35 @@ impl CliprdrHandler {
     Self {
       sender,
       watcher,
+      callback,
       download_state: Arc::new(Mutex::new(DownloadState::default())),
     }
   }
 
+  pub fn new() -> Self {
+    Self::new_inner(None)
+  }
+
+  pub fn with_callback<T>(callback: T) -> Self
+  where
+    T: Fn(ClipboardEvent) + Send + Sync + 'static,
+  {
+    Self::new_inner(Some(Arc::new(Box::new(callback))))
+  }
+
   #[cfg(feature = "server")]
-  pub fn send(&self, message: Event) -> Result<(), SendError<Event>> {
+  pub(crate) fn send(&self, message: Event) -> Result<(), SendError<Event>> {
     let sender = self.sender.lock().unwrap();
     send(&sender, message)
   }
 
   #[cfg(not(feature = "server"))]
-  pub fn send(&self, message: Event) -> Result<(), TrySendError<Event>> {
+  pub(crate) fn send(&self, message: Event) -> Result<(), TrySendError<Event>> {
     let sender = self.sender.lock().unwrap();
     send(&sender, message)
   }
 
-  pub fn send_format_list(&self) {
+  pub(crate) fn send_format_list(&self) {
     let state = {
       let state = self.watcher.state.lock().unwrap();
       state
@@ -139,7 +154,7 @@ impl CliprdrHandler {
     }
   }
 
-  pub fn send_html(&self) {
+  pub(crate) fn send_html(&self) {
     let html = {
       let state = self.watcher.state.lock().unwrap();
       state.html.clone()
@@ -154,7 +169,7 @@ impl CliprdrHandler {
     }
   }
 
-  pub fn send_rich_text(&self) {
+  pub(crate) fn send_rich_text(&self) {
     let rich_text = {
       let state = self.watcher.state.lock().unwrap();
       state.rich_text.clone()
@@ -169,7 +184,7 @@ impl CliprdrHandler {
     }
   }
 
-  pub fn send_file_list(&self) {
+  pub(crate) fn send_file_list(&self) {
     let files = {
       let state = self.watcher.state.lock().unwrap();
       match state.file_descriptors() {
@@ -190,7 +205,7 @@ impl CliprdrHandler {
     }
   }
 
-  pub fn send_image(&self) {
+  pub(crate) fn send_image(&self) {
     let image = {
       let state = self.watcher.state.lock().unwrap();
       state.image.clone()
@@ -205,7 +220,7 @@ impl CliprdrHandler {
     }
   }
 
-  pub fn send_files(&self, request: FileContentsRequest) {
+  pub(crate) fn send_files(&self, request: FileContentsRequest) {
     let path = {
       let state = self.watcher.state.lock().unwrap();
       let file_index = request.index;
@@ -258,7 +273,7 @@ impl CliprdrHandler {
     }
   }
 
-  pub fn set_status(&self, status: ClipboardStatus) {
+  pub(crate) fn set_status(&self, status: ClipboardStatus) {
     self.watcher.set_status(status);
   }
 
@@ -266,17 +281,17 @@ impl CliprdrHandler {
     self.watcher.get_status()
   }
 
-  pub fn add_lock(&self, lock: LockDataId) {
+  pub(crate) fn add_lock(&self, lock: LockDataId) {
     let mut state = self.watcher.state.lock().unwrap();
     state.active_locks.push(lock);
   }
 
-  pub fn remove_lock(&self, lock: LockDataId) {
+  pub(crate) fn remove_lock(&self, lock: LockDataId) {
     let mut state = self.watcher.state.lock().unwrap();
     state.active_locks.retain(|element| element != &lock);
   }
 
-  pub fn remove_locks(&self, locks: Option<&[LockDataId]>) {
+  pub(crate) fn remove_locks(&self, locks: Option<&[LockDataId]>) {
     let mut state = self.watcher.state.lock().unwrap();
     match locks {
       Some(locks) => state.active_locks.retain(|lock| !locks.contains(lock)),
@@ -284,34 +299,39 @@ impl CliprdrHandler {
     }
   }
 
-  pub fn clipboard(&self) -> Arc<ClipboardContext> {
-    Arc::clone(&self.watcher.clipboard)
-  }
-
-  pub fn start_watcher(&self) {
+  pub(crate) fn start_watcher(&self) {
     self.watcher.start()
   }
 
-  pub fn clear(&self) {
+  fn clear(&self) {
     self.watcher.clear()
   }
 
-  pub fn request_next_chunk(&self, stream_id: u32, data: &[u8]) -> std::io::Result<()> {
+  pub(crate) fn request_next_chunk(&self, stream_id: u32, data: &[u8]) -> std::io::Result<()> {
     let mut state = self.download_state.lock().unwrap();
-    state.download_chunk(stream_id, data)
+    let event = state.download_chunk(stream_id, data)?;
+    if let Some(callback) = &self.callback {
+      (callback)(event);
+    }
+
+    Ok(())
   }
 
-  pub fn abort_download_chunk(&self, stream_id: u32) -> bool {
+  pub(crate) fn abort_download_chunk(&self, stream_id: u32) -> bool {
     self.download_state.lock().unwrap().abort_current(stream_id)
   }
 
-  pub fn request_files(&self, tmp_dir: &str, fd: &[FileDescriptor]) {
+  pub(crate) fn request_files(&self, tmp_dir: &str, fd: &[FileDescriptor]) {
     let mut state = self.download_state.lock().unwrap();
 
-    state.request_file(tmp_dir, fd)
+    if let Some(event) = state.request_file(tmp_dir, fd) {
+      if let Some(callback) = &self.callback {
+        (callback)(event);
+      }
+    }
   }
 
-  pub fn reset_state_if_download_idle(&self) {
+  fn reset_state_if_download_idle(&self) {
     let is_idle = { self.download_state.lock().unwrap().is_idle() };
     if is_idle {
       tracing::debug!("active locks cleared");
@@ -320,12 +340,36 @@ impl CliprdrHandler {
     }
   }
 
-  pub fn clear_download(&self) {
+  pub(crate) fn clear_download(&self) {
     self.download_state.lock().unwrap().clear();
   }
 
-  pub fn next_download_event(&self) -> Option<DownloadEvent> {
-    self.download_state.lock().unwrap().next_event()
+  pub(crate) fn pump_download(&mut self) {
+    while let Some(event) = self.download_state.lock().unwrap().next_event() {
+      match event {
+        DownloadEvent::DownloadComplete(files) => {
+          self.set_status(ClipboardStatus::Paste);
+          if let Err(error) = self.watcher.clipboard.set_files(
+            files
+              .iter()
+              .map(|path| path.to_string_lossy().to_string())
+              .collect(),
+          ) {
+            tracing::error!(?error, "failed to publish downloaded files to clipboard");
+            self.set_status(ClipboardStatus::Ready);
+          }
+          self.clear();
+        }
+        DownloadEvent::SendFileContentsRequest(event) => {
+          if let Err(error) = self.send(event) {
+            tracing::error!(?error, "sending file contents request failed");
+          }
+          break;
+        }
+      }
+    }
+
+    self.reset_state_if_download_idle();
   }
 }
 
@@ -391,4 +435,47 @@ fn send_format_list(state: &ClipboardState, sender: &Sender) {
   ) {
     tracing::error!(?error, "Failed to send initiate copy event");
   }
+}
+
+#[macro_export]
+macro_rules! clipboard_setter {
+    (
+        $(#[$meta:meta])*
+        $name:ident($($arg:ident : $ty:ty),*) => $method:ident($($expr:expr),*) => $event:expr
+    ) => {
+        $(#[$meta])*
+        pub fn $name(&self, $($arg: $ty),*) -> clipboard_rs::Result<()> {
+            self.watcher.clipboard.$method($($expr),*)?;
+            if let Some(callback) = &self.callback {
+                callback($event);
+            }
+            Ok(())
+        }
+    };
+}
+
+impl CliprdrHandler {
+  clipboard_setter!(
+      set_text(data: String)
+      => set_text(data.to_string())
+      => ClipboardEvent::Text
+  );
+
+  clipboard_setter!(
+      set_html(data: String)
+      => set_html(data.to_string())
+      => ClipboardEvent::Html
+  );
+
+  clipboard_setter!(
+      set_rich_text(data: String)
+      => set_rich_text(data.to_string())
+      => ClipboardEvent::RichText
+  );
+
+  clipboard_setter!(
+      set_image(data: RustImageData)
+      => set_image(data)
+      => ClipboardEvent::Image
+  );
 }

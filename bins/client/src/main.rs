@@ -63,6 +63,7 @@ fn main() -> anyhow::Result<()> {
       },
     },
     output_event_sender,
+    |_| {}
   )?;
 
   let rt = tokio::runtime::Builder::new_multi_thread()

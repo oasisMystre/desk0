@@ -1,5 +1,6 @@
 pub mod cliprdr;
-pub mod types;
 
-pub use cliprdr::cliprdr_handler::CliprdrHandler;
+#[cfg(any(feature = "client", feature = "server"))]
 pub use cliprdr::clipboard_watcher::ClipboardStatus;
+#[cfg(any(feature = "client", feature = "server"))]
+pub use cliprdr::cliprdr_handler::CliprdrHandler;

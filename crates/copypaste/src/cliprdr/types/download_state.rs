@@ -10,7 +10,13 @@ use ironrdp::cliprdr::{
   pdu::{ClipboardFileAttributes, FileContentsFlags, FileContentsRequest, FileDescriptor},
 };
 
-use crate::cliprdr::{cliprdr_backend::MAX_CLIPBOARD_CHUNK, types::Event};
+use crate::cliprdr::{
+  cliprdr_backend::MAX_CLIPBOARD_CHUNK,
+  types::{
+    Event,
+    clipboard_event::{ClipboardEvent, FileDownloadStatus},
+  },
+};
 
 pub struct DownloadTask {
   pub index: u32,
@@ -97,7 +103,7 @@ impl DownloadState {
     }
   }
 
-  pub fn download_chunk(&mut self, stream_id: u32, data: &[u8]) -> std::io::Result<()> {
+  pub fn download_chunk(&mut self, stream_id: u32, data: &[u8]) -> std::io::Result<ClipboardEvent> {
     if !self.inflight {
       return Err(std::io::Error::other(
         "received file chunk without an inflight request",
@@ -129,7 +135,11 @@ impl DownloadState {
     task.received += take as u64;
 
     self.inflight = false;
-    Ok(())
+    Ok(ClipboardEvent::File(FileDownloadStatus::Progress {
+      id: task.index,
+      total_size: task.size,
+      received: task.received,
+    }))
   }
 
   pub fn abort_current(&mut self, stream_id: u32) -> bool {
@@ -147,7 +157,11 @@ impl DownloadState {
     false
   }
 
-  pub fn request_file(&mut self, temp_dir: &str, files: &[FileDescriptor]) {
+  pub fn request_file(
+    &mut self,
+    temp_dir: &str,
+    files: &[FileDescriptor],
+  ) -> Option<ClipboardEvent> {
     self.clear();
 
     let timestamp = SystemTime::now()
@@ -158,7 +172,7 @@ impl DownloadState {
 
     if let Err(error) = std::fs::create_dir_all(&base_dir) {
       tracing::error!(?error, "Failed to create clipboard temp dir");
-      return;
+      return None;
     }
 
     for (index, fd) in files.iter().enumerate().rev() {
@@ -197,14 +211,23 @@ impl DownloadState {
         }
       }
 
+      let size = fd.file_size.unwrap_or(0);
+
       self.queue.push(DownloadTask {
         path,
+        size,
         file: None,
         received: 0,
         index: index as u32,
-        size: fd.file_size.unwrap_or(0),
       });
+
+      return Some(ClipboardEvent::File(FileDownloadStatus::Download {
+        id: index as u32,
+        total_size: size,
+      }));
     }
+
+    None
   }
 
   pub fn is_idle(&self) -> bool {

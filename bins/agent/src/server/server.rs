@@ -152,7 +152,11 @@ impl AgentServer {
     tasks.spawn_local(async move {
       let future = if config.tunnel {
         server
-          .run_connection_with(stream, TransportTls::AlreadyDone)
+          // The tunnel carries the raw RDP byte stream. RDCleanPath has
+          // already authenticated the viewer, but it does not terminate the
+          // RDP TLS upgrade for the embedded IronRDP server. Keep TLS managed
+          // here so the server emits the TLS handshake expected by the viewer.
+          .run_connection_with(stream, TransportTls::Managed)
           .await
       } else {
         server.run_connection(stream).await

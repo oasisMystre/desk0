@@ -4,7 +4,7 @@ use std::{
 };
 
 use anyhow::Context;
-use copypaste::CliprdrHandler;
+use copypaste::{CliprdrHandler, cliprdr::types::clipboard_event::ClipboardEvent};
 use display_info::DisplayInfo;
 use ironrdp::{
   client::{
@@ -52,12 +52,14 @@ impl Desk0Viewer {
   pub const THREAD_NAME: &str = "desk0-rdp-viewer";
 
   #[allow(dead_code)]
-  pub fn with_callback<'a, T>(
+  pub fn with_callback<'a, T, U>(
     config: Desk0ViewerConfig<'a>,
-    callback: T,
+    rdp_output_event_callback: T,
+    clipboard_event_callback: U,
   ) -> anyhow::Result<Self, Desk0ViewerError>
   where
     T: Fn(RdpOutputEvent) + 'static + Sync + Send,
+    U: Fn(ClipboardEvent) + 'static + Sync + Send,
   {
     let rt = tokio::runtime::Builder::new_multi_thread()
       .enable_all()
@@ -65,23 +67,31 @@ impl Desk0Viewer {
       .context("unable to create tokio runtime")?;
 
     let (output_event_sender, output_event_receiver) = output_channel(32);
-    let mut this = Self::build(config, output_event_sender)?;
-    this.run(rt, Some((callback, output_event_receiver)))?;
+    let mut this = Self::build(config, output_event_sender, clipboard_event_callback)?;
+    this.run(rt, Some((rdp_output_event_callback, output_event_receiver)))?;
 
     Ok(this)
   }
 
-  pub fn with_channel<'a>(
+  pub fn with_channel<'a, U>(
     config: Desk0ViewerConfig<'a>,
     output_event_sender: OutputEventSender,
-  ) -> anyhow::Result<Self, Desk0ViewerError> {
-    Self::build(config, output_event_sender)
+    clipboard_event_callback: U,
+  ) -> anyhow::Result<Self, Desk0ViewerError>
+  where
+    U: Fn(ClipboardEvent) + 'static + Sync + Send,
+  {
+    Self::build(config, output_event_sender, clipboard_event_callback)
   }
 
-  fn build<'a>(
+  fn build<'a, U>(
     config: Desk0ViewerConfig<'a>,
     output_event_sender: OutputEventSender,
-  ) -> anyhow::Result<Self, Desk0ViewerError> {
+    clipboard_event_callback: U,
+  ) -> anyhow::Result<Self, Desk0ViewerError>
+  where
+    U: Fn(ClipboardEvent) + 'static + Sync + Send,
+  {
     let mut endpoint =
       url::Url::parse(config.endpoint).map_err(Desk0ViewerError::InvalidEndpoint)?;
     if endpoint.scheme() == "http" {
@@ -90,8 +100,9 @@ impl Desk0Viewer {
       endpoint.set_scheme("wss").ok();
     }
 
-    let clipboard_handler = Arc::new(Mutex::new(CliprdrHandler::new()));
+    let clipboard_handler = CliprdrHandler::with_callback(clipboard_event_callback);
 
+    let clipboard_handler = Arc::new(Mutex::new(clipboard_handler));
     let displays = DisplayInfo::all().map_err(Desk0ViewerError::Display)?;
 
     let to_u16 =
@@ -121,25 +132,24 @@ impl Desk0Viewer {
           .to_string_lossy()
           .to_string(),
       )
-      // .with_autologon(true)
+      .with_autologon(true)
       .with_desktop_width(width)
       .with_desktop_height(height)
       .with_clipboard(ClipboardType::Enable)
       .with_pointer_software_rendering(false)
       .with_client_name(Self::client_name())
       .with_client_build(Self::client_build())
-      .with_client_dir("C:\\Windows\\System32\\mstscax.dll");
-    // .with_static_channel({
-    //   let clipboard_handler = clipboard_handler.clone();
-    //   move |_| {
-    //     let backend = {
-    //       let handler = clipboard_handler.lock().unwrap();
-    //       handler.build_cliprdr_backend()
-    //     };
-    //     tracing::info!("Registering client cliprdr static channel");
-    //     Some(Cliprdr::new(backend))
-    //   }
-    // });
+      .with_client_dir("C:\\Windows\\System32\\mstscax.dll")
+      .with_static_channel({
+        let clipboard_handler = clipboard_handler.clone();
+        move |_| {
+          let backend = {
+            let handler = clipboard_handler.lock().unwrap();
+            handler.build_cliprdr_backend()
+          };
+          Some(Cliprdr::new(backend))
+        }
+      });
 
     if let Some(desktop_size) = config.desktop_size {
       config_builder = config_builder
@@ -151,7 +161,9 @@ impl Desk0Viewer {
       .build()
       .map_err(Desk0ViewerError::Configuration)?;
 
-    let client = RdpClient::new(config, output_event_sender);
+    let client = RdpClient::new(config, output_event_sender)
+      .with_desktop_updates()
+      .with_auto_reconnect(5);
     let input = client.input_sender();
 
     let mut clipboard_handler = clipboard_handler.lock().unwrap();

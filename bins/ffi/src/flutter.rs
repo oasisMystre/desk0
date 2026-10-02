@@ -1,6 +1,7 @@
 use desk0_client::viewer::{Desk0Viewer, Desk0ViewerConfig};
 use flutter_rust_bridge::frb;
 use ironrdp::input::Operation;
+use std::sync::Mutex;
 
 use crate::{
   frb_generated::StreamSink,
@@ -12,7 +13,7 @@ pub struct ViewerHandle {
   token: String,
   endpoint: String,
   size: Option<SseDesktopSize>,
-  inner: Option<Desk0Viewer>,
+  inner: Mutex<Option<Desk0Viewer>>,
 }
 
 impl ViewerHandle {
@@ -22,11 +23,12 @@ impl ViewerHandle {
       size,
       token,
       endpoint,
-      inner: None,
+      inner: Mutex::new(None),
     }
   }
 
   pub fn connect(&mut self, events: StreamSink<SseOutputEvent>) -> anyhow::Result<()> {
+    let clipboard_events = events.clone();
     let viewer = Desk0Viewer::with_callback(
       Desk0ViewerConfig {
         token: &self.token,
@@ -39,16 +41,25 @@ impl ViewerHandle {
       move |event| {
         let _ = events.add(SseOutputEvent::from(event));
       },
+      move |event| {
+        let _ = clipboard_events.add(SseOutputEvent::Clipboard(event.into()));
+      },
     )
     .map_err(|error| anyhow::anyhow!(error.to_string()))?;
 
-    self.inner = Some(viewer);
+    *self
+      .inner
+      .lock()
+      .map_err(|_| anyhow::anyhow!("viewer lock poisoned"))? = Some(viewer);
     Ok(())
   }
 
   pub fn send_input_events(&mut self, events: Vec<InputEvent>) -> anyhow::Result<()> {
-    let viewer = self
+    let mut inner = self
       .inner
+      .lock()
+      .map_err(|_| anyhow::anyhow!("viewer lock poisoned"))?;
+    let viewer = inner
       .as_mut()
       .ok_or_else(|| anyhow::anyhow!("viewer is not connected"))?;
     let operations: Vec<Operation> = events.into_iter().map(Into::into).collect();
@@ -57,8 +68,10 @@ impl ViewerHandle {
   }
 
   pub fn stop(&mut self) {
-    if let Some(mut inner) = self.inner.take() {
-      inner.shutdown();
+    if let Ok(mut inner) = self.inner.lock() {
+      if let Some(mut inner) = inner.take() {
+        inner.shutdown();
+      }
     }
   }
 }

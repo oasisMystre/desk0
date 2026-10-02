@@ -2283,6 +2283,7 @@ name = "desk0-ffi"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "copypaste",
  "desk0-client",
  "flutter_rust_bridge",
  "ironrdp",

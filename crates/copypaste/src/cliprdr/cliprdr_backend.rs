@@ -1,6 +1,6 @@
 use std::fmt::Debug;
 
-use clipboard_rs::{Clipboard, RustImageData, common::RustImage};
+use clipboard_rs::{RustImageData, common::RustImage};
 use image::ImageFormat;
 use ironrdp::{
   cliprdr::{
@@ -19,9 +19,7 @@ use ironrdp_cliprdr_format::{
 };
 
 use crate::cliprdr::{
-  clipboard_watcher::ClipboardStatus,
-  cliprdr_handler::CliprdrHandler,
-  types::{Event, download_state::DownloadEvent},
+  clipboard_watcher::ClipboardStatus, cliprdr_handler::CliprdrHandler, types::Event,
 };
 
 pub const CF_RTF: u32 = 0xC001;
@@ -163,10 +161,9 @@ impl CliprdrBackend for CliprdrHandlerBackend {
   fn on_format_data_response(&mut self, response: FormatDataResponse<'_>) {
     self.handler.set_status(ClipboardStatus::Paste);
 
-    let clipboard = self.handler.clipboard();
     if let Ok(text) = response.to_string() {
       if !text.is_empty() {
-        if let Err(error) = clipboard.set_text(text) {
+        if let Err(error) = self.handler.set_text(text) {
           tracing::error!(?error, "Failed to paste unicode string");
         }
 
@@ -180,7 +177,7 @@ impl CliprdrBackend for CliprdrHandlerBackend {
     }
 
     if let Ok(data) = cf_html_to_plain_html(data) {
-      if let Err(error) = clipboard.set_html(data.to_string()) {
+      if let Err(error) = self.handler.set_html(data.to_string()) {
         tracing::error!(?error, "Failed to paste HTML");
       }
 
@@ -189,7 +186,7 @@ impl CliprdrBackend for CliprdrHandlerBackend {
 
     if let Ok(data) = std::str::from_utf8(data) {
       if data.starts_with("{\\rtf1") {
-        if let Err(error) = clipboard.set_rich_text(data.to_string()) {
+        if let Err(error) = self.handler.set_rich_text(data.to_string()) {
           tracing::error!(?error, "Failed to paste rich text");
         }
 
@@ -200,7 +197,7 @@ impl CliprdrBackend for CliprdrHandlerBackend {
     if let Ok(data) = dibv5_to_png(data) {
       if let Ok(image) = image::load_from_memory_with_format(&data, ImageFormat::Png) {
         let rust_image = RustImageData::from_dynamic_image(image);
-        if let Err(error) = clipboard.set_image(rust_image) {
+        if let Err(error) = self.handler.set_image(rust_image) {
           tracing::error!(?error, "Failed to paste image");
         }
       }
@@ -210,7 +207,7 @@ impl CliprdrBackend for CliprdrHandlerBackend {
     if let Ok(data) = dib_to_png(data) {
       if let Ok(image) = image::load_from_memory_with_format(&data, ImageFormat::Png) {
         let rust_image = RustImageData::from_dynamic_image(image);
-        if let Err(error) = clipboard.set_image(rust_image) {
+        if let Err(error) = self.handler.set_image(rust_image) {
           tracing::error!(?error, "Failed to paste image");
         }
       }
@@ -229,7 +226,7 @@ impl CliprdrBackend for CliprdrHandlerBackend {
         "remote file contents request failed"
       );
       self.handler.abort_download_chunk(response.stream_id());
-      self.pump_download();
+      self.handler.pump_download();
       return;
     }
 
@@ -242,12 +239,12 @@ impl CliprdrBackend for CliprdrHandlerBackend {
       return;
     }
 
-    self.pump_download();
+    self.handler.pump_download();
   }
 
   fn on_remote_file_list(&mut self, files: &[FileDescriptor], _: Option<u32>) {
     self.handler.request_files(&self.temp_dir, files);
-    self.pump_download();
+    self.handler.pump_download();
   }
 
   fn on_lock(&mut self, data_id: LockDataId) {
@@ -260,37 +257,9 @@ impl CliprdrBackend for CliprdrHandlerBackend {
 
   fn on_outgoing_locks_cleared(&mut self, data_ids: &[LockDataId]) {
     self.handler.remove_locks(Some(data_ids));
-    self.handler.clear_download();
   }
-}
 
-impl CliprdrHandlerBackend {
-  fn pump_download(&mut self) {
-    while let Some(event) = self.handler.next_download_event() {
-      match event {
-        DownloadEvent::DownloadComplete(files) => {
-          self.handler.set_status(ClipboardStatus::Paste);
-          let clipboard = self.handler.clipboard();
-          if let Err(error) = clipboard.set_files(
-            files
-              .iter()
-              .map(|path| path.to_string_lossy().to_string())
-              .collect(),
-          ) {
-            tracing::error!(?error, "failed to publish downloaded files to clipboard");
-            self.handler.set_status(ClipboardStatus::Ready);
-          }
-          self.handler.clear();
-        }
-        DownloadEvent::SendFileContentsRequest(event) => {
-          if let Err(error) = self.handler.send(event) {
-            tracing::error!(?error, "sending file contents request failed");
-          }
-          break;
-        }
-      }
-    }
-
-    self.handler.reset_state_if_download_idle();
+  fn on_outgoing_locks_expired(&mut self, clip_data_ids: &[LockDataId]) {
+    self.handler.remove_locks(Some(clip_data_ids));
   }
 }

@@ -1,5 +1,9 @@
+use copypaste::cliprdr::types::clipboard_event::{ClipboardEvent, FileDownloadStatus};
 use flutter_rust_bridge::frb;
-use ironrdp::{client::rdp::RdpOutputEvent, session::GracefulDisconnectReason};
+use ironrdp::{
+  client::rdp::{AutoReconnectDecision, RdpOutputEvent},
+  session::GracefulDisconnectReason,
+};
 use std::ffi::c_char;
 
 #[repr(C)]
@@ -112,7 +116,38 @@ pub enum SseDisconnectReason {
 
 #[repr(C)]
 #[derive(Clone)]
+pub enum SseFileDownloadStatus {
+  Download {
+    id: u32,
+    total_size: u64,
+  },
+  Progress {
+    id: u32,
+    total_size: u64,
+    received: u64,
+  },
+  Completed {
+    id: u32,
+  },
+}
+
+#[repr(C)]
+#[derive(Clone)]
+pub enum SseClipboardEvent {
+  Text,
+  Image,
+  Html,
+  RichText,
+  File(SseClipboardEvent),
+}
+
+#[repr(C)]
+#[derive(Clone)]
 pub enum SseOutputEvent {
+  Connected,
+  LoginComplete,
+  MonitorLayout(Vec<SseMonitor>),
+  Clipboard(SseClipboardEvent),
   TerminatedError(String),
   TerminatedSuccess(SseDisconnectReason),
   ConnectionFailure(String),
@@ -120,6 +155,15 @@ pub enum SseOutputEvent {
     width: u16,
     height: u16,
     buffer: Vec<u32>,
+  },
+  DesktopUpdate {
+    width: u16,
+    height: u16,
+    buffer: Vec<u32>,
+    region_left: u16,
+    region_top: u16,
+    region_right: u16,
+    region_bottom: u16,
   },
   PointerHidden,
   PointerDefault,
@@ -134,6 +178,14 @@ pub enum SseOutputEvent {
     hotspot_x: u16,
     hotspot_y: u16,
   },
+  WindowingOrders(Vec<u8>),
+  Ignored,
+  AutoReconnecting {
+    disconnect_reason: u32,
+    attempt: u32,
+    maximum_attempts: u32,
+  },
+  AutoReconnected,
 }
 
 #[repr(C)]
@@ -141,6 +193,47 @@ pub enum SseOutputEvent {
 pub struct SseDesktopSize {
   pub width: u16,
   pub height: u16,
+}
+
+#[derive(Clone)]
+pub struct SseMonitor {
+  pub left: i32,
+  pub top: i32,
+  pub right: i32,
+  pub bottom: i32,
+  pub flags: u32,
+}
+
+impl From<FileDownloadStatus> for SseFileDownloadStatus {
+  fn from(value: FileDownloadStatus) -> Self {
+    match value {
+      FileDownloadStatus::Download { id, total_size } => {
+        SseFileDownloadStatus::Download { id, total_size }
+      }
+      FileDownloadStatus::Progress {
+        id,
+        total_size,
+        received,
+      } => SseFileDownloadStatus::Progress {
+        id,
+        total_size,
+        received,
+      },
+      FileDownloadStatus::Completed { id } => SseFileDownloadStatus::Completed { id },
+    }
+  }
+}
+
+impl From<ClipboardEvent> for SseClipboardEvent {
+  fn from(value: ClipboardEvent) -> Self {
+    match value {
+      ClipboardEvent::Text => SseClipboardEvent::Text,
+      ClipboardEvent::Image => SseClipboardEvent::Image,
+      ClipboardEvent::Html => SseClipboardEvent::Html,
+      ClipboardEvent::RichText => SseClipboardEvent::RichText,
+      ClipboardEvent::File(status) => status.into(),
+    }
+  }
 }
 
 impl From<GracefulDisconnectReason> for SseDisconnectReason {
@@ -156,7 +249,24 @@ impl From<GracefulDisconnectReason> for SseDisconnectReason {
 impl From<RdpOutputEvent> for SseOutputEvent {
   fn from(value: RdpOutputEvent) -> Self {
     match value {
-      ironrdp::client::rdp::RdpOutputEvent::Image {
+      RdpOutputEvent::Connected => Self::Connected,
+      RdpOutputEvent::PointerHidden => Self::PointerHidden,
+      RdpOutputEvent::PointerDefault => Self::PointerDefault,
+      RdpOutputEvent::AutoReconnected => Self::AutoReconnected,
+      RdpOutputEvent::MonitorLayout(monitors) => Self::MonitorLayout(
+        monitors
+          .into_iter()
+          .map(|monitor| SseMonitor {
+            left: monitor.left,
+            top: monitor.top,
+            right: monitor.right,
+            bottom: monitor.bottom,
+            flags: monitor.flags.bits(),
+          })
+          .collect(),
+      ),
+      RdpOutputEvent::LoginComplete => Self::LoginComplete,
+      RdpOutputEvent::Image {
         buffer,
         width,
         height,
@@ -165,65 +275,55 @@ impl From<RdpOutputEvent> for SseOutputEvent {
         width: width.get(),
         height: height.get(),
       },
-      ironrdp::client::rdp::RdpOutputEvent::ConnectionFailure(error) => {
-        SseOutputEvent::ConnectionFailure(error.to_string())
+      RdpOutputEvent::DesktopUpdate(update) => {
+        let (buffer, width, height, region) = update.into_parts();
+        Self::DesktopUpdate {
+          buffer,
+          width: width.get(),
+          height: height.get(),
+          region_left: region.left,
+          region_top: region.top,
+          region_right: region.right,
+          region_bottom: region.bottom,
+        }
       }
-      ironrdp::client::rdp::RdpOutputEvent::PointerHidden => Self::PointerHidden,
-      ironrdp::client::rdp::RdpOutputEvent::PointerDefault => Self::PointerDefault,
-      ironrdp::client::rdp::RdpOutputEvent::PointerPosition { x, y } => {
-        Self::PointerPosition { x, y }
-      }
-      ironrdp::client::rdp::RdpOutputEvent::PointerBitmap(pointer) => Self::PointerBitmap {
+      RdpOutputEvent::PointerPosition { x, y } => Self::PointerPosition { x, y },
+      RdpOutputEvent::PointerBitmap(pointer) => Self::PointerBitmap {
         width: pointer.width,
         height: pointer.height,
         hotspot_x: pointer.hotspot_x,
         hotspot_y: pointer.hotspot_y,
         bitmap_data: pointer.bitmap_data.clone(),
       },
-      ironrdp::client::rdp::RdpOutputEvent::Terminated(reason) => match reason {
-        Ok(reason) => Self::TerminatedSuccess(reason.into()),
-        Err(error) => Self::TerminatedError(error.to_string()),
-      },
-      RdpOutputEvent::Connected => todo!(),
-      RdpOutputEvent::MonitorLayout(monitors) => todo!(),
-      RdpOutputEvent::LoginComplete => todo!(),
-      RdpOutputEvent::DesktopUpdate(desktop_update) => todo!(),
-      RdpOutputEvent::ConnectionFailure(error) => todo!(),
-      RdpOutputEvent::WindowingOrders(items) => todo!(),
-      RdpOutputEvent::RailHandshake {
-        handshake_ex_flags,
-        initialization_message_count,
-        queued_execute_count,
-      } => todo!(),
-      RdpOutputEvent::RailDesktopSynchronized {
-        released_execute_count,
-      } => todo!(),
-      RdpOutputEvent::RailPostHandshakeQueueReleased {
-        released_execute_count,
-      } => todo!(),
-      RdpOutputEvent::RailExecuteResult(execute_result_pdu) => todo!(),
-      RdpOutputEvent::RailExecuteFailed {
-        executable,
-        flags,
-        reason,
-      } => todo!(),
-      RdpOutputEvent::RailApplicationId {
-        window_id,
-        application_id,
-        process_id,
-        process_image_name,
-      } => todo!(),
-      RdpOutputEvent::RailControl(rail_control_event) => todo!(),
-      RdpOutputEvent::PostLogonDisplayRedraw => todo!(),
-      RdpOutputEvent::MalformedBitmapDisplayRedraw => todo!(),
-      RdpOutputEvent::DisplayResizeFallback(display_resize_fallback_reason) => todo!(),
+      RdpOutputEvent::WindowingOrders(items) => Self::WindowingOrders(items),
       RdpOutputEvent::AutoReconnecting {
         disconnect_reason,
         attempt,
         maximum_attempts,
         response,
-      } => todo!(),
-      RdpOutputEvent::AutoReconnected => todo!(),
+      } => {
+        let _ = response.send(AutoReconnectDecision::Continue);
+        Self::AutoReconnecting {
+          attempt,
+          maximum_attempts,
+          disconnect_reason,
+        }
+      }
+      RdpOutputEvent::ConnectionFailure(error) => Self::ConnectionFailure(error.to_string()),
+      RdpOutputEvent::Terminated(reason) => match reason {
+        Ok(reason) => Self::TerminatedSuccess(reason.into()),
+        Err(error) => Self::TerminatedError(error.to_string()),
+      },
+      RdpOutputEvent::RailHandshake { .. }
+      | RdpOutputEvent::RailDesktopSynchronized { .. }
+      | RdpOutputEvent::RailPostHandshakeQueueReleased { .. }
+      | RdpOutputEvent::RailExecuteResult(_)
+      | RdpOutputEvent::RailExecuteFailed { .. }
+      | RdpOutputEvent::RailApplicationId { .. }
+      | RdpOutputEvent::RailControl(_)
+      | RdpOutputEvent::PostLogonDisplayRedraw
+      | RdpOutputEvent::MalformedBitmapDisplayRedraw
+      | RdpOutputEvent::DisplayResizeFallback(_) => Self::Ignored,
     }
   }
 }

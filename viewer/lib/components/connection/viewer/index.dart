@@ -34,7 +34,16 @@ import '../../../ffi/types.dart'
         SseOutputEvent_PointerHidden,
         SseOutputEvent_PointerPosition,
         SseOutputEvent_TerminatedError,
-        SseOutputEvent_TerminatedSuccess;
+        SseOutputEvent_TerminatedSuccess,
+        SseOutputEvent_Connected,
+        SseOutputEvent_LoginComplete,
+        SseOutputEvent_MonitorLayout,
+        SseOutputEvent_Clipboard,
+        SseOutputEvent_DesktopUpdate,
+        SseOutputEvent_WindowingOrders,
+        SseOutputEvent_Ignored,
+        SseOutputEvent_AutoReconnecting,
+        SseOutputEvent_AutoReconnected;
 
 class DeviceViewer extends StatefulWidget {
   final String token;
@@ -156,6 +165,24 @@ class DeviceViewerState extends State<DeviceViewer> {
       case SseOutputEvent_ConnectionFailure():
         break;
       case SseOutputEvent_PointerPosition():
+        break;
+      case SseOutputEvent_Connected():
+        break;
+      case SseOutputEvent_LoginComplete():
+        break;
+      case SseOutputEvent_MonitorLayout():
+        break;
+      case SseOutputEvent_Clipboard():
+        break;
+      case SseOutputEvent_DesktopUpdate(:final width, :final height, :final buffer, :final ):
+        break;
+      case SseOutputEvent_WindowingOrders():
+        break;
+      case SseOutputEvent_AutoReconnecting():
+        break;
+      case SseOutputEvent_AutoReconnected():
+        break;
+      case SseOutputEvent_Ignored():
         break;
     }
   }

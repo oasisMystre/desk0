@@ -101,7 +101,7 @@ impl RdpServerInputHandler for InputHandler {
         self.mouse_button(button, pressed);
       }
       MouseEvent::VerticalScroll { value } => {
-        if let Err(error) = self.enigo.scroll(value as i32, Axis::Vertical) {
+        if let Err(error) = self.enigo.scroll(Self::scroll_notches(value), Axis::Vertical) {
           tracing::error!(?error, "failed to scroll vertical");
         }
       }
