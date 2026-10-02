@@ -146,7 +146,11 @@ impl RdpHandler {
       tracing::warn!(?error, "removing RDP presence failed");
     }
 
-    if let Err(error) = self.hub.send(&upstream, Message::Close(None)).await {
+    if let Err(error) = self
+      .hub
+      .send(&upstream, Message::Ping(RESET_RDP_SESSION.into()))
+      .await
+    {
       tracing::warn!(?error, "resetting agent RDP session failed");
     }
 

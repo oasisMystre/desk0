@@ -79,8 +79,6 @@ impl AgentHandler {
       }
     });
 
-    let mut reset = false;
-
     loop {
       tokio::select! {
           result = socket.next() => {
@@ -106,19 +104,38 @@ impl AgentHandler {
                   Some(Ok(_)) => {}
               }
           }
-          result = inbound_receiver.recv() => {
+              result = inbound_receiver.recv() => {
               match result {
                   Some(message) => {
-                    if !connected.swap(true, Ordering::AcqRel) {
-                      if let Err(error) = self.hub.register(upstream, HubConnectionState::Connected).await {
-                        tracing::warn!(?error, "failed to mark agent connected");
+                    if let Message::Ping(bytes) = &message {
+                      if bytes == RESET_RDP_SESSION {
+                          connected.store(false, Ordering::Release);
+                          if let Err(error) = self
+                            .hub
+                            .register(upstream, HubConnectionState::Connecting)
+                            .await
+                          {
+                            tracing::warn!(?error, "failed to mark agent reconnecting");
+                          }
+
+                          if socket
+                            .send(Message::Ping(RESET_RDP_SESSION.into()))
+                            .await
+                            .is_err()
+                          {
+                            break;
+                          }
+
+                          // Keep this WebSocket alive. AgentTunnel will tear
+                          // down only the embedded RDP stream and wait for the
+                          // next viewer session on the same tunnel.
+                          continue;
                       }
                     }
 
-                    if let Message::Ping(bytes) = &message {
-                      if bytes == RESET_RDP_SESSION {
-                          reset = true;
-                          break;
+                    if !connected.swap(true, Ordering::AcqRel) {
+                      if let Err(error) = self.hub.register(upstream, HubConnectionState::Connected).await {
+                        tracing::warn!(?error, "failed to mark agent connected");
                       }
                     }
 
@@ -140,14 +157,6 @@ impl AgentHandler {
     self.hub.unsubscribe(inbound).await;
     if let Err(error) = self.hub.unregister(upstream).await {
       tracing::warn!(?error, "removing agent presence failed");
-    }
-
-    // send reset connection only when server set has been reset
-    if reset {
-      socket
-        .send(Message::Ping(RESET_RDP_SESSION.into()))
-        .await
-        .ok();
     }
 
     tracing::info!("agent disconnected");

@@ -105,9 +105,9 @@ impl DisplayHandler {
 
           for update in updates {
             if let Err(error) = sender.send(update) {
-              tracing::warn!(
+              tracing::debug!(
                 ?error,
-                "Display update receiver disconnected. Stopping capture."
+                "Display update receiver disconnected; stopping capture"
               );
 
               if let Err(error) = this.stop() {

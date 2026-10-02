@@ -72,7 +72,11 @@ impl Server for AgentServer {
               tokio::task::spawn_local(async move {
                 tracing::info!(%peer_addr, "RDP connection accepted");
                 if let Err(error) = Self::handle(config, stream, cancellation_token).await {
-                  tracing::error!(?error, ?peer_addr, "Connection handler error");
+                  if Self::is_expected_disconnect(&error) {
+                    tracing::debug!(?error, ?peer_addr, "RDP connection closed");
+                  } else {
+                    tracing::error!(?error, ?peer_addr, "Connection handler error");
+                  }
                 }
                 tracing::info!(%peer_addr, "RDP connection handler stopped");
               });
@@ -89,6 +93,23 @@ impl Server for AgentServer {
 }
 
 impl AgentServer {
+  fn is_expected_disconnect(error: &anyhow::Error) -> bool {
+    error.chain().any(|cause| {
+      cause
+        .downcast_ref::<std::io::Error>()
+        .map(|io_error| {
+          matches!(
+            io_error.kind(),
+            std::io::ErrorKind::UnexpectedEof
+              | std::io::ErrorKind::ConnectionReset
+              | std::io::ErrorKind::BrokenPipe
+              | std::io::ErrorKind::NotConnected
+          )
+        })
+        .unwrap_or(false)
+    })
+  }
+
   fn tls_acceptor() -> anyhow::Result<TlsAcceptor> {
     let identity = rcgen::generate_simple_self_signed(vec!["desk0-agent".to_owned()])?;
     let certificate = CertificateDer::from(identity.cert.der().to_vec());
