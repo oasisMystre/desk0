@@ -6,6 +6,7 @@ use ironrdp::server::{RdpServer, TransportTls};
 use tokio::{
   io::{AsyncRead, AsyncWrite},
   net::TcpListener,
+  task::JoinSet,
 };
 use tokio_rustls::{
   TlsAcceptor,
@@ -143,7 +144,7 @@ impl AgentServer {
     let display_handler = DisplayHandler::new()?;
     let input_handler = InputHandler::new(&Settings::default())?;
 
-    let mut handles = vec![];
+    let mut tasks = JoinSet::new();
 
     let addr = config
       .addr
@@ -159,13 +160,13 @@ impl AgentServer {
 
     let mut server = server.build();
 
-    handles.push(tokio::task::spawn_local(async move {
+    tasks.spawn_local(async move {
       if let Err(error) = display_handler.capture().await {
         tracing::error!(?error, "Display handler error");
       }
-    }));
+    });
 
-    handles.push(tokio::task::spawn_local(async move {
+    tasks.spawn_local(async move {
       let future = if config.tunnel {
         server
           .run_connection_with(stream, TransportTls::AlreadyDone)
@@ -181,18 +182,17 @@ impl AgentServer {
           tracing::error!(?error, "Connection dropped");
         }
       }
-    }));
+    });
 
     tokio::select! {
       _ = cancellation_token.cancelled() => {
-        for handle in &handles {
-          handle.abort();
-        }
-        for handle in handles {
-          let _ = handle.await;
+        tasks.abort_all();
+        while tasks.join_next().await.is_some() {
         }
       }
-      _ = futures::future::join_all(&mut handles) => {}
+      _ = async {
+        while tasks.join_next().await.is_some() {}
+      } => {}
     }
 
     Ok(())
