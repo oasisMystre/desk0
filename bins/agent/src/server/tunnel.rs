@@ -107,11 +107,6 @@ impl AgentTunnel {
 
       rdp_cancellation.cancel();
       if reset {
-        // Do not start the replacement RDP session until the previous server
-        // has fully released its duplex stream, display receiver, and RDP
-        // tasks. Starting both sessions concurrently can make the new
-        // negotiation observe the old stream closing and produce a truncated
-        // X.224 response.
         if let Err(error) = rdp.await {
           tracing::debug!(?error, "previous embedded RDP session stopped during reset");
         }
@@ -135,8 +130,8 @@ impl Tunnel for AgentTunnel {
   async fn run(&self, cancellation_token: CancellationToken) -> anyhow::Result<()> {
     while !cancellation_token.is_cancelled() {
       match self.connect().await {
-        Ok(()) => eprintln!("Agent WebSocket closed; reconnecting in 5 seconds..."),
-        Err(error) => eprintln!("Agent WebSocket connection failed: {error:#}"),
+        Ok(()) => tracing::info!("Agent WebSocket closed; reconnecting in 5 seconds..."),
+        Err(error) => tracing::error!(?error, "Agent WebSocket connection failed"),
       }
 
       tokio::select! {

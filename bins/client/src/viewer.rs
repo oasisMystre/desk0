@@ -121,25 +121,25 @@ impl Desk0Viewer {
           .to_string_lossy()
           .to_string(),
       )
-      .with_autologon(true)
+      // .with_autologon(true)
       .with_desktop_width(width)
       .with_desktop_height(height)
       .with_clipboard(ClipboardType::Enable)
       .with_pointer_software_rendering(false)
       .with_client_name(Self::client_name())
       .with_client_build(Self::client_build())
-      .with_client_dir("C:\\Windows\\System32\\mstscax.dll")
-      .with_static_channel({
-        let clipboard_handler = clipboard_handler.clone();
-        move |_| {
-          let backend = {
-            let handler = clipboard_handler.lock().unwrap();
-            handler.build_cliprdr_backend()
-          };
-          tracing::info!("Registering client cliprdr static channel");
-          Some(Cliprdr::new(backend))
-        }
-      });
+      .with_client_dir("C:\\Windows\\System32\\mstscax.dll");
+    // .with_static_channel({
+    //   let clipboard_handler = clipboard_handler.clone();
+    //   move |_| {
+    //     let backend = {
+    //       let handler = clipboard_handler.lock().unwrap();
+    //       handler.build_cliprdr_backend()
+    //     };
+    //     tracing::info!("Registering client cliprdr static channel");
+    //     Some(Cliprdr::new(backend))
+    //   }
+    // });
 
     if let Some(desktop_size) = config.desktop_size {
       config_builder = config_builder

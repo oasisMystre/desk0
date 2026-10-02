@@ -2,7 +2,7 @@ use std::{net::SocketAddr, sync::Arc};
 
 use copypaste::CliprdrHandler;
 use enigo::Settings;
-use ironrdp::server::{RdpServer, TransportTls};
+use ironrdp::server::{RdpServer, ServerError, ServerErrorKind, TransportTls};
 use tokio::{
   io::{AsyncRead, AsyncWrite},
   net::TcpListener,
@@ -73,11 +73,7 @@ impl Server for AgentServer {
               tokio::task::spawn_local(async move {
                 tracing::info!(%peer_addr, "RDP connection accepted");
                 if let Err(error) = Self::handle(config, stream, cancellation_token).await {
-                  if Self::is_expected_disconnect(&error) {
-                    tracing::debug!(?error, ?peer_addr, "RDP connection closed");
-                  } else {
                     tracing::error!(?error, ?peer_addr, "Connection handler error");
-                  }
                 }
                 tracing::info!(%peer_addr, "RDP connection handler stopped");
               });
@@ -94,30 +90,17 @@ impl Server for AgentServer {
 }
 
 impl AgentServer {
-  fn is_expected_disconnect_text(message: &str) -> bool {
-    let message = message.to_ascii_lowercase();
-    message.contains("unexpected eof")
-      || message.contains("not enough bytes")
-      || message.contains("brokenpipe")
-      || message.contains("broken pipe")
-      || message.contains("connection reset")
-  }
-
-  fn is_expected_disconnect(error: &anyhow::Error) -> bool {
-    error.chain().any(|cause| {
-      cause
-        .downcast_ref::<std::io::Error>()
-        .map(|io_error| {
-          matches!(
-            io_error.kind(),
-            std::io::ErrorKind::UnexpectedEof
-              | std::io::ErrorKind::ConnectionReset
-              | std::io::ErrorKind::BrokenPipe
-              | std::io::ErrorKind::NotConnected
-          )
-        })
-        .unwrap_or(false)
-    })
+  fn is_expected_disconnect(error: &ServerError) -> bool {
+    match error.kind() {
+      ServerErrorKind::Io(error) => matches!(
+        error.kind(),
+        std::io::ErrorKind::UnexpectedEof
+          | std::io::ErrorKind::ConnectionReset
+          | std::io::ErrorKind::BrokenPipe
+          | std::io::ErrorKind::NotConnected
+      ),
+      _ => false,
+    }
   }
 
   fn tls_acceptor() -> anyhow::Result<TlsAcceptor> {
@@ -176,7 +159,7 @@ impl AgentServer {
       };
 
       if let Err(error) = future {
-        if Self::is_expected_disconnect_text(&error.to_string()) {
+        if Self::is_expected_disconnect(&error) {
           tracing::debug!(?error, "RDP connection closed");
         } else {
           tracing::error!(?error, "Connection dropped");

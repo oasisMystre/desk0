@@ -94,9 +94,10 @@ impl RdpServerInputHandler for InputHandler {
       MouseEvent::Button {
         button, pressed, ..
       }
-      | MouseEvent::ButtonRel {
-        button, pressed, ..
-      } => {
+      // | MouseEvent::ButtonRel {
+      //   button, pressed, ..
+      // }
+      => {
         self.mouse_button(button, pressed);
       }
       MouseEvent::VerticalScroll { value } => {
@@ -112,11 +113,11 @@ impl RdpServerInputHandler for InputHandler {
           tracing::error!(?error, "failed to scroll horizontal");
         }
       }
-      MouseEvent::RelMove { x, y } => {
-        if let Err(error) = self.enigo.move_mouse(x as i32, y as i32, Coordinate::Rel) {
-          tracing::error!(?error, x, y, "failed to move mouse");
-        }
-      }
+      // MouseEvent::RelMove { x, y } => {
+      //   if let Err(error) = self.enigo.move_mouse(x as i32, y as i32, Coordinate::Rel) {
+      //     tracing::error!(?error, x, y, "failed to move mouse");
+      //   }
+      // }
       _ => {}
     }
   }

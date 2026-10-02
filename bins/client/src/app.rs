@@ -279,155 +279,155 @@ impl Desk0InnerApp {
 
     match event {
       WindowEvent::Resized(size) => {
-        if let AppState::Running { surface, .. } = &mut self.state {
-          if let (Some(width), Some(height)) =
-            (NonZeroU32::new(size.width), NonZeroU32::new(size.height))
-          {
-            if let Err(error) = surface.resize(width, height) {
-              tracing::error!(?error, "failed to resize surface");
-            }
-          }
-        }
-
-        self.last_size = Some(size);
-        self.resize_timeout = Some(Instant::now() + Duration::from_secs(1));
+//         if let AppState::Running { surface, .. } = &mut self.state {
+//           if let (Some(width), Some(height)) =
+//             (NonZeroU32::new(size.width), NonZeroU32::new(size.height))
+//           {
+//             if let Err(error) = surface.resize(width, height) {
+//               tracing::error!(?error, "failed to resize surface");
+//             }
+//           }
+//         }
+// 
+//         self.last_size = Some(size);
+//         self.resize_timeout = Some(Instant::now() + Duration::from_secs(1));
       }
       WindowEvent::CloseRequested => {
-        self.viewer.shutdown();
-        event_loop.exit();
+        // self.viewer.shutdown();
+        // event_loop.exit();
       }
       WindowEvent::KeyboardInput { event, .. } => {
-        let key_code = match event.physical_key {
-          PhysicalKey::Code(key_code) => key_code,
-          PhysicalKey::Unidentified(native_key_code) => {
-            tracing::warn!(?native_key_code, "Unsupported physical key, ignored");
-            return;
-          }
-        };
-
-        if is_modifier(key_code) {
-          return;
-        }
-
-        let Some((scancode, release_only)) = map_key_code(key_code) else {
-          tracing::warn!(?key_code, "Unsupported physical key, ignored");
-          return;
-        };
-
-        let operations: SmallVec<[Operation; 2]> = match event.state {
-          winit::event::ElementState::Pressed => {
-            smallvec::smallvec![Operation::KeyPressed(scancode)]
-          }
-          winit::event::ElementState::Released if release_only => {
-            smallvec::smallvec![
-              Operation::KeyPressed(scancode),
-              Operation::KeyReleased(scancode),
-            ]
-          }
-          winit::event::ElementState::Released => {
-            smallvec::smallvec![Operation::KeyReleased(scancode),]
-          }
-        };
-
-        self.viewer.apply_and_send_fast_path_events(operations);
+//         let key_code = match event.physical_key {
+//           PhysicalKey::Code(key_code) => key_code,
+//           PhysicalKey::Unidentified(native_key_code) => {
+//             tracing::warn!(?native_key_code, "Unsupported physical key, ignored");
+//             return;
+//           }
+//         };
+// 
+//         if is_modifier(key_code) {
+//           return;
+//         }
+// 
+//         let Some((scancode, release_only)) = map_key_code(key_code) else {
+//           tracing::warn!(?key_code, "Unsupported physical key, ignored");
+//           return;
+//         };
+// 
+//         let operations: SmallVec<[Operation; 2]> = match event.state {
+//           winit::event::ElementState::Pressed => {
+//             smallvec::smallvec![Operation::KeyPressed(scancode)]
+//           }
+//           winit::event::ElementState::Released if release_only => {
+//             smallvec::smallvec![
+//               Operation::KeyPressed(scancode),
+//               Operation::KeyReleased(scancode),
+//             ]
+//           }
+//           winit::event::ElementState::Released => {
+//             smallvec::smallvec![Operation::KeyReleased(scancode),]
+//           }
+//         };
+// 
+//         self.viewer.apply_and_send_fast_path_events(operations);
       }
       WindowEvent::ModifiersChanged(modifiers) => {
-        const ALT_LEFT: Scancode = Scancode::from_u8(false, 0x38);
-        const LOGO_LEFT: Scancode = Scancode::from_u8(true, 0x5B);
-        const SHIFT_LEFT: Scancode = Scancode::from_u8(false, 0x2A);
-        const CONTROL_LEFT: Scancode = Scancode::from_u8(false, 0x1D);
-
-        let mut operations = SmallVec::<[Operation; 4]>::new();
-        let mut add_operations = |pressed: bool, scancode: Scancode| {
-          let operation = if pressed {
-            Operation::KeyPressed(scancode)
-          } else {
-            Operation::KeyReleased(scancode)
-          };
-
-          operations.push(operation);
-        };
-
-        add_operations(modifiers.state().alt_key(), ALT_LEFT);
-        add_operations(modifiers.state().super_key(), LOGO_LEFT);
-        add_operations(modifiers.state().shift_key(), SHIFT_LEFT);
-        add_operations(modifiers.state().control_key(), CONTROL_LEFT);
-
-        self.viewer.apply_and_send_fast_path_events(operations);
+//         const ALT_LEFT: Scancode = Scancode::from_u8(false, 0x38);
+//         const LOGO_LEFT: Scancode = Scancode::from_u8(true, 0x5B);
+//         const SHIFT_LEFT: Scancode = Scancode::from_u8(false, 0x2A);
+//         const CONTROL_LEFT: Scancode = Scancode::from_u8(false, 0x1D);
+// 
+//         let mut operations = SmallVec::<[Operation; 4]>::new();
+//         let mut add_operations = |pressed: bool, scancode: Scancode| {
+//           let operation = if pressed {
+//             Operation::KeyPressed(scancode)
+//           } else {
+//             Operation::KeyReleased(scancode)
+//           };
+// 
+//           operations.push(operation);
+//         };
+// 
+//         add_operations(modifiers.state().alt_key(), ALT_LEFT);
+//         add_operations(modifiers.state().super_key(), LOGO_LEFT);
+//         add_operations(modifiers.state().shift_key(), SHIFT_LEFT);
+//         add_operations(modifiers.state().control_key(), CONTROL_LEFT);
+// 
+//         self.viewer.apply_and_send_fast_path_events(operations);
       }
       WindowEvent::CursorMoved { position, .. } => {
-        let window_size = window.inner_size();
-        let x = (position.x / f64::from(window_size.width) * f64::from(self.buffer_size.0)) as u16;
-        let y = (position.y / f64::from(window_size.height) * f64::from(self.buffer_size.1)) as u16;
-
-        let operation = Operation::MouseMove(MousePosition { x, y });
-
-        self
-          .viewer
-          .apply_and_send_fast_path_events(std::iter::once(operation));
+//         let window_size = window.inner_size();
+//         let x = (position.x / f64::from(window_size.width) * f64::from(self.buffer_size.0)) as u16;
+//         let y = (position.y / f64::from(window_size.height) * f64::from(self.buffer_size.1)) as u16;
+// 
+//         let operation = Operation::MouseMove(MousePosition { x, y });
+// 
+//         self
+//           .viewer
+//           .apply_and_send_fast_path_events(std::iter::once(operation));
       }
       WindowEvent::MouseWheel { delta, .. } => {
-        let mut operations = SmallVec::<[Operation; 2]>::new();
-
-        match delta {
-          MouseScrollDelta::LineDelta(delta_x, delta_y) => {
-            if delta_x.abs() > 0.001 {
-              operations.push(Operation::WheelRotations(WheelRotations {
-                is_vertical: false,
-                rotation_units: wheel_units(f64::from(delta_x) * 100.0),
-              }));
-            }
-
-            if delta_y.abs() > 0.001 {
-              operations.push(Operation::WheelRotations(WheelRotations {
-                is_vertical: true,
-                rotation_units: wheel_units(f64::from(delta_y) * 100.0),
-              }));
-            }
-          }
-          MouseScrollDelta::PixelDelta(delta) => {
-            if delta.x.abs() > 0.001 {
-              operations.push(Operation::WheelRotations(WheelRotations {
-                is_vertical: false,
-                rotation_units: wheel_units(delta.x),
-              }));
-            }
-
-            if delta.y.abs() > 0.001 {
-              operations.push(Operation::WheelRotations(WheelRotations {
-                is_vertical: true,
-                rotation_units: wheel_units(delta.y),
-              }));
-            }
-          }
-        }
-
-        self.viewer.apply_and_send_fast_path_events(operations);
+//         let mut operations = SmallVec::<[Operation; 2]>::new();
+// 
+//         match delta {
+//           MouseScrollDelta::LineDelta(delta_x, delta_y) => {
+//             if delta_x.abs() > 0.001 {
+//               operations.push(Operation::WheelRotations(WheelRotations {
+//                 is_vertical: false,
+//                 rotation_units: wheel_units(f64::from(delta_x) * 100.0),
+//               }));
+//             }
+// 
+//             if delta_y.abs() > 0.001 {
+//               operations.push(Operation::WheelRotations(WheelRotations {
+//                 is_vertical: true,
+//                 rotation_units: wheel_units(f64::from(delta_y) * 100.0),
+//               }));
+//             }
+//           }
+//           MouseScrollDelta::PixelDelta(delta) => {
+//             if delta.x.abs() > 0.001 {
+//               operations.push(Operation::WheelRotations(WheelRotations {
+//                 is_vertical: false,
+//                 rotation_units: wheel_units(delta.x),
+//               }));
+//             }
+// 
+//             if delta.y.abs() > 0.001 {
+//               operations.push(Operation::WheelRotations(WheelRotations {
+//                 is_vertical: true,
+//                 rotation_units: wheel_units(delta.y),
+//               }));
+//             }
+//           }
+//         }
+// 
+//         self.viewer.apply_and_send_fast_path_events(operations);
       }
       WindowEvent::MouseInput { state, button, .. } => {
-        let button = match button {
-          winit::event::MouseButton::Back => ironrdp::input::MouseButton::X1,
-          winit::event::MouseButton::Forward => ironrdp::input::MouseButton::X2,
-          winit::event::MouseButton::Left => ironrdp::input::MouseButton::Left,
-          winit::event::MouseButton::Right => ironrdp::input::MouseButton::Right,
-          winit::event::MouseButton::Middle => ironrdp::input::MouseButton::Middle,
-          winit::event::MouseButton::Other(native_button) => {
-            if let Some(button) = ironrdp::input::MouseButton::from_native_button(native_button) {
-              button
-            } else {
-              return;
-            }
-          }
-        };
-
-        let operation = match state {
-          winit::event::ElementState::Pressed => Operation::MouseButtonPressed(button),
-          winit::event::ElementState::Released => Operation::MouseButtonReleased(button),
-        };
-
-        self
-          .viewer
-          .apply_and_send_fast_path_events(std::iter::once(operation));
+//         let button = match button {
+//           winit::event::MouseButton::Back => ironrdp::input::MouseButton::X1,
+//           winit::event::MouseButton::Forward => ironrdp::input::MouseButton::X2,
+//           winit::event::MouseButton::Left => ironrdp::input::MouseButton::Left,
+//           winit::event::MouseButton::Right => ironrdp::input::MouseButton::Right,
+//           winit::event::MouseButton::Middle => ironrdp::input::MouseButton::Middle,
+//           winit::event::MouseButton::Other(native_button) => {
+//             if let Some(button) = ironrdp::input::MouseButton::from_native_button(native_button) {
+//               button
+//             } else {
+//               return;
+//             }
+//           }
+//         };
+// 
+//         let operation = match state {
+//           winit::event::ElementState::Pressed => Operation::MouseButtonPressed(button),
+//           winit::event::ElementState::Released => Operation::MouseButtonReleased(button),
+//         };
+// 
+//         self
+//           .viewer
+//           .apply_and_send_fast_path_events(std::iter::once(operation));
       }
       WindowEvent::RedrawRequested => {
         if self.buffer.is_empty() {
