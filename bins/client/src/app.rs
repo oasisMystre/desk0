@@ -134,7 +134,7 @@ impl Desk0InnerApp {
   }
 
   pub fn handle_output_event(&mut self, event_loop: &ActiveEventLoop, event: RdpOutputEvent) {
-    let AppState::Running { surface, window } = &mut self.state else {
+    let AppState::Running { window, .. } = &mut self.state else {
       return;
     };
 
