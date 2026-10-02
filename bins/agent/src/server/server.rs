@@ -93,6 +93,15 @@ impl Server for AgentServer {
 }
 
 impl AgentServer {
+  fn is_expected_disconnect_text(message: &str) -> bool {
+    let message = message.to_ascii_lowercase();
+    message.contains("unexpected eof")
+      || message.contains("not enough bytes")
+      || message.contains("brokenpipe")
+      || message.contains("broken pipe")
+      || message.contains("connection reset")
+  }
+
   fn is_expected_disconnect(error: &anyhow::Error) -> bool {
     error.chain().any(|cause| {
       cause
@@ -166,7 +175,11 @@ impl AgentServer {
       };
 
       if let Err(error) = future {
-        tracing::error!(?error, "Connection dropped");
+        if Self::is_expected_disconnect_text(&error.to_string()) {
+          tracing::debug!(?error, "RDP connection closed");
+        } else {
+          tracing::error!(?error, "Connection dropped");
+        }
       }
     }));
 
@@ -174,6 +187,9 @@ impl AgentServer {
       _ = cancellation_token.cancelled() => {
         for handle in &handles {
           handle.abort();
+        }
+        for handle in handles {
+          let _ = handle.await;
         }
       }
       _ = futures::future::join_all(&mut handles) => {}

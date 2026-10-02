@@ -107,6 +107,14 @@ impl AgentTunnel {
 
       rdp_cancellation.cancel();
       if reset {
+        // Do not start the replacement RDP session until the previous server
+        // has fully released its duplex stream, display receiver, and RDP
+        // tasks. Starting both sessions concurrently can make the new
+        // negotiation observe the old stream closing and produce a truncated
+        // X.224 response.
+        if let Err(error) = rdp.await {
+          tracing::debug!(?error, "previous embedded RDP session stopped during reset");
+        }
         tracing::info!("resetting embedded RDP session while keeping agent WebSocket");
         continue;
       }
