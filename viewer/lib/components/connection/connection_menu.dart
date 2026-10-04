@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:get/get.dart' show Get, Inst;
 import 'package:flutter_svg/svg.dart' show SvgPicture;
+import 'package:multiview_desktop/multiview_desktop.dart'
+    show openWindow, WindowOptions, TitleBarStyle;
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart'
     show
         GlassMenu,
@@ -8,12 +11,53 @@ import 'package:liquid_glass_widgets/liquid_glass_widgets.dart'
         GlassContainer,
         LiquidRoundedRectangle;
 
+import '../../env.dart' show Env;
+import 'viewer/index.dart' show DeviceViewer;
+import '../../dio/index.dart' show Api, Device;
 import '../../theme/app_theme.dart' show AppColors;
+import '../../states/index.dart' show DeviceState, FavoriteState;
 
 class ConnectionMenu extends StatelessWidget {
+  final Device device;
   final Widget Function(void Function() toggle)? trigger;
 
-  const ConnectionMenu({super.key, this.trigger});
+  const ConnectionMenu({super.key, required this.device, this.trigger});
+
+  Future<void> openViewer(BuildContext context) async {
+    final api = Get.find<Api>();
+    final desktopSize = device.metadata.size;
+
+    try {
+      final token = await api.organization.createConnectionToken(device.id);
+      if (!context.mounted) return;
+      await openWindow(
+        (_, _) => DeviceViewer(
+          token: token,
+          size: desktopSize,
+          endpoint: Env.rdpEndpoint,
+        ),
+        parentContext: context,
+        options: WindowOptions(
+          title: device.hostname ?? device.username ?? 'Desk0 Viewer',
+          size: Size(
+            desktopSize.width.toDouble(),
+            desktopSize.height.toDouble(),
+          ),
+          minimumSize: const Size(640, 360),
+          titleBarStyle: TitleBarStyle.normal,
+          windowButtonVisibility: true,
+        ),
+      );
+    } catch (error) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Unable to connect: $error')));
+    }
+  }
+
+  Future<void> _toggleFavorite() async {
+    await Get.find<FavoriteState>().toggle(device);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -58,7 +102,7 @@ class ConnectionMenu extends StatelessWidget {
           titleStyle: theme.textTheme.labelMedium?.copyWith(
             color: Colors.white70,
           ),
-          onTap: () {},
+          onTap: () => openViewer(context),
         ),
         GlassMenuItem(
           title: "Terminal",
@@ -93,7 +137,7 @@ class ConnectionMenu extends StatelessWidget {
           onTap: () {},
         ),
         GlassMenuItem(
-          title: "Add to Favorites",
+          title: device.favorite ? "Remove from Favorites" : "Add to Favorites",
           icon: SvgPicture.asset(
             "assets/icons/star.svg",
             width: 20,
@@ -106,7 +150,7 @@ class ConnectionMenu extends StatelessWidget {
           titleStyle: theme.textTheme.labelMedium?.copyWith(
             color: Colors.white70,
           ),
-          onTap: () {},
+          onTap: _toggleFavorite,
         ),
         GlassMenuItem(
           title: "Delete",
@@ -121,7 +165,7 @@ class ConnectionMenu extends StatelessWidget {
             showDialog(
               context: context,
               builder: (context) {
-                return DeleteConfirmationDialog();
+                return DeleteConfirmationDialog(device: device);
               },
             );
           },
@@ -132,7 +176,9 @@ class ConnectionMenu extends StatelessWidget {
 }
 
 class DeleteConfirmationDialog extends StatelessWidget {
-  const DeleteConfirmationDialog({super.key});
+  final Device device;
+
+  const DeleteConfirmationDialog({super.key, required this.device});
 
   @override
   Widget build(BuildContext context) {
@@ -197,7 +243,19 @@ class DeleteConfirmationDialog extends StatelessWidget {
                       "Delete",
                       style: TextStyle(color: AppColors.textPrimary),
                     ),
-                    onPressed: () {},
+                    onPressed: () async {
+                      try {
+                        await Get.find<DeviceState>().deleteDevice(device.id);
+                        if (context.mounted) Navigator.of(context).pop();
+                      } catch (error) {
+                        if (!context.mounted) return;
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('Unable to delete device: $error'),
+                          ),
+                        );
+                      }
+                    },
                   ),
                 ),
               ],

@@ -4,6 +4,7 @@
 #ifdef GDK_WINDOWING_X11
 #include <gdk/gdkx.h>
 #endif
+#include <multiview_desktop/multiview_desktop_runner.h>
 
 #include "flutter/generated_plugin_registrant.h"
 #include <bitsdojo_window_linux/bitsdojo_window_plugin.h>
@@ -23,6 +24,7 @@ static void first_frame_cb(MyApplication *self, FlView *view) {
 // Implements GApplication::activate.
 static void my_application_activate(GApplication *application) {
   MyApplication *self = MY_APPLICATION(application);
+  multiview_desktop_linux_runner_install(GTK_APPLICATION(application));
   GtkWindow *window =
       GTK_WINDOW(gtk_application_window_new(GTK_APPLICATION(application)));
 
@@ -57,6 +59,7 @@ static void my_application_activate(GApplication *application) {
   bdw->setCustomFrame(true);
 
   g_autoptr(FlDartProject) project = fl_dart_project_new();
+  multiview_desktop_linux_runner_prepare_dart_project(project);
   fl_dart_project_set_dart_entrypoint_arguments(
       project, self->dart_entrypoint_arguments);
 
@@ -76,6 +79,7 @@ static void my_application_activate(GApplication *application) {
   gtk_widget_realize(GTK_WIDGET(view));
 
   fl_register_plugins(FL_PLUGIN_REGISTRY(view));
+  multiview_desktop_linux_runner_register_primary(window, view);
 
   gtk_widget_grab_focus(GTK_WIDGET(view));
 }

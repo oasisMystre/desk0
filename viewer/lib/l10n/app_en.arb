@@ -1,0 +1,13 @@
+{
+  "@@locale": "en",
+  "connecting": "Connecting",
+  "connection_failed": "Connection failed",
+  "reconnecting": "Reconnecting",
+  "reconnecting_retries": "Reconnecting ({attempt}/{maximumAttempts})…",
+  "@reconnecting_retries": {
+    "placeholders": {
+      "attempt": { "type": "int" },
+      "maximumAttempts": { "type": "int" }
+    }
+  }
+}

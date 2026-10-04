@@ -1,11 +1,13 @@
 use desk0_client::viewer::{Desk0Viewer, Desk0ViewerConfig};
 use flutter_rust_bridge::frb;
-use ironrdp::input::Operation;
+use ironrdp::{client::rdp::RdpInputEvent, input::Operation};
+use shared::init::init_tracing;
 use std::sync::Mutex;
 
 use crate::{
+  SseInputEvent,
   frb_generated::StreamSink,
-  types::{InputEvent, SseDesktopSize, SseOutputEvent},
+  types::{SseDesktopSize, SseOutputEvent},
 };
 
 #[frb(opaque)]
@@ -27,7 +29,9 @@ impl ViewerHandle {
     }
   }
 
-  pub fn connect(&mut self, events: StreamSink<SseOutputEvent>) -> anyhow::Result<()> {
+  pub fn connect(&self, events: StreamSink<SseOutputEvent>) -> anyhow::Result<()> {
+    init_tracing()?;
+
     let clipboard_events = events.clone();
     let viewer = Desk0Viewer::with_callback(
       Desk0ViewerConfig {
@@ -54,7 +58,7 @@ impl ViewerHandle {
     Ok(())
   }
 
-  pub fn send_input_events(&mut self, events: Vec<InputEvent>) -> anyhow::Result<()> {
+  pub fn send_input_events(&mut self, events: Vec<SseInputEvent>) -> anyhow::Result<()> {
     let mut inner = self
       .inner
       .lock()
@@ -64,14 +68,34 @@ impl ViewerHandle {
       .ok_or_else(|| anyhow::anyhow!("viewer is not connected"))?;
     let operations: Vec<Operation> = events.into_iter().map(Into::into).collect();
     viewer.apply_and_send_fast_path_events(operations);
+
     Ok(())
   }
 
-  pub fn stop(&mut self) {
-    if let Ok(mut inner) = self.inner.lock() {
-      if let Some(mut inner) = inner.take() {
-        inner.shutdown();
-      }
-    }
+  pub fn resize(
+    &self,
+    width: u16,
+    height: u16,
+    scale_factor: u32,
+    physical_size: Option<(u32, u32)>,
+  ) -> anyhow::Result<()> {
+    let mut inner = self
+      .inner
+      .lock()
+      .map_err(|_| anyhow::anyhow!("viewer lock poisoned"))?;
+    let viewer = inner
+      .as_mut()
+      .ok_or_else(|| anyhow::anyhow!("viewer is not connected"))?;
+
+    if let Err(error) = viewer.input.try_send(RdpInputEvent::Resize {
+      width,
+      height,
+      scale_factor,
+      physical_size,
+    }) {
+      tracing::error!(?error, "sending resize event failed");
+    };
+
+    Ok(())
   }
 }

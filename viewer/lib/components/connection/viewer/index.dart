@@ -1,49 +1,49 @@
 import 'dart:math' show Point;
 import 'dart:async' show StreamSubscription;
 
-import 'package:flutter/services.dart' show MouseCursor, SystemMouseCursors;
-import 'package:flutter_custom_cursor/cursor_manager.dart'
-    show CursorManager, CursorData;
-import 'package:flutter_custom_cursor/flutter_custom_cursor.dart'
-    show FlutterCustomMemoryImageCursor;
+import 'package:get/get.dart' show Obx;
 import 'package:texture_rgba_renderer/texture_rgba_renderer.dart'
     show TextureRgbaRenderer;
+import 'package:flutter/material.dart'
+    show CircularProgressIndicator, Positioned, Stack, StackFit;
 import 'package:flutter/cupertino.dart'
     show
-        Size,
+        AspectRatio,
+        BuildContext,
+        Center,
+        LayoutBuilder,
         State,
         StatefulWidget,
-        BuildContext,
-        Widget,
-        Center,
         Texture,
-        LayoutBuilder,
-        AspectRatio;
+        Widget,
+        WidgetsBinding;
 
 import 'mouse.dart' show MouseListener;
 import 'keyboard.dart' show KeyboardListener;
 import '../../../ffi/flutter.dart' show ViewerHandle;
+import '../../../states/display_state.dart' show DisplayState;
+import 'connection_loading.dart' show ConnectionOverlay, ConnectionPhase;
 import '../../../ffi/types.dart'
     show
         SseDesktopSize,
         SseOutputEvent,
+        SseOutputEvent_AutoReconnected,
+        SseOutputEvent_AutoReconnecting,
+        SseOutputEvent_Clipboard,
+        SseOutputEvent_Connected,
         SseOutputEvent_ConnectionFailure,
+        SseOutputEvent_DesktopUpdate,
+        SseOutputEvent_Ignored,
         SseOutputEvent_Image,
+        SseOutputEvent_LoginComplete,
+        SseOutputEvent_MonitorLayout,
         SseOutputEvent_PointerBitmap,
         SseOutputEvent_PointerDefault,
         SseOutputEvent_PointerHidden,
         SseOutputEvent_PointerPosition,
         SseOutputEvent_TerminatedError,
         SseOutputEvent_TerminatedSuccess,
-        SseOutputEvent_Connected,
-        SseOutputEvent_LoginComplete,
-        SseOutputEvent_MonitorLayout,
-        SseOutputEvent_Clipboard,
-        SseOutputEvent_DesktopUpdate,
-        SseOutputEvent_WindowingOrders,
-        SseOutputEvent_Ignored,
-        SseOutputEvent_AutoReconnecting,
-        SseOutputEvent_AutoReconnected;
+        SseOutputEvent_WindowingOrders;
 
 class DeviceViewer extends StatefulWidget {
   final String token;
@@ -65,24 +65,32 @@ class DeviceViewer extends StatefulWidget {
 
 class DeviceViewerState extends State<DeviceViewer> {
   int? textureId;
+  late final DisplayState displayState;
   late final TextureRgbaRenderer textureRgbaRenderer;
   StreamSubscription<SseOutputEvent>? viewerSubscription;
 
   late final ViewerHandle viewer;
 
-  Size frameSize = const Size(1280, 720);
-  MouseCursor cursor = SystemMouseCursors.none;
+  String? connectionMessage;
+  ConnectionPhase phase = ConnectionPhase.connecting;
 
   @override
   void initState() {
     super.initState();
     textureRgbaRenderer = TextureRgbaRenderer();
-    frameSize = Size(
-      widget.size.width.toDouble(),
-      widget.size.height.toDouble(),
+    displayState = DisplayState(
+      frameBufferWidth: widget.size.width,
+      frameBufferHeight: widget.size.height,
+      textureRgbaRenderer: textureRgbaRenderer,
     );
 
-    viewer = ViewerHandle(endpoint: widget.endpoint, token: widget.token);
+    final uri = Uri.parse(widget.endpoint);
+
+    viewer = ViewerHandle(
+      size: widget.size,
+      token: widget.token,
+      endpoint: uri.path == '/ws' ? widget.endpoint : '${uri.host}/ws',
+    );
 
     init();
   }
@@ -96,7 +104,23 @@ class DeviceViewerState extends State<DeviceViewer> {
 
     setState(() {});
 
-    viewerSubscription = viewer.connect().listen(onEvent, onError: (error) {});
+    viewerSubscription = viewer.connect().listen(
+      onEvent,
+      onError: (Object error, _) {
+        setPhase(ConnectionPhase.failed, error.toString());
+      },
+    );
+  }
+
+  void setPhase(ConnectionPhase nextPhase, [String? message]) {
+    if (!mounted || (phase == nextPhase && connectionMessage == message)) {
+      return;
+    }
+
+    setState(() {
+      phase = nextPhase;
+      connectionMessage = message;
+    });
   }
 
   @override
@@ -108,32 +132,16 @@ class DeviceViewerState extends State<DeviceViewer> {
     super.dispose();
   }
 
-  Future<void> onEvent(SseOutputEvent event) async {
+  void onEvent(SseOutputEvent event) {
     switch (event) {
       case SseOutputEvent_Image(:final width, :final height, :final buffer):
-        final bytes = buffer.buffer.asUint8List(
-          buffer.offsetInBytes,
-          buffer.lengthInBytes,
-        );
-
-        textureRgbaRenderer.onRgba(0, bytes, height, width, 0);
-
-        if (frameSize.width != width || frameSize.height != height) {
-          setState(() {
-            frameSize = Size(width.toDouble(), height.toDouble());
-          });
-        }
+        displayState.onImage(width: width, height: height, buffer: buffer);
         break;
-
       case SseOutputEvent_PointerHidden():
-        setState(() {
-          cursor = SystemMouseCursors.none;
-        });
+        displayState.hideCursor();
         break;
       case SseOutputEvent_PointerDefault():
-        setState(() {
-          cursor = SystemMouseCursors.basic;
-        });
+        displayState.defaultCursor();
         break;
       case SseOutputEvent_PointerBitmap(
         :final width,
@@ -142,31 +150,52 @@ class DeviceViewerState extends State<DeviceViewer> {
         :final hotspotX,
         :final hotspotY,
       ):
-        final cursorName = await CursorManager.instance.registerCursor(
-          CursorData()
-            ..buffer = bitmapData
-            ..height = height
-            ..width = width
-            ..hotX = hotspotX.toDouble()
-            ..hotY = hotspotY.toDouble(),
+        displayState.onCursorBitmap(
+          width: width,
+          height: height,
+          bitmapData: bitmapData,
+          hotspotX: hotspotX,
+          hotspotY: hotspotY,
         );
-
-        if (!mounted) return;
-
-        setState(() {
-          cursor = FlutterCustomMemoryImageCursor(key: cursorName);
-        });
         break;
-
-      case SseOutputEvent_TerminatedError():
+      case SseOutputEvent_DesktopUpdate(
+        :final width,
+        :final height,
+        :final buffer,
+        :final region,
+      ):
+        displayState.onDesktopUpdate(
+          width: width,
+          height: height,
+          buffer: buffer,
+          region: region,
+        );
+        break;
+      case SseOutputEvent_TerminatedError(:final field0):
+        setPhase(ConnectionPhase.failed, field0);
         break;
       case SseOutputEvent_TerminatedSuccess():
+        setPhase(ConnectionPhase.failed, 'Connection closed');
         break;
-      case SseOutputEvent_ConnectionFailure():
+      case SseOutputEvent_ConnectionFailure(:final field0):
+        setPhase(ConnectionPhase.failed, field0);
         break;
       case SseOutputEvent_PointerPosition():
         break;
       case SseOutputEvent_Connected():
+        setPhase(ConnectionPhase.connected);
+        break;
+      case SseOutputEvent_AutoReconnecting(
+        :final attempt,
+        :final maximumAttempts,
+      ):
+        setPhase(
+          ConnectionPhase.reconnecting,
+          'Reconnecting ($attempt/$maximumAttempts)…',
+        );
+        break;
+      case SseOutputEvent_AutoReconnected():
+        setPhase(ConnectionPhase.connected);
         break;
       case SseOutputEvent_LoginComplete():
         break;
@@ -174,13 +203,7 @@ class DeviceViewerState extends State<DeviceViewer> {
         break;
       case SseOutputEvent_Clipboard():
         break;
-      case SseOutputEvent_DesktopUpdate(:final width, :final height, :final buffer, :final ):
-        break;
       case SseOutputEvent_WindowingOrders():
-        break;
-      case SseOutputEvent_AutoReconnecting():
-        break;
-      case SseOutputEvent_AutoReconnected():
         break;
       case SseOutputEvent_Ignored():
         break;
@@ -191,27 +214,60 @@ class DeviceViewerState extends State<DeviceViewer> {
   Widget build(BuildContext context) {
     final id = textureId;
     if (id == null) {
-      return const Center();
+      return const Center(child: CircularProgressIndicator());
     }
 
-    return KeyboardListener(
-      viewer: viewer,
-      child: AspectRatio(
-        aspectRatio: frameSize.width / frameSize.height,
-        child: LayoutBuilder(
-          builder: (context, box) {
-            final scaleX = frameSize.width / box.maxWidth;
-            final scaleY = frameSize.height / box.maxHeight;
+    final content = Obx(() {
+      final cursor = displayState.cursor.value;
+      final frameWidth = displayState.frameBufferWidth.value;
+      final frameHeight = displayState.frameBufferHeight.value;
 
-            return MouseListener(
-              cursor: cursor,
-              viewer: viewer,
-              scale: Point(scaleX, scaleY),
-              child: Texture(textureId: id),
+      return KeyboardListener(
+        viewer: viewer,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            if (phase == ConnectionPhase.connected) {
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (mounted) {
+                  displayState.onResize(viewer, context, constraints);
+                }
+              });
+            }
+
+            final frameAspectRatio = frameWidth / frameHeight;
+
+            return Center(
+              child: AspectRatio(
+                aspectRatio: frameAspectRatio,
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final scaleX = frameWidth / constraints.maxWidth;
+                    final scaleY = frameHeight / constraints.maxHeight;
+
+                    return MouseListener(
+                      cursor: cursor,
+                      viewer: viewer,
+                      scale: Point(scaleX, scaleY),
+                      child: Texture(textureId: id),
+                    );
+                  },
+                ),
+              ),
             );
           },
         ),
-      ),
+      );
+    });
+
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        content,
+        if (phase != ConnectionPhase.connected)
+          Positioned.fill(
+            child: ConnectionOverlay(phase: phase, message: connectionMessage),
+          ),
+      ],
     );
   }
 }

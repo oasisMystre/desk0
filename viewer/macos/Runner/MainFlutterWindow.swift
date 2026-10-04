@@ -1,11 +1,23 @@
 import Cocoa
 import FlutterMacOS
+import multiview_desktop
 
 class MainFlutterWindow: NSWindow {
     override func awakeFromNib() {
         super.awakeFromNib()
 
-        let flutterViewController = FlutterViewController()
+        let engine = FlutterEngine(
+            name: "main_flutter_engine",
+            project: nil,
+            allowHeadlessExecution: true
+        )
+        MultiviewDesktopPlugin.prepareEngine(engine, window: self)
+
+        let flutterViewController = FlutterViewController(
+            engine: engine,
+            nibName: nil,
+            bundle: nil
+        )
         self.contentViewController = flutterViewController
 
         if let flutterView = flutterViewController.view.subviews.first {
@@ -48,7 +60,6 @@ class MainFlutterWindow: NSWindow {
         self.titlebarAppearsTransparent = true
         self.titleVisibility = .hidden
         self.styleMask.insert(.fullSizeContentView)
-        self.standardWindowButton(.zoomButton)?.isHidden = true
 
         RegisterGeneratedPlugins(registry: flutterViewController)
     }

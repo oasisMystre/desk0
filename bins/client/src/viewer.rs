@@ -5,7 +5,6 @@ use std::{
 
 use anyhow::Context;
 use copypaste::{CliprdrHandler, cliprdr::types::clipboard_event::ClipboardEvent};
-use display_info::DisplayInfo;
 use ironrdp::{
   client::{
     config::{ClipboardType, ConfigBuilder, Destination, TransportKind},
@@ -101,19 +100,7 @@ impl Desk0Viewer {
     }
 
     let clipboard_handler = CliprdrHandler::with_callback(clipboard_event_callback);
-
     let clipboard_handler = Arc::new(Mutex::new(clipboard_handler));
-    let displays = DisplayInfo::all().map_err(Desk0ViewerError::Display)?;
-
-    let to_u16 =
-      |value: u32| -> Option<u16> { u16::try_from(value).ok().filter(|&value| value > 0) };
-
-    let (width, height) = displays
-      .iter()
-      .find(|display| display.is_primary)
-      .or_else(|| displays.first())
-      .and_then(|display| Some((to_u16(display.width)?, to_u16(display.height)?)))
-      .unwrap_or((1920, 1080));
 
     let destination = Destination::new("127.0.0.1/0").unwrap();
 
@@ -133,8 +120,6 @@ impl Desk0Viewer {
           .to_string(),
       )
       .with_autologon(true)
-      .with_desktop_width(width)
-      .with_desktop_height(height)
       .with_clipboard(ClipboardType::Enable)
       .with_pointer_software_rendering(false)
       .with_client_name(Self::client_name())
@@ -161,9 +146,7 @@ impl Desk0Viewer {
       .build()
       .map_err(Desk0ViewerError::Configuration)?;
 
-    let client = RdpClient::new(config, output_event_sender)
-      .with_desktop_updates()
-      .with_auto_reconnect(5);
+    let client = RdpClient::new(config, output_event_sender).with_desktop_updates();
     let input = client.input_sender();
 
     let mut clipboard_handler = clipboard_handler.lock().unwrap();
@@ -202,15 +185,18 @@ impl Desk0Viewer {
 
                 loop {
                   tokio::select! {
-                    _ = &mut runner => break,
+                    biased;
                     event = receiver.recv() => {
                         match event {
                             Some(event) => callback(event),
                             None => break,
                         }
                     }
+                    _ = &mut runner => {},
                   }
                 }
+
+                tracing::info!("stopping thread");
 
                 drop(input);
               });

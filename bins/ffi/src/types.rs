@@ -2,13 +2,13 @@ use copypaste::cliprdr::types::clipboard_event::{ClipboardEvent, FileDownloadSta
 use flutter_rust_bridge::frb;
 use ironrdp::{
   client::rdp::{AutoReconnectDecision, RdpOutputEvent},
+  pdu::geometry::Rectangle,
   session::GracefulDisconnectReason,
 };
 use std::ffi::c_char;
 
-#[repr(C)]
 #[derive(Clone, Copy)]
-pub enum MouseButton {
+pub enum SseMouseButton {
   Left = 0,
   Middle = 1,
   Right = 2,
@@ -16,15 +16,14 @@ pub enum MouseButton {
   X2 = 4,
 }
 
-#[repr(C)]
-#[derive(Clone, Copy)]
-pub enum InputEvent {
+#[derive(Clone)]
+pub enum SseInputEvent {
   WheelRotations {
     is_vertical: bool,
     rotation_units: i16,
   },
-  MouseButtonPressed(MouseButton),
-  MouseButtonReleased(MouseButton),
+  MouseButtonPressed(SseMouseButton),
+  MouseButtonReleased(SseMouseButton),
   MousePosition {
     x: u16,
     y: u16,
@@ -39,41 +38,41 @@ pub enum InputEvent {
   },
 }
 
-impl Into<ironrdp::input::MouseButton> for MouseButton {
+impl Into<ironrdp::input::MouseButton> for SseMouseButton {
   fn into(self) -> ironrdp::input::MouseButton {
     match self {
-      MouseButton::Left => ironrdp::input::MouseButton::Left,
-      MouseButton::Middle => ironrdp::input::MouseButton::Middle,
-      MouseButton::Right => ironrdp::input::MouseButton::Right,
-      MouseButton::X1 => ironrdp::input::MouseButton::X1,
-      MouseButton::X2 => ironrdp::input::MouseButton::X2,
+      SseMouseButton::Left => ironrdp::input::MouseButton::Left,
+      SseMouseButton::Middle => ironrdp::input::MouseButton::Middle,
+      SseMouseButton::Right => ironrdp::input::MouseButton::Right,
+      SseMouseButton::X1 => ironrdp::input::MouseButton::X1,
+      SseMouseButton::X2 => ironrdp::input::MouseButton::X2,
     }
   }
 }
 
-impl Into<ironrdp::input::Operation> for InputEvent {
+impl Into<ironrdp::input::Operation> for SseInputEvent {
   fn into(self) -> ironrdp::input::Operation {
     match self {
-      InputEvent::MousePosition { x, y } => {
+      SseInputEvent::MousePosition { x, y } => {
         ironrdp::input::Operation::MouseMove(ironrdp::input::MousePosition { x, y })
       }
-      InputEvent::WheelRotations {
+      SseInputEvent::WheelRotations {
         is_vertical,
         rotation_units,
       } => ironrdp::input::Operation::WheelRotations(ironrdp::input::WheelRotations {
         is_vertical,
         rotation_units,
       }),
-      InputEvent::MouseButtonPressed(button) => {
+      SseInputEvent::MouseButtonPressed(button) => {
         ironrdp::input::Operation::MouseButtonPressed(button.into())
       }
-      InputEvent::MouseButtonReleased(button) => {
+      SseInputEvent::MouseButtonReleased(button) => {
         ironrdp::input::Operation::MouseButtonReleased(button.into())
       }
-      InputEvent::KeyPressed { code, extended } => {
+      SseInputEvent::KeyPressed { code, extended } => {
         ironrdp::input::Operation::KeyPressed(ironrdp::input::Scancode::from_u8(extended, code))
       }
-      InputEvent::KeyReleased { code, extended } => {
+      SseInputEvent::KeyReleased { code, extended } => {
         ironrdp::input::Operation::KeyReleased(ironrdp::input::Scancode::from_u8(extended, code))
       }
     }
@@ -138,7 +137,18 @@ pub enum SseClipboardEvent {
   Image,
   Html,
   RichText,
-  File(SseClipboardEvent),
+  File(SseFileDownloadStatus),
+}
+
+#[repr(C)]
+#[derive(Clone)]
+pub struct SseInclusizeRectangle {
+  pub left: u16,
+  pub top: u16,
+  pub right: u16,
+  pub bottom: u16,
+  pub width: u16,
+  pub height: u16,
 }
 
 #[repr(C)]
@@ -160,10 +170,7 @@ pub enum SseOutputEvent {
     width: u16,
     height: u16,
     buffer: Vec<u32>,
-    region_left: u16,
-    region_top: u16,
-    region_right: u16,
-    region_bottom: u16,
+    region: SseInclusizeRectangle,
   },
   PointerHidden,
   PointerDefault,
@@ -231,7 +238,7 @@ impl From<ClipboardEvent> for SseClipboardEvent {
       ClipboardEvent::Image => SseClipboardEvent::Image,
       ClipboardEvent::Html => SseClipboardEvent::Html,
       ClipboardEvent::RichText => SseClipboardEvent::RichText,
-      ClipboardEvent::File(status) => status.into(),
+      ClipboardEvent::File(status) => SseClipboardEvent::File(status.into()),
     }
   }
 }
@@ -281,10 +288,14 @@ impl From<RdpOutputEvent> for SseOutputEvent {
           buffer,
           width: width.get(),
           height: height.get(),
-          region_left: region.left,
-          region_top: region.top,
-          region_right: region.right,
-          region_bottom: region.bottom,
+          region: SseInclusizeRectangle {
+            left: region.left,
+            top: region.top,
+            right: region.right,
+            bottom: region.bottom,
+            width: region.width(),
+            height: region.height(),
+          },
         }
       }
       RdpOutputEvent::PointerPosition { x, y } => Self::PointerPosition { x, y },

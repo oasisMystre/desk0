@@ -2,9 +2,11 @@ import 'package:dio/dio.dart';
 import 'package:get/get.dart';
 
 import 'user.dart';
-import 'attachment.dart';
 import 'devices.dart';
+import 'attachment.dart';
 import 'organization.dart';
+
+export 'models/index.dart';
 
 class Api extends GetxController {
   late final Dio client;
@@ -35,6 +37,11 @@ class Api extends GetxController {
     organization = OrganizationApi(client: client);
 
     _updateHeaders();
+  }
+
+  String get websocketEndpoint {
+    final endpoint = baseUrl.replaceFirst(RegExp(r'/+$'), '');
+    return endpoint.endsWith('/ws') ? endpoint : '$endpoint/ws';
   }
 
   void _updateHeaders() {

@@ -4,7 +4,8 @@ version = "0.1.0"
 edition = "2024"
 
 [lib]
-crate-type = ["cdylib", "staticlib", "lib"]
+name = "rust_lib_desk0"
+crate-type = ["cdylib", "staticlib"]
 
 [features]
 flutter = []
@@ -12,6 +13,8 @@ default = ["flutter"]
 
 [dependencies]
 winit = "0.30.13"
+tracing.workspace = true
+shared = { workspace = true, features=["otel"] }
 copypaste = { workspace = true }
 desk0-client = { path = "../client" }
 anyhow.workspace = true

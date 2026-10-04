@@ -1,28 +1,28 @@
+import 'package:desk0/ffi/types.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:get/instance_manager.dart';
 import 'package:go_router/go_router.dart';
+import 'package:get/instance_manager.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:window_manager/window_manager.dart';
+import 'package:multiview_desktop/multiview_desktop.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 
+import 'env.dart';
 import 'dio/index.dart';
+import 'states/index.dart';
 import 'screens/index.dart';
 import 'theme/app_theme.dart';
 import 'components/index.dart';
-import 'states/app_state.dart';
-
-class InterceptFullscreenListener extends WindowListener {
-  @override
-  void onWindowEnterFullScreen() async {
-    await windowManager.setFullScreen(false);
-  }
-}
+import 'ffi/frb_generated.dart';
+import 'l10n/generated/app_localizations.dart';
+import 'components/connection/viewer/index.dart';
 
 void main() async {
+  await RustLib.init();
   WidgetsFlutterBinding.ensureInitialized();
 
-  final Api api = Api(baseUrl: 'http://0.0.0.0:8080');
+  final Api api = Api(baseUrl: Env.apiBaseUrl);
   final sharedPreferences = await SharedPreferences.getInstance();
   final guestUser = sharedPreferences.getStringList('user');
 
@@ -43,28 +43,32 @@ void main() async {
   api.updateUserId(user);
   api.updateOrganizationId(organization);
 
-  await windowManager.ensureInitialized();
   await LiquidGlassWidgets.initialize();
 
-  windowManager.addListener(InterceptFullscreenListener());
+  final deviceState = DeviceState();
+  final favoriteState = FavoriteState(sharedPreferences);
 
   Get.put(api);
   Get.put(AppState());
+  Get.put(deviceState);
+  Get.put(favoriteState);
 
-  await windowManager.waitUntilReadyToShow(
-    WindowOptions(
-      size: Size(720, 480),
-      skipTaskbar: true,
-      backgroundColor: Colors.transparent,
-      titleBarStyle: TitleBarStyle.hidden,
+  await deviceState.loadDevices();
+  await favoriteState.loadFavorites();
+
+  runMultiApp(
+    home: (context, publicId) => const MainApplication(),
+    globalScope: (child) => LiquidGlassWidgets.wrap(child: child),
+    config: MultiAppConfig(
+      generalParams: MultiPlatformParams(closeMode: CloseMode.softCascade),
+      globalWindowOptions: WindowOptions(
+        size: const Size(720, 480),
+        titleBarStyle: TitleBarStyle.hidden,
+        windowButtonVisibility: true,
+        backgroundColor: Colors.transparent,
+      ),
     ),
-    () async {
-      await windowManager.show();
-      await windowManager.focus();
-    },
   );
-
-  runApp(LiquidGlassWidgets.wrap(child: const MainApplication()));
 }
 
 final router = GoRouter(
@@ -72,34 +76,19 @@ final router = GoRouter(
   routes: [
     ShellRoute(
       builder: (context, state, child) {
-        return GlassScaffold(
-          backgroundColor: Colors.transparent,
-          settings: LiquidGlassSettings.figma(
-            depth: 10,
-            dispersion: 5,
-            frost: 5,
-            refraction: 10,
-          ),
-          body: Stack(
-            children: [
-              Positioned.fill(
-                child: Row(
-                  children: [
-                    SideNav(),
-                    Expanded(child: child),
-                  ],
-                ),
-              ),
-              Positioned(top: 0, left: 0, right: 0, child: Toolbar()),
-            ],
-          ),
-          themeOverride: GlassThemeData(
-            dark: GlassThemeVariant(settings: GlassThemeSettings()),
-          ),
-        );
+        return MainApplication.wrapper(child);
       },
       routes: [
-        GoRoute(path: '/', builder: (context, state) => const HomeScreen()),
+        GoRoute(
+          path: '/',
+          builder: (context, state) => kDebugMode
+              ? const DeviceViewer(
+                  endpoint: Env.rdpEndpoint,
+                  token: Env.rdpToken,
+                  size: SseDesktopSize(width: 1280, height: 720),
+                )
+              : const HomeScreen(),
+        ),
         GoRoute(
           path: '/devices',
           builder: (context, state) => const DevicesScreen(),
@@ -117,6 +106,8 @@ class MainApplication extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp.router(
       title: 'Desk0',
+      supportedLocales: AppLocalizations.supportedLocales,
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
       debugShowCheckedModeBanner: false,
       routerConfig: router,
       theme: ThemeData(
@@ -135,6 +126,35 @@ class MainApplication extends StatelessWidget {
           ),
         ),
         useMaterial3: true,
+      ),
+    );
+  }
+
+  static Widget wrapper(Widget child) {
+    return GlassScaffold(
+      backgroundColor: Colors.transparent,
+      settings: LiquidGlassSettings.figma(
+        frost: 5,
+        depth: 10,
+        dispersion: 5,
+        refraction: 10,
+      ),
+      body: Stack(
+        children: [
+          Positioned.fill(
+            child: Row(
+              children: [
+                if (!kDebugMode) SideNav(),
+                Expanded(child: child),
+              ],
+            ),
+          ),
+          if (!kDebugMode)
+            Positioned(top: 0, left: 0, right: 0, child: Toolbar()),
+        ],
+      ),
+      themeOverride: GlassThemeData(
+        dark: GlassThemeVariant(settings: GlassThemeSettings()),
       ),
     );
   }

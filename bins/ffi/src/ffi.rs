@@ -6,7 +6,7 @@ use std::{
 use desk0_client::viewer::{Desk0Viewer, Desk0ViewerConfig};
 use ironrdp::client::rdp::RdpOutputEvent;
 
-use crate::types::{InputEvent, OutputEvent};
+use crate::types::{OutputEvent, RawInputEvent, ViewerInputEvent};
 
 pub type OnOutputEventCallback = extern "C" fn(event: *const OutputEvent);
 
@@ -162,7 +162,7 @@ pub unsafe extern "C" fn desk0_stop_viewer(viewer: *mut Desk0Viewer) -> bool {
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn desk0_send_input_event(
   viewer: *mut Desk0Viewer,
-  events: *const InputEvent,
+  events: *const RawInputEvent,
   len: usize,
 ) -> bool {
   if viewer.is_null() {
@@ -181,7 +181,8 @@ pub unsafe extern "C" fn desk0_send_input_event(
   let operations = events
     .iter()
     .cloned()
-    .map(InputEvent::into)
+    .map(|event| ViewerInputEvent::from(*event))
+    .map(ViewerInputEvent::into)
     .collect::<Vec<ironrdp::input::Operation>>();
 
   viewer.apply_and_send_fast_path_events(operations);

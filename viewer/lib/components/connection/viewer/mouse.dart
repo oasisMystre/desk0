@@ -1,10 +1,34 @@
-import 'dart:math';
+import 'dart:math' show Point;
 
-import 'package:flutter/cupertino.dart';
-import 'package:flutter/gestures.dart';
+import 'package:flutter/gestures.dart'
+    show
+        kPrimaryButton,
+        kMiddleMouseButton,
+        PointerSignalEvent,
+        PointerScrollEvent,
+        kSecondaryButton,
+        kBackMouseButton,
+        kForwardMouseButton;
+import 'package:flutter/cupertino.dart'
+    show
+        StatefulWidget,
+        SystemMouseCursors,
+        Widget,
+        MouseCursor,
+        State,
+        Offset,
+        PointerDownEvent,
+        PointerUpEvent,
+        PointerCancelEvent,
+        BuildContext,
+        WidgetsBinding,
+        Focus,
+        HitTestBehavior,
+        Listener,
+        MouseRegion;
 
 import '../../../ffi/flutter.dart' show ViewerHandle;
-import '../../../ffi/types.dart' show InputEvent, MouseButton;
+import '../../../ffi/types.dart' show SseMouseButton, SseInputEvent;
 
 class MouseListener extends StatefulWidget {
   final Point scale;
@@ -32,25 +56,25 @@ class MouseListenerState extends State<MouseListener> {
   int lastButtons = 0;
   bool flushScheduled = false;
 
-  static const Map<int, MouseButton> buttonMap = {
-    kPrimaryButton: MouseButton.left,
-    kMiddleMouseButton: MouseButton.middle,
-    kSecondaryButton: MouseButton.right,
-    kBackMouseButton: MouseButton.x1,
-    kForwardMouseButton: MouseButton.x2,
+  static const Map<int, SseMouseButton> buttonMap = {
+    kPrimaryButton: SseMouseButton.left,
+    kMiddleMouseButton: SseMouseButton.middle,
+    kSecondaryButton: SseMouseButton.right,
+    kBackMouseButton: SseMouseButton.x1,
+    kForwardMouseButton: SseMouseButton.x2,
   };
 
-  Future<void> send(List<InputEvent> events) async {
+  Future<void> send(List<SseInputEvent> events) async {
     if (events.isEmpty) return;
 
     await widget.viewer.sendInputEvents(events: events);
   }
 
-  InputEvent positionEvent(Offset local) {
+  SseInputEvent positionEvent(Offset local) {
     final dx = local.dx * widget.scale.x;
     final dy = local.dy * widget.scale.y;
 
-    return InputEvent.mousePosition(x: dx.round(), y: dy.round());
+    return SseInputEvent.mousePosition(x: dx.round(), y: dy.round());
   }
 
   void queueMove(Offset local) {
@@ -65,14 +89,14 @@ class MouseListenerState extends State<MouseListener> {
     });
   }
 
-  List<InputEvent> buttonEvents(int mask, bool pressed) {
-    final List<InputEvent> events = [];
+  List<SseInputEvent> buttonEvents(int mask, bool pressed) {
+    final List<SseInputEvent> events = [];
     buttonMap.forEach((flag, button) {
       if (mask & flag != 0) {
         events.add(
           pressed
-              ? InputEvent.mouseButtonPressed(button)
-              : InputEvent.mouseButtonReleased(button),
+              ? SseInputEvent.mouseButtonPressed(button)
+              : SseInputEvent.mouseButtonReleased(button),
         );
       }
     });
@@ -110,11 +134,11 @@ class MouseListenerState extends State<MouseListener> {
 
   void onScroll(PointerSignalEvent event) {
     if (event is! PointerScrollEvent) return;
-    final List<InputEvent> events = [];
+    final List<SseInputEvent> events = [];
 
     if (event.scrollDelta.dy != 0) {
       events.add(
-        InputEvent.wheelRotations(
+        SseInputEvent.wheelRotations(
           isVertical: true,
           rotationUnits: (event.scrollDelta.dy / 100 * 120).round(),
         ),
@@ -123,7 +147,7 @@ class MouseListenerState extends State<MouseListener> {
 
     if (event.scrollDelta.dx != 0) {
       events.add(
-        InputEvent.wheelRotations(
+        SseInputEvent.wheelRotations(
           isVertical: false,
           rotationUnits: (event.scrollDelta.dx / 100 * 120).round(),
         ),

@@ -3,6 +3,7 @@ use ironrdp::{
   client::{output_channel::output_channel, rdp::RdpOutputEvent},
   session::GracefulDisconnectReason,
 };
+use shared::init::init_tracing;
 use winit::{dpi::PhysicalSize, event_loop::EventLoop};
 
 use crate::{
@@ -36,7 +37,7 @@ struct Args {
 }
 
 fn main() -> anyhow::Result<()> {
-  init_tracing();
+  init_tracing()?;
 
   let args = Args::parse();
   tracing::info!(endpoint = %args.endpoint, "starting RDP client");
@@ -63,7 +64,7 @@ fn main() -> anyhow::Result<()> {
       },
     },
     output_event_sender,
-    |_| {}
+    |_| {},
   )?;
 
   let rt = tokio::runtime::Builder::new_multi_thread()
@@ -118,18 +119,4 @@ fn main() -> anyhow::Result<()> {
   }
 
   Ok(())
-}
-
-fn init_tracing() {
-  let filter = tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| {
-    tracing_subscriber::EnvFilter::new("info,desk0_client=debug,copypaste=debug")
-  });
-
-  tracing_subscriber::fmt()
-    .with_env_filter(filter)
-    .with_target(true)
-    .with_thread_names(true)
-    .with_file(true)
-    .with_line_number(true)
-    .init();
 }

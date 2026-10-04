@@ -71,8 +71,6 @@ impl FromRequestParts<AppState> for AuthenticatedUser {
       });
     }
 
-    tracing::info!(?org_id, "id");
-
     if let Some(org_id) = org_id {
       let org_id = org_id
         .parse::<uuid::Uuid>()

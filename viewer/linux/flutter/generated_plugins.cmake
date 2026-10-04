@@ -3,16 +3,14 @@
 #
 
 list(APPEND FLUTTER_PLUGIN_LIST
-  desktop_multi_window
   flutter_custom_cursor
-  screen_retriever_linux
+  multiview_desktop
   texture_rgba_renderer
-  window_manager
-  window_size
 )
 
 list(APPEND FLUTTER_FFI_PLUGIN_LIST
   jni
+  rust_lib_desk0
 )
 
 set(PLUGIN_BUNDLED_LIBRARIES)

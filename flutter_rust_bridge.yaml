@@ -3,3 +3,5 @@ rust_root: bins/ffi
 dart_root: viewer
 dart_output: viewer/lib/ffi
 enable_lifetime: true
+c_output: viewer/macos/Runner/bridge_generated.h
+full_dep: true

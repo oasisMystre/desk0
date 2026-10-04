@@ -2,12 +2,15 @@ PODS:
   - flutter_custom_cursor (0.0.1):
     - FlutterMacOS
   - FlutterMacOS (1.0.0)
+  - rust_lib_desk0 (0.0.1):
+    - FlutterMacOS
   - texture_rgba_renderer (0.0.1):
     - FlutterMacOS
 
 DEPENDENCIES:
   - flutter_custom_cursor (from `Flutter/ephemeral/.symlinks/plugins/flutter_custom_cursor/macos`)
   - FlutterMacOS (from `Flutter/ephemeral`)
+  - rust_lib_desk0 (from `Flutter/ephemeral/.symlinks/plugins/rust_lib_desk0/macos`)
   - texture_rgba_renderer (from `Flutter/ephemeral/.symlinks/plugins/texture_rgba_renderer/macos`)
 
 EXTERNAL SOURCES:
@@ -15,12 +18,15 @@ EXTERNAL SOURCES:
     :path: Flutter/ephemeral/.symlinks/plugins/flutter_custom_cursor/macos
   FlutterMacOS:
     :path: Flutter/ephemeral
+  rust_lib_desk0:
+    :path: Flutter/ephemeral/.symlinks/plugins/rust_lib_desk0/macos
   texture_rgba_renderer:
     :path: Flutter/ephemeral/.symlinks/plugins/texture_rgba_renderer/macos
 
 SPEC CHECKSUMS:
   flutter_custom_cursor: 37e588711a2746f5cf48adb58b582cacff11c0c6
   FlutterMacOS: c232990155153907050900a2e175c7773903ba4e
+  rust_lib_desk0: 2137d4d3cef7ec84001e0a87e2e0f090b995d055
   texture_rgba_renderer: 6661f577ea5d4990e964c7e3840e544ac798e6da
 
 PODFILE CHECKSUM: 1e95c36afbfd1cb6423ceca4de7a8e1b256fb6ac

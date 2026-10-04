@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/svg.dart' show SvgPicture;
 
-import '../../dio/models/device.dart' show Device;
-import '../../components/connection/connection_menu.dart' show ConnectionMenu;
+import '../../dio/index.dart' show Device;
+import 'connection_menu.dart' show ConnectionMenu;
 
 class ConnectionListItem extends StatelessWidget {
   final Device device;
@@ -72,6 +72,7 @@ class ConnectionListItem extends StatelessWidget {
                     ),
                   ),
                   ConnectionMenu(
+                    device: device,
                     trigger: (toggle) => IconButton(
                       icon: SvgPicture.asset(
                         "assets/icons/more_vert.svg",

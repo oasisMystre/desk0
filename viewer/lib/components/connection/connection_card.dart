@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:get/get.dart' show Get, Inst;
 import 'package:flutter_svg/flutter_svg.dart' show SvgPicture;
 import 'package:liquid_glass_widgets/widgets/interactive/glass_button.dart'
     show GlassButton;
 
+import 'connection_menu.dart' show ConnectionMenu;
 import '../../dio/models/device.dart' show Device;
-import '../../components/connection/connection_menu.dart' show ConnectionMenu;
+import '../../states/index.dart' show FavoriteState;
 
 class ConnectionCard extends StatefulWidget {
   final Device device;
@@ -62,7 +64,6 @@ class ConnectionCardState extends State<ConnectionCard> {
             left: 8,
             child: Badge(backgroundColor: Colors.green),
           ),
-
           Positioned(
             right: 4,
             top: 4,
@@ -72,7 +73,7 @@ class ConnectionCardState extends State<ConnectionCard> {
               child: Row(
                 spacing: 8,
                 children: [
-                  ConnectionMenu(),
+                  ConnectionMenu(device: device),
                   GlassButton(
                     width: 24,
                     height: 24,
@@ -86,7 +87,10 @@ class ConnectionCardState extends State<ConnectionCard> {
                         BlendMode.srcIn,
                       ),
                     ),
-                    onTap: () {},
+                    onTap: () async {
+                      await Get.find<FavoriteState>().toggle(device);
+                      if (mounted) setState(() {});
+                    },
                   ),
                 ],
               ),

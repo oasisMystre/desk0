@@ -10,6 +10,7 @@ crate-type = ["cdylib", "staticlib", "lib"]
 ffi = []
 
 [dependencies]
+shared = { workspace = true, features=["otel"] }
 copypaste = { workspace = true, features=["client"] }
 anyhow.workspace = true
 ironrdp = { workspace = true, features = ["client", "connector", "cliprdr", "input", "session", "client-clipboard", "pdu"] }

@@ -1,7 +1,10 @@
-import 'package:flutter/painting.dart' show Size;
+import 'package:desk0/ffi/types.dart' show SseDesktopSize;
+
+const kDefaultDeviceWidth = 1280;
+const kDefaultDeviceHeight = 720;
 
 class DeviceMetadataV1 {
-  final Size? size;
+  final SseDesktopSize size;
 
   const DeviceMetadataV1({required this.size});
 
@@ -10,10 +13,13 @@ class DeviceMetadataV1 {
       {'_version': 1, 'size': final Map<String, dynamic>? size} =>
         DeviceMetadataV1(
           size: size == null
-              ? null
-              : Size(
-                  (size['width'] as num).toDouble(),
-                  (size['height'] as num).toDouble(),
+              ? SseDesktopSize(
+                  width: kDefaultDeviceWidth,
+                  height: kDefaultDeviceHeight,
+                )
+              : SseDesktopSize(
+                  width: (size['width'] as num).toInt().clamp(1, 65535),
+                  height: (size['height'] as num).toInt().clamp(1, 65535),
                 ),
         ),
       _ => throw const FormatException("Failed to deserialize device.metadata"),
@@ -24,7 +30,7 @@ class DeviceMetadataV1 {
 class Device {
   bool favorite;
   bool online = false;
-  DeviceMetadataV1? metadata;
+  DeviceMetadataV1 metadata;
   String? hostname, username, version, os;
   String id, organization, lastLoggedIn, createdAt;
 
@@ -66,7 +72,13 @@ class Device {
           organization: organization,
           lastLoggedIn: lastLoggedIn,
           metadata: metadata == null
-              ? null
+              ? DeviceMetadataV1.fromJson({
+                  "_version": 1,
+                  "size": {
+                    "width": kDefaultDeviceWidth,
+                    "height": kDefaultDeviceHeight,
+                  },
+                })
               : DeviceMetadataV1.fromJson(metadata),
         ),
       _ => throw const FormatException('Failed to deserialize client'),

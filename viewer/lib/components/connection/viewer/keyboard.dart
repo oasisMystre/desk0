@@ -10,7 +10,7 @@ import 'package:flutter/cupertino.dart'
         Focus;
 
 import 'hid_to_scancode.dart' show hidToScancode;
-import '../../../ffi/types.dart' show InputEvent;
+import '../../../ffi/types.dart' show SseInputEvent;
 import '../../../ffi/flutter.dart' show ViewerHandle;
 
 class KeyboardListener extends StatefulWidget {
@@ -41,7 +41,7 @@ class KeyboardListenerState extends State<KeyboardListener> {
     super.dispose();
   }
 
-  Future<void> send(List<InputEvent> events) async {
+  Future<void> send(List<SseInputEvent> events) async {
     if (events.isEmpty) return;
     widget.viewer.sendInputEvents(events: events);
   }
@@ -56,11 +56,11 @@ class KeyboardListenerState extends State<KeyboardListener> {
     final id = (extended ? 0x100 : 0) | code;
     if (event is KeyUpEvent) {
       if (held.remove(id)) {
-        send([InputEvent.keyReleased(code: code, extended: extended)]);
+        send([SseInputEvent.keyReleased(code: code, extended: extended)]);
       }
     } else {
       held.add(id);
-      send([InputEvent.keyPressed(code: code, extended: extended)]);
+      send([SseInputEvent.keyPressed(code: code, extended: extended)]);
     }
 
     return KeyEventResult.handled;
@@ -70,7 +70,7 @@ class KeyboardListenerState extends State<KeyboardListener> {
     if (held.isEmpty) return;
     final events = [
       for (final id in held)
-        InputEvent.keyReleased(code: id & 0xFF, extended: id & 0x100 != 0),
+        SseInputEvent.keyReleased(code: id & 0xFF, extended: id & 0x100 != 0),
     ];
 
     held.clear();
