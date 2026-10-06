@@ -12,10 +12,10 @@ import 'package:liquid_glass_widgets/liquid_glass_widgets.dart'
         LiquidRoundedRectangle;
 
 import '../../env.dart' show Env;
-import 'viewer/index.dart' show DeviceViewer;
 import '../../dio/index.dart' show Api, Device;
 import '../../theme/app_theme.dart' show AppColors;
 import '../../states/index.dart' show DeviceState, FavoriteState;
+import 'open_connection.dart' show OpenConnection, ConnectionType;
 
 class ConnectionMenu extends StatelessWidget {
   final Device device;
@@ -31,10 +31,11 @@ class ConnectionMenu extends StatelessWidget {
       final token = await api.organization.createConnectionToken(device.id);
       if (!context.mounted) return;
       await openWindow(
-        (_, _) => DeviceViewer(
+        (_, _) => OpenConnection(
           token: token,
           size: desktopSize,
           endpoint: Env.rdpEndpoint,
+          connectionType: ConnectionType.desktop,
         ),
         parentContext: context,
         options: WindowOptions(

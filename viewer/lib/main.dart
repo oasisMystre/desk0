@@ -16,7 +16,7 @@ import 'theme/app_theme.dart';
 import 'components/index.dart';
 import 'ffi/frb_generated.dart';
 import 'l10n/generated/app_localizations.dart';
-import 'components/connection/viewer/index.dart';
+import 'components/connection/open_connection.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -85,9 +85,10 @@ final router = GoRouter(
         GoRoute(
           path: '/',
           builder: (context, state) => kDebugMode
-              ? const DeviceViewer(
-                  endpoint: Env.rdpEndpoint,
+              ? const OpenConnection(
                   token: Env.rdpToken,
+                  endpoint: Env.rdpEndpoint,
+                  connectionType: ConnectionType.terminal,
                   size: SseDesktopSize(width: 1280, height: 720),
                 )
               : const HomeScreen(),

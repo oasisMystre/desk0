@@ -6,6 +6,8 @@ use std::{
 };
 
 use clipboard_rs::{Clipboard, common::RustImageData};
+#[cfg(not(feature = "server"))]
+use ironrdp::client::rdp::RdpInputSender;
 use ironrdp::cliprdr::{
   backend::{ClipboardMessage, CliprdrBackend, CliprdrBackendFactory},
   pdu::{
@@ -16,8 +18,6 @@ use ironrdp::cliprdr::{
 };
 #[cfg(feature = "server")]
 use ironrdp::server::{CliprdrServerFactory, ServerEventSender};
-#[cfg(not(feature = "server"))]
-use ironrdp::client::rdp::RdpInputSender;
 #[cfg(not(feature = "server"))]
 use tokio::sync::mpsc::error::TrySendError;
 #[cfg(feature = "server")]

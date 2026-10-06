@@ -18,11 +18,13 @@ impl Debug for Desk0StaticChannel {
 }
 
 impl Desk0StaticChannel {
-  pub fn new<T>(callback: Arc<T>) -> Self
+  pub fn new<T>(callback: T) -> Self
   where
     T: Fn(StaticChannelOutput) + Send + Sync + 'static,
   {
-    Self { callback }
+    Self {
+      callback: Arc::new(callback),
+    }
   }
 }
 

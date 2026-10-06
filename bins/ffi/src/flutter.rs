@@ -1,4 +1,4 @@
-use desk0_client::viewer::{Desk0Viewer, Desk0ViewerConfig};
+use desk0_client::viewer::{Desk0Viewer, Desk0ViewerConfig, Desk0ViewerOutput};
 use flutter_rust_bridge::frb;
 use ironrdp::{
   client::rdp::{RdpInputEvent, RdpOutputEvent},
@@ -11,7 +11,7 @@ use std::sync::{Arc, Mutex};
 use tokio::sync::mpsc::error::TrySendError;
 
 use crate::{
-  SseInputEvent, SseStaticChannelInput,
+  SseClipboardEvent, SseInputEvent, SseStaticChannelInput, SseStaticChannelOutput,
   frame::TextureHandle,
   frb_generated::StreamSink,
   types::{SseDesktopSize, SseOutputEvent},
@@ -46,13 +46,15 @@ impl ViewerHandle {
     Ok(id)
   }
 
-  pub fn connect(&self, events: StreamSink<SseOutputEvent>) -> anyhow::Result<()> {
+  pub fn connect(&self) -> anyhow::Result<()> {
     init_tracing()?;
-    let clipboard_events = events.clone();
-    let static_channel_events = events.clone();
-    let texture = self.texture_handle.clone();
 
-    let viewer = Desk0Viewer::with_callback(
+    let rt = tokio::runtime::Builder::new_multi_thread()
+      .enable_all()
+      .build()?;
+
+    let viewer = Desk0Viewer::new(
+      rt,
       Desk0ViewerConfig {
         token: &self.token,
         endpoint: &self.endpoint,
@@ -61,35 +63,7 @@ impl ViewerHandle {
           height: self.size.height,
         }),
       },
-      move |event| match event {
-        RdpOutputEvent::DesktopUpdate(update) => {
-          let width = update.width().get();
-          let height = update.height().get();
-
-          texture.apply_desktop_update(update);
-          let _ = events.add(SseOutputEvent::Resize { width, height });
-        }
-        RdpOutputEvent::Image {
-          buffer,
-          width,
-          height,
-        } => {
-          let width = width.get();
-          let height = height.get();
-
-          texture.apply_image(width, height, &buffer);
-          let _ = events.add(SseOutputEvent::Resize { width, height });
-        }
-        event => {
-          let _ = events.add(SseOutputEvent::from(event));
-        }
-      },
-      move |event| {
-        let _ = clipboard_events.add(SseOutputEvent::Clipboard(event.into()));
-      },
-      move |event| {
-        let _ = static_channel_events.add(SseOutputEvent::StaticChannel(event.into()));
-      },
+      Desk0ViewerOutput::callback(),
     )
     .map_err(|error| anyhow::anyhow!(error.to_string()))?;
 
@@ -97,6 +71,78 @@ impl ViewerHandle {
       .inner
       .lock()
       .map_err(|_| anyhow::anyhow!("viewer lock poisoned"))? = Some(viewer);
+    Ok(())
+  }
+
+  pub fn on_rdp_event(&self, events: StreamSink<SseOutputEvent>) -> anyhow::Result<()> {
+    let texture = self.texture_handle.clone();
+    let mut inner = self
+      .inner
+      .lock()
+      .map_err(|_| anyhow::anyhow!("viewer lock poisoned"))?;
+    let viewer = inner
+      .as_mut()
+      .ok_or_else(|| anyhow::anyhow!("viewer is not connected"))?;
+
+    viewer.set_rdp_output_event_callback(move |event| match event {
+      RdpOutputEvent::DesktopUpdate(update) => {
+        let width = update.width().get();
+        let height = update.height().get();
+
+        texture.apply_desktop_update(update);
+        let _ = events.add(SseOutputEvent::Resize { width, height });
+      }
+      RdpOutputEvent::Image {
+        buffer,
+        width,
+        height,
+      } => {
+        let width = width.get();
+        let height = height.get();
+
+        texture.apply_image(width, height, &buffer);
+        let _ = events.add(SseOutputEvent::Resize { width, height });
+      }
+      event => {
+        let _ = events.add(SseOutputEvent::from(event));
+      }
+    });
+
+    Ok(())
+  }
+
+  pub fn on_clipboard_event(&self, events: StreamSink<SseClipboardEvent>) -> anyhow::Result<()> {
+    let mut inner = self
+      .inner
+      .lock()
+      .map_err(|_| anyhow::anyhow!("viewer lock poisoned"))?;
+    let viewer = inner
+      .as_mut()
+      .ok_or_else(|| anyhow::anyhow!("viewer is not connected"))?;
+
+    viewer.set_clipboard_event_callback(move |event| {
+      let _ = events.add(event.into());
+    });
+
+    Ok(())
+  }
+
+  pub fn on_static_channel_event_event(
+    &self,
+    events: StreamSink<SseStaticChannelOutput>,
+  ) -> anyhow::Result<()> {
+    let mut inner = self
+      .inner
+      .lock()
+      .map_err(|_| anyhow::anyhow!("viewer lock poisoned"))?;
+    let viewer = inner
+      .as_mut()
+      .ok_or_else(|| anyhow::anyhow!("viewer is not connected"))?;
+
+    viewer.set_static_channel_event_callback(move |event| {
+      let _ = events.add(event.into());
+    });
+
     Ok(())
   }
 
@@ -115,7 +161,7 @@ impl ViewerHandle {
   }
 
   pub fn send_static_channel_events(
-    &mut self,
+    &self,
     events: Vec<SseStaticChannelInput>,
   ) -> anyhow::Result<()> {
     let mut inner = self

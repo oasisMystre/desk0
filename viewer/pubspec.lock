@@ -201,6 +201,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.2.2"
+  equatable:
+    dependency: transitive
+    description:
+      name: equatable
+      sha256: "3bce007a596ff8b3119c45d68aaef631272537c03d30e5d4534dd24bf4c5eaa2"
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.1.0"
   fake_async:
     dependency: transitive
     description:
@@ -856,6 +864,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.2.2"
+  terminal_view:
+    dependency: "direct main"
+    description:
+      name: terminal_view
+      sha256: "881b9f865daf075ca1c32b3572efa4ec8f609ba29e3f2f040e60dfef33b6aa79"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.4.0"
   test_api:
     dependency: transitive
     description:
@@ -992,6 +1008,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.2.4"
+  zmodem:
+    dependency: transitive
+    description:
+      name: zmodem
+      sha256: "3b7e5b29f3a7d8aee472029b05165a68438eff2f3f7766edf13daba1e297adbf"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.0.6"
 sdks:
   dart: ">=3.13.2 <4.0.0"
   flutter: ">=3.47.0"

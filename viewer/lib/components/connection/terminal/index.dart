@@ -1,0 +1,89 @@
+import 'dart:convert' show utf8;
+import 'dart:async' show StreamSubscription;
+
+import 'package:flutter/cupertino.dart';
+import 'package:terminal_view/terminal_view.dart';
+
+import '../../../ffi/flutter.dart' show ViewerHandle;
+import '../../../ffi/types.dart'
+    show
+        SseTerminalInput,
+        SseStaticChannelOutput,
+        SseStaticChannelInput,
+        SseTerminalOutput_StdOut,
+        SseTerminalOutput_StdErr,
+        SseStaticChannelOutput_Terminal;
+
+class TerminalViewer extends StatefulWidget {
+  final ViewerHandle viewer;
+
+  const TerminalViewer({super.key, required this.viewer});
+
+  @override
+  TerminalViewerState createState() {
+    return TerminalViewerState();
+  }
+}
+
+class TerminalViewerState extends State<TerminalViewer> {
+  final Terminal terminal = Terminal();
+  final controller = TerminalController();
+
+  StreamSubscription<SseStaticChannelOutput>? subscription;
+
+  @override
+  void initState() {
+    super.initState();
+
+    terminal.onOutput = (data) {
+      widget.viewer.sendStaticChannelEvents(
+        events: [
+          SseStaticChannelInput.terminal(
+            SseTerminalInput.stdIn(utf8.encode(data)),
+          ),
+        ],
+      );
+    };
+
+    widget.viewer.onStaticChannelEventEvent().listen((event) {
+      switch (event) {
+        case SseStaticChannelOutput_Terminal(:final field0):
+          switch (field0) {
+            case SseTerminalOutput_StdOut(:final field0):
+              terminal.write(utf8.decode(field0));
+            case SseTerminalOutput_StdErr(:final field0):
+              terminal.write(utf8.decode(field0));
+          }
+          break;
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    controller.dispose();
+    subscription?.cancel();
+
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        const SizedBox(height: 36),
+        Expanded(
+          child: TerminalView(
+            terminal,
+            autofocus: true,
+            backgroundOpacity: 0,
+            controller: controller,
+            keyboardType: TextInputType.multiline,
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            blinkInterval: const Duration(milliseconds: 600),
+          ),
+        ),
+      ],
+    );
+  }
+}

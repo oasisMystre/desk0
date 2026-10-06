@@ -8,7 +8,7 @@ use winit::{dpi::PhysicalSize, event_loop::EventLoop};
 
 use crate::{
   app::Desk0App,
-  viewer::{Desk0Viewer, Desk0ViewerConfig},
+  viewer::{Desk0Viewer, Desk0ViewerConfig, Desk0ViewerOutput},
 };
 
 mod app;
@@ -51,7 +51,12 @@ fn main() -> anyhow::Result<()> {
 
   let (output_event_sender, mut output_event_receiver) = output_channel(1000);
 
-  let mut viewer = Desk0Viewer::with_channel(
+  let rt = tokio::runtime::Builder::new_multi_thread()
+    .enable_all()
+    .build()?;
+
+  let mut viewer = Desk0Viewer::new(
+    rt,
     Desk0ViewerConfig {
       token: &args.token,
       endpoint: &args.endpoint,
@@ -64,15 +69,12 @@ fn main() -> anyhow::Result<()> {
         None
       },
     },
-    output_event_sender,
-    |_| {},
-    |_| {}
+    Desk0ViewerOutput::Channel {
+      clipboard_event_sender: None,
+      static_channel_event_sender: None,
+      rdp_output_event_sender: output_event_sender,
+    },
   )?;
-
-  let rt = tokio::runtime::Builder::new_multi_thread()
-    .enable_all()
-    .build()?;
-  viewer.run::<fn(RdpOutputEvent)>(rt, None)?;
 
   let event_loop = EventLoop::<RdpOutputEvent>::with_user_event().build()?;
   let proxy = event_loop.create_proxy();

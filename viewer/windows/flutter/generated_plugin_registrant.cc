@@ -9,7 +9,6 @@
 #include <flutter_custom_cursor/flutter_custom_cursor_plugin.h>
 #include <irondash_engine_context/irondash_engine_context_plugin_c_api.h>
 #include <multiview_desktop/multi_view_desktop_plugin.h>
-#include <texture_rgba_renderer/texture_rgba_renderer_plugin_c_api.h>
 
 void RegisterPlugins(flutter::PluginRegistry* registry) {
   FlutterCustomCursorPluginRegisterWithRegistrar(
@@ -18,6 +17,4 @@ void RegisterPlugins(flutter::PluginRegistry* registry) {
       registry->GetRegistrarForPlugin("IrondashEngineContextPluginCApi"));
   MultiViewDesktopPluginRegisterWithRegistrar(
       registry->GetRegistrarForPlugin("MultiViewDesktopPlugin"));
-  TextureRgbaRendererPluginCApiRegisterWithRegistrar(
-      registry->GetRegistrarForPlugin("TextureRgbaRendererPluginCApi"));
 }

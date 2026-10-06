@@ -120,8 +120,6 @@ pub enum SseOutputEvent {
   },
   WindowingOrders(Vec<u8>),
   MonitorLayout(Vec<SseMonitor>),
-  Clipboard(SseClipboardEvent),
-  StaticChannel(SseStaticChannelOutput),
   TerminatedError(String),
   TerminatedSuccess(SseDisconnectReason),
   ConnectionFailure(String),

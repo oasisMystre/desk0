@@ -30,7 +30,6 @@ import '../../../ffi/types.dart'
         SseOutputEvent,
         SseOutputEvent_AutoReconnected,
         SseOutputEvent_AutoReconnecting,
-        SseOutputEvent_Clipboard,
         SseOutputEvent_Connected,
         SseOutputEvent_ConnectionFailure,
         SseOutputEvent_Ignored,
@@ -46,16 +45,10 @@ import '../../../ffi/types.dart'
         SseOutputEvent_WindowingOrders;
 
 class DeviceViewer extends StatefulWidget {
-  final String token;
-  final String endpoint;
   final SseDesktopSize size;
+  final ViewerHandle viewer;
 
-  const DeviceViewer({
-    super.key,
-    required this.endpoint,
-    required this.token,
-    required this.size,
-  });
+  const DeviceViewer({super.key, required this.viewer, required this.size});
 
   @override
   DeviceViewerState createState() {
@@ -67,8 +60,6 @@ class DeviceViewerState extends State<DeviceViewer> {
   int? textureId;
   late final DisplayState displayState;
   StreamSubscription<SseOutputEvent>? viewerSubscription;
-
-  late final ViewerHandle viewer;
 
   String? connectionMessage;
   ConnectionPhase phase = ConnectionPhase.connecting;
@@ -82,20 +73,12 @@ class DeviceViewerState extends State<DeviceViewer> {
     );
     displayState = DisplayState(width: size.width, height: size.height);
 
-    final uri = Uri.parse(widget.endpoint);
-
-    viewer = ViewerHandle(
-      size: size,
-      token: widget.token,
-      endpoint: uri.path == '/ws' ? widget.endpoint : '${uri.host}/ws',
-    );
-
     init();
   }
 
   Future<void> init() async {
     final engineHandle = await EngineContext.instance.getEngineHandle();
-    final textureId = viewer.createTexture(engineHandle: engineHandle);
+    final textureId = widget.viewer.createTexture(engineHandle: engineHandle);
 
     if (!mounted) {
       return;
@@ -105,7 +88,7 @@ class DeviceViewerState extends State<DeviceViewer> {
       this.textureId = textureId;
     });
 
-    viewerSubscription = viewer.connect().listen(
+    viewerSubscription = widget.viewer.onRdpEvent().listen(
       onEvent,
       onError: (Object error, _) {
         setPhase(ConnectionPhase.failed, error.toString());
@@ -127,7 +110,6 @@ class DeviceViewerState extends State<DeviceViewer> {
   @override
   void dispose() {
     viewerSubscription?.cancel();
-    viewer.dispose();
 
     super.dispose();
   }
@@ -195,8 +177,6 @@ class DeviceViewerState extends State<DeviceViewer> {
         break;
       case SseOutputEvent_MonitorLayout():
         break;
-      case SseOutputEvent_Clipboard():
-        break;
       case SseOutputEvent_WindowingOrders():
         break;
       case SseOutputEvent_Ignored():
@@ -217,7 +197,7 @@ class DeviceViewerState extends State<DeviceViewer> {
       final height = displayState.height.value;
 
       return KeyboardListener(
-        viewer: viewer,
+        viewer: widget.viewer,
         child: LayoutBuilder(
           builder: (context, constraints) {
             final frameAspectRatio = width / height;
@@ -231,7 +211,7 @@ class DeviceViewerState extends State<DeviceViewer> {
 
                   return MouseListener(
                     cursor: cursor,
-                    viewer: viewer,
+                    viewer: widget.viewer,
                     scale: Point(scaleX, scaleY),
                     child: Texture(textureId: id),
                   );

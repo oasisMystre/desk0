@@ -134,7 +134,7 @@ pub fn init_tracing(
 
   #[cfg(not(feature = "opentelemetry"))]
   {
-    tracing_log::LogTracer::init().unwrap();
+    tracing_log::LogTracer::init()?;
 
     let filter_otel = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
 

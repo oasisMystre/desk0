@@ -3,7 +3,6 @@ use std::{
   thread,
 };
 
-use anyhow::Context;
 use copypaste::{CliprdrHandler, cliprdr::types::clipboard_event::ClipboardEvent};
 use ironrdp::{
   client::{
@@ -16,7 +15,7 @@ use ironrdp::{
   pdu::rdp::capability_sets::MajorPlatformType,
 };
 use pdu::static_channel::StaticChannelOutput;
-use tokio::sync::mpsc::error::TrySendError;
+use tokio::sync::mpsc::{UnboundedSender, error::TrySendError};
 use tokio_util::sync::CancellationToken;
 use winit::dpi::PhysicalSize;
 
@@ -36,6 +35,23 @@ pub enum Desk0ViewerError {
   Display(#[from] display_info::error::DIError),
 }
 
+#[derive(Clone)]
+pub enum Desk0ViewerOutput {
+  Callback {
+    rdp_output_event_callback:
+      Arc<Mutex<Option<Arc<dyn Fn(RdpOutputEvent) + 'static + Sync + Send>>>>,
+    clipboard_event_callback:
+      Arc<Mutex<Option<Arc<dyn Fn(ClipboardEvent) + 'static + Sync + Send>>>>,
+    static_channel_event_callback:
+      Arc<Mutex<Option<Arc<dyn Fn(StaticChannelOutput) + Sync + Send + 'static>>>>,
+  },
+  Channel {
+    rdp_output_event_sender: OutputEventSender,
+    clipboard_event_sender: Option<UnboundedSender<ClipboardEvent>>,
+    static_channel_event_sender: Option<UnboundedSender<StaticChannelOutput>>,
+  },
+}
+
 pub struct Desk0ViewerConfig<'a> {
   pub token: &'a str,
   pub endpoint: &'a str,
@@ -43,74 +59,158 @@ pub struct Desk0ViewerConfig<'a> {
 }
 
 pub struct Desk0Viewer {
+  output: Desk0ViewerOutput,
   client: Option<RdpClient>,
+
   pub database: Database,
   pub input: RdpInputSender,
   pub thread: Option<thread::JoinHandle<()>>,
   _cancellation_token: CancellationToken,
 }
 
+impl Desk0ViewerOutput {
+  pub fn callback() -> Self {
+    Self::Callback {
+      rdp_output_event_callback: Arc::new(Mutex::new(None)),
+      clipboard_event_callback: Arc::new(Mutex::new(None)),
+      static_channel_event_callback: Arc::new(Mutex::new(None)),
+    }
+  }
+
+  pub fn send_rdp_output_event(&self, event: RdpOutputEvent) {
+    match self {
+      Self::Callback {
+        rdp_output_event_callback,
+        ..
+      } => {
+        let callback = rdp_output_event_callback.lock().unwrap().clone();
+
+        if let Some(callback) = callback {
+          (callback)(event);
+        }
+      }
+      Desk0ViewerOutput::Channel {
+        rdp_output_event_sender,
+        ..
+      } => {
+        let _ = rdp_output_event_sender.send(event);
+      }
+    }
+  }
+
+  pub fn send_clipboard_event(&self, event: ClipboardEvent) {
+    match self {
+      Self::Callback {
+        clipboard_event_callback,
+        ..
+      } => {
+        let callback = clipboard_event_callback.lock().unwrap().clone();
+
+        if let Some(callback) = callback {
+          (callback)(event);
+        }
+      }
+      Self::Channel {
+        clipboard_event_sender,
+        ..
+      } => {
+        if let Some(sender) = clipboard_event_sender {
+          let _ = sender.send(event);
+        };
+      }
+    }
+  }
+
+  pub fn send_static_output_event(&self, event: StaticChannelOutput) {
+    match self {
+      Self::Callback {
+        static_channel_event_callback,
+        ..
+      } => {
+        let callback = static_channel_event_callback.lock().unwrap().clone();
+
+        if let Some(callback) = callback {
+          (callback)(event);
+        }
+      }
+      Self::Channel {
+        static_channel_event_sender,
+        ..
+      } => {
+        if let Some(sender) = static_channel_event_sender {
+          let _ = sender.send(event);
+        };
+      }
+    }
+  }
+
+  pub fn set_rdp_output_event_callback<F>(&self, callback: F)
+  where
+    F: Fn(RdpOutputEvent) + Send + Sync + 'static,
+  {
+    match self {
+      Desk0ViewerOutput::Callback {
+        rdp_output_event_callback,
+        ..
+      } => {
+        *rdp_output_event_callback.lock().unwrap() = Some(Arc::new(callback));
+      }
+      Desk0ViewerOutput::Channel { .. } => unimplemented!(),
+    }
+  }
+
+  pub fn set_clipboard_event_callback<F>(&self, callback: F)
+  where
+    F: Fn(ClipboardEvent) + Send + Sync + 'static,
+  {
+    match self {
+      Desk0ViewerOutput::Callback {
+        clipboard_event_callback,
+        ..
+      } => {
+        *clipboard_event_callback.lock().unwrap() = Some(Arc::new(callback));
+      }
+      Desk0ViewerOutput::Channel { .. } => unimplemented!(),
+    }
+  }
+
+  pub fn set_static_channel_event_callback<F>(&self, callback: F)
+  where
+    F: Fn(StaticChannelOutput) + Send + Sync + 'static,
+  {
+    match self {
+      Desk0ViewerOutput::Callback {
+        static_channel_event_callback,
+        ..
+      } => {
+        *static_channel_event_callback.lock().unwrap() = Some(Arc::new(callback));
+      }
+      Desk0ViewerOutput::Channel { .. } => unimplemented!(),
+    }
+  }
+}
+
 impl Desk0Viewer {
   pub const CLIENT_NAME: &str = "Desk0 Viewer";
   pub const THREAD_NAME: &str = "desk0-rdp-viewer";
 
-  #[allow(dead_code)]
-  pub fn with_callback<'a, T, U, V>(
+  pub fn new<'a>(
+    rt: tokio::runtime::Runtime,
     config: Desk0ViewerConfig<'a>,
-    rdp_output_event_callback: T,
-    clipboard_event_callback: U,
-    static_channel_callback: V,
-  ) -> anyhow::Result<Self, Desk0ViewerError>
-  where
-    T: Fn(RdpOutputEvent) + 'static + Sync + Send,
-    U: Fn(ClipboardEvent) + 'static + Sync + Send,
-    V: Fn(StaticChannelOutput) + Sync + Send + Clone + 'static,
-  {
-    let rt = tokio::runtime::Builder::new_multi_thread()
-      .enable_all()
-      .build()
-      .context("unable to create tokio runtime")?;
-
+    output: Desk0ViewerOutput,
+  ) -> anyhow::Result<Self, Desk0ViewerError> {
     let (output_event_sender, output_event_receiver) = output_channel(32);
-    let mut this = Self::build(
-      config,
-      output_event_sender,
-      clipboard_event_callback,
-      static_channel_callback,
-    )?;
-    this.run(rt, Some((rdp_output_event_callback, output_event_receiver)))?;
+    let mut this = Self::new_inner(config, output, output_event_sender)?;
+    this.run(rt, output_event_receiver)?;
 
     Ok(this)
   }
 
-  pub fn with_channel<'a, T, U>(
+  fn new_inner<'a>(
     config: Desk0ViewerConfig<'a>,
-    output_event_sender: OutputEventSender,
-    clipboard_event_callback: T,
-    static_channel_callback: U,
-  ) -> anyhow::Result<Self, Desk0ViewerError>
-  where
-    T: Fn(ClipboardEvent) + Sync + Send + 'static,
-    U: Fn(StaticChannelOutput) + Sync + Send + Clone + 'static,
-  {
-    Self::build(
-      config,
-      output_event_sender,
-      clipboard_event_callback,
-      static_channel_callback,
-    )
-  }
-
-  fn build<'a, T, U>(
-    config: Desk0ViewerConfig<'a>,
-    output_event_sender: OutputEventSender,
-    clipboard_event_callback: T,
-    static_channel_callback: U,
-  ) -> anyhow::Result<Self, Desk0ViewerError>
-  where
-    T: Fn(ClipboardEvent) + Sync + Send + 'static,
-    U: Fn(StaticChannelOutput) + Sync + Send + Clone + 'static,
-  {
+    output: Desk0ViewerOutput,
+    rdp_output_event_sender: OutputEventSender,
+  ) -> anyhow::Result<Self, Desk0ViewerError> {
     let mut endpoint =
       url::Url::parse(config.endpoint).map_err(Desk0ViewerError::InvalidEndpoint)?;
     if endpoint.scheme() == "http" {
@@ -119,12 +219,17 @@ impl Desk0Viewer {
       endpoint.set_scheme("wss").ok();
     }
 
-    let clipboard_handler = CliprdrHandler::with_callback(clipboard_event_callback);
+    let clipboard_handler = CliprdrHandler::with_callback({
+      let output = output.clone();
+
+      move |event| {
+        output.send_clipboard_event(event);
+      }
+    });
+
     let clipboard_handler = Arc::new(Mutex::new(clipboard_handler));
 
     let destination = Destination::new("127.0.0.1/0").unwrap();
-
-    let static_channel_callback = Arc::new(static_channel_callback);
 
     let mut config_builder = ConfigBuilder::new()
       .with_destination(destination)
@@ -158,7 +263,14 @@ impl Desk0Viewer {
         }
       })
       .with_static_channel({
-        move |_| Some(Desk0StaticChannel::new(static_channel_callback.clone()))
+        let output = output.clone();
+        move |_| {
+          let output = output.clone();
+
+          Some(Desk0StaticChannel::new(move |event| {
+            output.send_static_output_event(event);
+          }))
+        }
       });
 
     if let Some(desktop_size) = config.desktop_size {
@@ -171,7 +283,7 @@ impl Desk0Viewer {
       .build()
       .map_err(Desk0ViewerError::Configuration)?;
 
-    let client = RdpClient::new(config, output_event_sender).with_desktop_updates();
+    let client = RdpClient::new(config, rdp_output_event_sender).with_desktop_updates();
     let input = client.input_sender();
 
     let mut clipboard_handler = clipboard_handler.lock().unwrap();
@@ -180,6 +292,7 @@ impl Desk0Viewer {
 
     Ok(Self {
       input,
+      output,
       thread: None,
       client: Some(client),
       database: Database::new(),
@@ -187,68 +300,73 @@ impl Desk0Viewer {
     })
   }
 
-  pub fn run<T>(
+  pub fn run(
     &mut self,
     rt: tokio::runtime::Runtime,
-    callback: Option<(T, OutputEventReceiver)>,
-  ) -> anyhow::Result<(), Desk0ViewerError>
-  where
-    T: Fn(RdpOutputEvent) + 'static + Send + Sync,
-  {
+    mut rdp_output_event_receiver: OutputEventReceiver,
+  ) -> anyhow::Result<(), Desk0ViewerError> {
     let client = self.client.take();
     if let Some(client) = client {
-      let thread = if let Some(callback) = callback {
-        thread::Builder::new()
-          .name(Self::THREAD_NAME.into())
-          .spawn({
-            let input = self.input.clone();
-            move || {
-              rt.block_on(async move {
-                let (callback, mut receiver) = callback;
-                let runner = client.run();
-                tokio::pin!(runner);
+      let thread = thread::Builder::new()
+        .name(Self::THREAD_NAME.into())
+        .spawn({
+          let input = self.input.clone();
+          let output = self.output.clone();
 
-                loop {
-                  tokio::select! {
-                    biased;
-                    event = receiver.recv() => {
-                        match event {
-                            Some(event) => callback(event),
-                            None => break,
-                        }
-                    }
-                    _ = &mut runner => {},
+          move || {
+            rt.block_on(async move {
+              let runner = client.run();
+              tokio::pin!(runner);
+
+              loop {
+                tokio::select! {
+                  biased;
+                  event = rdp_output_event_receiver.recv() => {
+                      match event {
+                          Some(event) => output.send_rdp_output_event(event),
+                          None => break,
+                      }
                   }
+                  _ = &mut runner => {},
                 }
+              }
 
-                tracing::info!("stopping thread");
+              tracing::info!("stopping thread");
 
-                drop(input);
-              });
-            }
-          })
-          .map_err(|error| {
-            tracing::error!(?error, "input closed");
-            Desk0ViewerError::InputClosed
-          })?
-      } else {
-        let cancellation_token = self._cancellation_token.clone();
-        thread::spawn(move || {
-          rt.block_on(async {
-            tokio::select! {
-                result = client.run() => result,
-                _ = cancellation_token.cancelled() => {
-                    return;
-                }
-            }
-          });
+              drop(input);
+            });
+          }
         })
-      };
+        .map_err(|error| {
+          tracing::error!(?error, "input closed");
+          Desk0ViewerError::InputClosed
+        })?;
 
       self.thread = Some(thread);
     }
 
     Ok(())
+  }
+
+  pub fn set_rdp_output_event_callback<F>(&self, callback: F)
+  where
+    F: Fn(RdpOutputEvent) + Send + Sync + 'static,
+  {
+    self.output.set_rdp_output_event_callback(callback);
+  }
+
+  pub fn set_clipboard_event_callback<F>(&self, callback: F)
+  where
+    F: Fn(ClipboardEvent) + Send + Sync + 'static,
+  {
+    self.output.set_clipboard_event_callback(callback);
+  }
+
+  pub fn set_static_channel_event_callback<F>(&self, callback: F)
+  where
+    F: Fn(StaticChannelOutput) + Send + Sync + 'static,
+  {
+    self.output.set_static_channel_event_callback(callback);
   }
 
   fn platform() -> MajorPlatformType {
