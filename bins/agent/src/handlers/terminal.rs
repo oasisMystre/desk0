@@ -33,7 +33,11 @@ impl Terminal {
 
   fn shell() -> Command {
     #[cfg(target_os = "windows")]
-    let command = Command::new("cmd.exe").arg("/Q");
+    let command = {
+      let mut command = Command::new("cmd.exe");
+      command.arg("/Q");
+      command
+    };
 
     #[cfg(target_os = "macos")]
     let command = {
