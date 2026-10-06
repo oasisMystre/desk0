@@ -1,11 +1,13 @@
 import 'dart:math' show Point;
 import 'dart:async' show StreamSubscription;
 
+import 'package:flutter/foundation.dart';
 import 'package:get/get.dart' show Obx;
-import 'package:texture_rgba_renderer/texture_rgba_renderer.dart'
-    show TextureRgbaRenderer;
+import 'package:irondash_engine_context/irondash_engine_context.dart'
+    show EngineContext;
 import 'package:flutter/material.dart'
     show CircularProgressIndicator, Positioned, Stack, StackFit;
+
 import 'package:flutter/cupertino.dart'
     show
         AspectRatio,
@@ -15,8 +17,7 @@ import 'package:flutter/cupertino.dart'
         State,
         StatefulWidget,
         Texture,
-        Widget,
-        WidgetsBinding;
+        Widget;
 
 import 'mouse.dart' show MouseListener;
 import 'keyboard.dart' show KeyboardListener;
@@ -32,15 +33,14 @@ import '../../../ffi/types.dart'
         SseOutputEvent_Clipboard,
         SseOutputEvent_Connected,
         SseOutputEvent_ConnectionFailure,
-        SseOutputEvent_DesktopUpdate,
         SseOutputEvent_Ignored,
-        SseOutputEvent_Image,
         SseOutputEvent_LoginComplete,
         SseOutputEvent_MonitorLayout,
         SseOutputEvent_PointerBitmap,
         SseOutputEvent_PointerDefault,
         SseOutputEvent_PointerHidden,
         SseOutputEvent_PointerPosition,
+        SseOutputEvent_Resize,
         SseOutputEvent_TerminatedError,
         SseOutputEvent_TerminatedSuccess,
         SseOutputEvent_WindowingOrders;
@@ -66,7 +66,6 @@ class DeviceViewer extends StatefulWidget {
 class DeviceViewerState extends State<DeviceViewer> {
   int? textureId;
   late final DisplayState displayState;
-  late final TextureRgbaRenderer textureRgbaRenderer;
   StreamSubscription<SseOutputEvent>? viewerSubscription;
 
   late final ViewerHandle viewer;
@@ -77,17 +76,16 @@ class DeviceViewerState extends State<DeviceViewer> {
   @override
   void initState() {
     super.initState();
-    textureRgbaRenderer = TextureRgbaRenderer();
-    displayState = DisplayState(
-      frameBufferWidth: widget.size.width,
-      frameBufferHeight: widget.size.height,
-      textureRgbaRenderer: textureRgbaRenderer,
+    final size = SseDesktopSize(
+      width: DisplayState.alignDown(widget.size.width, 64),
+      height: DisplayState.alignDown(widget.size.height, 2),
     );
+    displayState = DisplayState(width: size.width, height: size.height);
 
     final uri = Uri.parse(widget.endpoint);
 
     viewer = ViewerHandle(
-      size: widget.size,
+      size: size,
       token: widget.token,
       endpoint: uri.path == '/ws' ? widget.endpoint : '${uri.host}/ws',
     );
@@ -96,13 +94,16 @@ class DeviceViewerState extends State<DeviceViewer> {
   }
 
   Future<void> init() async {
-    textureId = await textureRgbaRenderer.createTexture(0);
+    final engineHandle = await EngineContext.instance.getEngineHandle();
+    final textureId = viewer.createTexture(engineHandle: engineHandle);
 
     if (!mounted) {
       return;
     }
 
-    setState(() {});
+    setState(() {
+      this.textureId = textureId;
+    });
 
     viewerSubscription = viewer.connect().listen(
       onEvent,
@@ -127,20 +128,22 @@ class DeviceViewerState extends State<DeviceViewer> {
   void dispose() {
     viewerSubscription?.cancel();
     viewer.dispose();
-    textureRgbaRenderer.closeTexture(0);
 
     super.dispose();
   }
 
   void onEvent(SseOutputEvent event) {
     switch (event) {
-      case SseOutputEvent_Image(:final width, :final height, :final buffer):
-        displayState.onImage(width: width, height: height, buffer: buffer);
+      case SseOutputEvent_Resize(:final width, :final height):
+        displayState.resize(width, height);
         break;
       case SseOutputEvent_PointerHidden():
+        debugPrint("pointer hide");
         displayState.hideCursor();
+
         break;
       case SseOutputEvent_PointerDefault():
+        debugPrint("pointer default");
         displayState.defaultCursor();
         break;
       case SseOutputEvent_PointerBitmap(
@@ -150,25 +153,16 @@ class DeviceViewerState extends State<DeviceViewer> {
         :final hotspotX,
         :final hotspotY,
       ):
+        debugPrint("pointer bitmap");
+        debugPrint(
+          'Received cursor: ${width}x$height, ${bitmapData.length} bytes',
+        );
         displayState.onCursorBitmap(
           width: width,
           height: height,
           bitmapData: bitmapData,
           hotspotX: hotspotX,
           hotspotY: hotspotY,
-        );
-        break;
-      case SseOutputEvent_DesktopUpdate(
-        :final width,
-        :final height,
-        :final buffer,
-        :final region,
-      ):
-        displayState.onDesktopUpdate(
-          width: width,
-          height: height,
-          buffer: buffer,
-          region: region,
         );
         break;
       case SseOutputEvent_TerminatedError(:final field0):
@@ -219,39 +213,29 @@ class DeviceViewerState extends State<DeviceViewer> {
 
     final content = Obx(() {
       final cursor = displayState.cursor.value;
-      final frameWidth = displayState.frameBufferWidth.value;
-      final frameHeight = displayState.frameBufferHeight.value;
+      final width = displayState.width.value;
+      final height = displayState.height.value;
 
       return KeyboardListener(
         viewer: viewer,
         child: LayoutBuilder(
           builder: (context, constraints) {
-            if (phase == ConnectionPhase.connected) {
-              WidgetsBinding.instance.addPostFrameCallback((_) {
-                if (mounted) {
-                  displayState.onResize(viewer, context, constraints);
-                }
-              });
-            }
+            final frameAspectRatio = width / height;
 
-            final frameAspectRatio = frameWidth / frameHeight;
+            return AspectRatio(
+              aspectRatio: frameAspectRatio,
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final scaleX = width / constraints.maxWidth;
+                  final scaleY = height / constraints.maxHeight;
 
-            return Center(
-              child: AspectRatio(
-                aspectRatio: frameAspectRatio,
-                child: LayoutBuilder(
-                  builder: (context, constraints) {
-                    final scaleX = frameWidth / constraints.maxWidth;
-                    final scaleY = frameHeight / constraints.maxHeight;
-
-                    return MouseListener(
-                      cursor: cursor,
-                      viewer: viewer,
-                      scale: Point(scaleX, scaleY),
-                      child: Texture(textureId: id),
-                    );
-                  },
-                ),
+                  return MouseListener(
+                    cursor: cursor,
+                    viewer: viewer,
+                    scale: Point(scaleX, scaleY),
+                    child: Texture(textureId: id),
+                  );
+                },
               ),
             );
           },

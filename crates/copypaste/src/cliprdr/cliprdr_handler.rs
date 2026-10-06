@@ -17,7 +17,7 @@ use ironrdp::cliprdr::{
 #[cfg(feature = "server")]
 use ironrdp::server::{CliprdrServerFactory, ServerEventSender};
 #[cfg(not(feature = "server"))]
-use ironrdp_client::rdp::RdpInputSender;
+use ironrdp::client::rdp::RdpInputSender;
 #[cfg(not(feature = "server"))]
 use tokio::sync::mpsc::error::TrySendError;
 #[cfg(feature = "server")]
@@ -41,7 +41,7 @@ pub struct CliprdrHandler {
   sender: Arc<Mutex<Sender>>,
   watcher: ClipboardWatcherHandler,
   download_state: Arc<Mutex<DownloadState>>,
-  callback: Option<Arc<Box<dyn Fn(ClipboardEvent) + Send + Sync>>>,
+  callback: Option<Arc<dyn Fn(ClipboardEvent) + Send + Sync>>,
 }
 
 impl CliprdrBackendFactory for CliprdrHandler {
@@ -86,9 +86,7 @@ impl CliprdrHandler {
 }
 
 impl CliprdrHandler {
-  pub fn new_inner(
-    callback: Option<Arc<Box<dyn Fn(ClipboardEvent) + Send + Sync + 'static>>>,
-  ) -> Self {
+  pub fn new_inner(callback: Option<Arc<dyn Fn(ClipboardEvent) + Send + Sync + 'static>>) -> Self {
     let sender: Arc<Mutex<Sender>> = Arc::new(Mutex::new(None));
     let callback_sender = Arc::clone(&sender);
 
@@ -113,7 +111,7 @@ impl CliprdrHandler {
   where
     T: Fn(ClipboardEvent) + Send + Sync + 'static,
   {
-    Self::new_inner(Some(Arc::new(Box::new(callback))))
+    Self::new_inner(Some(Arc::new(callback)))
   }
 
   #[cfg(feature = "server")]

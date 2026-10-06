@@ -100,6 +100,7 @@ impl DeviceApi {
     Ok(response)
   }
 
+  #[allow(dead_code)]
   pub async fn update_device(
     &self,
     device_id: &str,

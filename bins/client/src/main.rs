@@ -13,6 +13,7 @@ use crate::{
 
 mod app;
 mod keymap;
+mod static_channel;
 mod viewer;
 
 /// Desk0 RDP Viewer
@@ -65,6 +66,7 @@ fn main() -> anyhow::Result<()> {
     },
     output_event_sender,
     |_| {},
+    |_| {}
   )?;
 
   let rt = tokio::runtime::Builder::new_multi_thread()

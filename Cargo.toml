@@ -10,6 +10,7 @@ panic = "abort"
 
 [workspace.dependencies]
 flow = { path = "crates/flow" }
+pdu = { path = "crates/pdu" }
 shared = { path = "crates/shared" }
 copypaste = { path = "crates/copypaste" }
 rs_capture = { path = "../../notmine/rs-capture", features = ["metadata"] }
@@ -36,8 +37,7 @@ uuid = { version = "1.10", features = ["v4", "serde"] }
 diesel-async = { version = "0.9.2", features = ["postgres"] }
 ironrdp-rdcleanpath = { git = "https://github.com/Devolutions/IronRDP.git" }
 ironrdp-cliprdr-format = { git = "https://github.com/Devolutions/IronRDP.git" }
-ironrdp = { git = "https://github.com/Devolutions/IronRDP.git", features = ["acceptor", "cliprdr"] }
-ironrdp-client = { git = "https://github.com/Devolutions/IronRDP.git", features = ["rustls", "clipboard"] }
+ironrdp = { git = "https://github.com/Devolutions/IronRDP.git" }
 
 tokio-stream = "0.1"
 tokio-util = { version = "0.7.19", features = ["full", "codec", "io"] }

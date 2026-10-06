@@ -4,6 +4,7 @@
 
 list(APPEND FLUTTER_PLUGIN_LIST
   flutter_custom_cursor
+  irondash_engine_context
   multiview_desktop
   texture_rgba_renderer
 )

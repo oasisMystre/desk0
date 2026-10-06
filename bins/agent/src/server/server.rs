@@ -18,7 +18,7 @@ use tokio_rustls::{
 use tokio_util::sync::CancellationToken;
 
 use crate::{
-  handlers::{display::DisplayHandler, input::InputHandler},
+  handlers::{channel::Desk0StaticChannelFactory, display::DisplayHandler, input::InputHandler},
   server::traits::Server,
 };
 
@@ -139,7 +139,8 @@ impl AgentServer {
       .with_tls(tls_acceptor)
       .with_input_handler(input_handler)
       .with_display_handler(display_handler.clone())
-      .with_cliprdr_factory(Some(Box::new(CliprdrHandler::new())));
+      .with_cliprdr_factory(Some(Box::new(CliprdrHandler::new())))
+      .with_static_channel_factory(Box::new(Desk0StaticChannelFactory));
 
     let mut server = server.build();
 

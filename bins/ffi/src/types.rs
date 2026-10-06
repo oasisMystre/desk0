@@ -1,11 +1,8 @@
 use copypaste::cliprdr::types::clipboard_event::{ClipboardEvent, FileDownloadStatus};
-use flutter_rust_bridge::frb;
 use ironrdp::{
   client::rdp::{AutoReconnectDecision, RdpOutputEvent},
-  pdu::geometry::Rectangle,
   session::GracefulDisconnectReason,
 };
-use std::ffi::c_char;
 
 #[derive(Clone, Copy)]
 pub enum SseMouseButton {
@@ -36,6 +33,121 @@ pub enum SseInputEvent {
     code: u8,
     extended: bool,
   },
+}
+
+#[repr(C)]
+#[derive(Clone)]
+pub enum SseTerminalInput {
+  StdIn(Vec<u8>),
+  Output,
+}
+
+#[repr(C)]
+#[derive(Clone)]
+pub enum SseTerminalOutput {
+  StdOut(Vec<u8>),
+  StdErr(Vec<u8>),
+}
+
+#[repr(C)]
+#[derive(Clone)]
+pub enum SseStaticChannelInput {
+  Terminal(SseTerminalInput),
+}
+
+#[repr(C)]
+#[derive(Clone)]
+pub enum SseStaticChannelOutput {
+  Terminal(SseTerminalOutput),
+}
+
+#[repr(C)]
+#[derive(Clone)]
+pub enum SseDisconnectReason {
+  UserInitiated,
+  ServerInitiated,
+  Other(String),
+}
+
+#[repr(C)]
+#[derive(Clone)]
+pub enum SseFileDownloadStatus {
+  Download {
+    id: u32,
+    total_size: u64,
+  },
+  Progress {
+    id: u32,
+    total_size: u64,
+    received: u64,
+  },
+  Completed {
+    id: u32,
+  },
+}
+
+#[repr(C)]
+#[derive(Clone)]
+pub enum SseClipboardEvent {
+  Text,
+  Image,
+  Html,
+  RichText,
+  File(SseFileDownloadStatus),
+}
+
+#[repr(C)]
+#[derive(Clone)]
+pub enum SseOutputEvent {
+  Connected,
+  LoginComplete,
+  PointerHidden,
+  PointerDefault,
+  PointerPosition {
+    x: u16,
+    y: u16,
+  },
+  PointerBitmap {
+    width: u16,
+    height: u16,
+    hotspot_x: u16,
+    hotspot_y: u16,
+    bitmap_data: Vec<u8>,
+  },
+  Resize {
+    width: u16,
+    height: u16,
+  },
+  WindowingOrders(Vec<u8>),
+  MonitorLayout(Vec<SseMonitor>),
+  Clipboard(SseClipboardEvent),
+  StaticChannel(SseStaticChannelOutput),
+  TerminatedError(String),
+  TerminatedSuccess(SseDisconnectReason),
+  ConnectionFailure(String),
+  AutoReconnecting {
+    disconnect_reason: u32,
+    attempt: u32,
+    maximum_attempts: u32,
+  },
+  AutoReconnected,
+  Ignored,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct SseDesktopSize {
+  pub width: u16,
+  pub height: u16,
+}
+
+#[derive(Clone)]
+pub struct SseMonitor {
+  pub left: i32,
+  pub top: i32,
+  pub right: i32,
+  pub bottom: i32,
+  pub flags: u32,
 }
 
 impl Into<ironrdp::input::MouseButton> for SseMouseButton {
@@ -79,136 +191,40 @@ impl Into<ironrdp::input::Operation> for SseInputEvent {
   }
 }
 
-#[repr(C)]
-#[derive()]
-pub enum OutputEvent {
-  Terminated,
-  ConnectionFailure(*const c_char),
-  Image {
-    width: u16,
-    height: u16,
-    buffer_len: usize,
-    buffer: *mut u32,
-  },
-  PointerHidden,
-  PointerDefault,
-  PointerPosition {
-    x: u16,
-    y: u16,
-  },
-  PointerBitmap {
-    width: u16,
-    height: u16,
-    bitmap_data_len: usize,
-    bitmap_data: *mut u8,
-    hotspot_x: u16,
-    hotspot_y: u16,
-  },
+impl Into<pdu::terminal::TerminalInput> for SseTerminalInput {
+  fn into(self) -> pdu::terminal::TerminalInput {
+    match self {
+      SseTerminalInput::StdIn(data) => pdu::terminal::TerminalInput::StdIn(data),
+      SseTerminalInput::Output => pdu::terminal::TerminalInput::Output,
+    }
+  }
 }
 
-#[derive(Clone)]
-pub enum SseDisconnectReason {
-  UserInitiated,
-  ServerInitiated,
-  Other(String),
+impl Into<pdu::static_channel::StaticChannelInput> for SseStaticChannelInput {
+  fn into(self) -> pdu::static_channel::StaticChannelInput {
+    match self {
+      SseStaticChannelInput::Terminal(value) => {
+        pdu::static_channel::StaticChannelInput::Terminal(value.into())
+      }
+    }
+  }
 }
 
-#[repr(C)]
-#[derive(Clone)]
-pub enum SseFileDownloadStatus {
-  Download {
-    id: u32,
-    total_size: u64,
-  },
-  Progress {
-    id: u32,
-    total_size: u64,
-    received: u64,
-  },
-  Completed {
-    id: u32,
-  },
+impl From<pdu::terminal::TerminalOutput> for SseTerminalOutput {
+  fn from(value: pdu::terminal::TerminalOutput) -> Self {
+    match value {
+      pdu::terminal::TerminalOutput::StdOut(data) => Self::StdOut(data),
+      pdu::terminal::TerminalOutput::StdErr(data) => Self::StdErr(data),
+    }
+  }
 }
 
-#[repr(C)]
-#[derive(Clone)]
-pub enum SseClipboardEvent {
-  Text,
-  Image,
-  Html,
-  RichText,
-  File(SseFileDownloadStatus),
-}
-
-#[repr(C)]
-#[derive(Clone)]
-pub struct SseInclusizeRectangle {
-  pub left: u16,
-  pub top: u16,
-  pub right: u16,
-  pub bottom: u16,
-  pub width: u16,
-  pub height: u16,
-}
-
-#[repr(C)]
-#[derive(Clone)]
-pub enum SseOutputEvent {
-  Connected,
-  LoginComplete,
-  MonitorLayout(Vec<SseMonitor>),
-  Clipboard(SseClipboardEvent),
-  TerminatedError(String),
-  TerminatedSuccess(SseDisconnectReason),
-  ConnectionFailure(String),
-  Image {
-    width: u16,
-    height: u16,
-    buffer: Vec<u32>,
-  },
-  DesktopUpdate {
-    width: u16,
-    height: u16,
-    buffer: Vec<u32>,
-    region: SseInclusizeRectangle,
-  },
-  PointerHidden,
-  PointerDefault,
-  PointerPosition {
-    x: u16,
-    y: u16,
-  },
-  PointerBitmap {
-    width: u16,
-    height: u16,
-    bitmap_data: Vec<u8>,
-    hotspot_x: u16,
-    hotspot_y: u16,
-  },
-  WindowingOrders(Vec<u8>),
-  Ignored,
-  AutoReconnecting {
-    disconnect_reason: u32,
-    attempt: u32,
-    maximum_attempts: u32,
-  },
-  AutoReconnected,
-}
-
-#[repr(C)]
-#[derive(Clone, Copy)]
-pub struct SseDesktopSize {
-  pub width: u16,
-  pub height: u16,
-}
-
-#[derive(Clone)]
-pub struct SseMonitor {
-  pub left: i32,
-  pub top: i32,
-  pub right: i32,
-  pub bottom: i32,
-  pub flags: u32,
+impl From<pdu::static_channel::StaticChannelOutput> for SseStaticChannelOutput {
+  fn from(value: pdu::static_channel::StaticChannelOutput) -> Self {
+    match value {
+      pdu::static_channel::StaticChannelOutput::Terminal(value) => Self::Terminal(value.into()),
+    }
+  }
 }
 
 impl From<FileDownloadStatus> for SseFileDownloadStatus {
@@ -273,31 +289,6 @@ impl From<RdpOutputEvent> for SseOutputEvent {
           .collect(),
       ),
       RdpOutputEvent::LoginComplete => Self::LoginComplete,
-      RdpOutputEvent::Image {
-        buffer,
-        width,
-        height,
-      } => Self::Image {
-        buffer,
-        width: width.get(),
-        height: height.get(),
-      },
-      RdpOutputEvent::DesktopUpdate(update) => {
-        let (buffer, width, height, region) = update.into_parts();
-        Self::DesktopUpdate {
-          buffer,
-          width: width.get(),
-          height: height.get(),
-          region: SseInclusizeRectangle {
-            left: region.left,
-            top: region.top,
-            right: region.right,
-            bottom: region.bottom,
-            width: region.width(),
-            height: region.height(),
-          },
-        }
-      }
       RdpOutputEvent::PointerPosition { x, y } => Self::PointerPosition { x, y },
       RdpOutputEvent::PointerBitmap(pointer) => Self::PointerBitmap {
         width: pointer.width,
@@ -325,7 +316,9 @@ impl From<RdpOutputEvent> for SseOutputEvent {
         Ok(reason) => Self::TerminatedSuccess(reason.into()),
         Err(error) => Self::TerminatedError(error.to_string()),
       },
-      RdpOutputEvent::RailHandshake { .. }
+      RdpOutputEvent::Image { .. }
+      | RdpOutputEvent::DesktopUpdate(_)
+      | RdpOutputEvent::RailHandshake { .. }
       | RdpOutputEvent::RailDesktopSynchronized { .. }
       | RdpOutputEvent::RailPostHandshakeQueueReleased { .. }
       | RdpOutputEvent::RailExecuteResult(_)

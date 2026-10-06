@@ -4,7 +4,7 @@ use ironrdp::server::ServerEvent;
 use tokio::sync::mpsc::UnboundedSender;
 
 #[cfg(not(feature = "server"))]
-use ironrdp_client::rdp::{RdpInputEvent, RdpInputSender};
+use ironrdp::client::rdp::{RdpInputEvent, RdpInputSender};
 
 pub mod clipboard_event;
 #[cfg(any(feature = "client", feature = "server"))]

@@ -1,0 +1,9 @@
+[package]
+name = "pdu"
+version = "0.1.0"
+edition = "2024"
+
+[features]
+
+[dependencies]
+ironrdp = { workspace = true, features = ["pdu", "svc"] }

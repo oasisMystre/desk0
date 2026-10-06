@@ -12,6 +12,7 @@ flutter = []
 default = ["flutter"]
 
 [dependencies]
+pdu.workspace = true
 winit = "0.30.13"
 tracing.workspace = true
 shared = { workspace = true, features=["otel"] }
@@ -20,3 +21,6 @@ desk0-client = { path = "../client" }
 anyhow.workspace = true
 ironrdp = { workspace = true, features = ["client", "connector", "cliprdr", "input", "session", "client-clipboard", "graphics"] }
 flutter_rust_bridge = "=2.13.0"
+irondash_texture = "0.5.0"
+fastrand = "2.5.0"
+tokio = {workspace = true, features=["sync"]}

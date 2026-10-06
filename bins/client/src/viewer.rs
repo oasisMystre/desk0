@@ -15,8 +15,12 @@ use ironrdp::{
   input::{Database, Operation},
   pdu::rdp::capability_sets::MajorPlatformType,
 };
+use pdu::static_channel::StaticChannelOutput;
+use tokio::sync::mpsc::error::TrySendError;
 use tokio_util::sync::CancellationToken;
 use winit::dpi::PhysicalSize;
+
+use crate::static_channel::Desk0StaticChannel;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Desk0ViewerError {
@@ -51,14 +55,16 @@ impl Desk0Viewer {
   pub const THREAD_NAME: &str = "desk0-rdp-viewer";
 
   #[allow(dead_code)]
-  pub fn with_callback<'a, T, U>(
+  pub fn with_callback<'a, T, U, V>(
     config: Desk0ViewerConfig<'a>,
     rdp_output_event_callback: T,
     clipboard_event_callback: U,
+    static_channel_callback: V,
   ) -> anyhow::Result<Self, Desk0ViewerError>
   where
     T: Fn(RdpOutputEvent) + 'static + Sync + Send,
     U: Fn(ClipboardEvent) + 'static + Sync + Send,
+    V: Fn(StaticChannelOutput) + Sync + Send + Clone + 'static,
   {
     let rt = tokio::runtime::Builder::new_multi_thread()
       .enable_all()
@@ -66,30 +72,44 @@ impl Desk0Viewer {
       .context("unable to create tokio runtime")?;
 
     let (output_event_sender, output_event_receiver) = output_channel(32);
-    let mut this = Self::build(config, output_event_sender, clipboard_event_callback)?;
+    let mut this = Self::build(
+      config,
+      output_event_sender,
+      clipboard_event_callback,
+      static_channel_callback,
+    )?;
     this.run(rt, Some((rdp_output_event_callback, output_event_receiver)))?;
 
     Ok(this)
   }
 
-  pub fn with_channel<'a, U>(
+  pub fn with_channel<'a, T, U>(
     config: Desk0ViewerConfig<'a>,
     output_event_sender: OutputEventSender,
-    clipboard_event_callback: U,
+    clipboard_event_callback: T,
+    static_channel_callback: U,
   ) -> anyhow::Result<Self, Desk0ViewerError>
   where
-    U: Fn(ClipboardEvent) + 'static + Sync + Send,
+    T: Fn(ClipboardEvent) + Sync + Send + 'static,
+    U: Fn(StaticChannelOutput) + Sync + Send + Clone + 'static,
   {
-    Self::build(config, output_event_sender, clipboard_event_callback)
+    Self::build(
+      config,
+      output_event_sender,
+      clipboard_event_callback,
+      static_channel_callback,
+    )
   }
 
-  fn build<'a, U>(
+  fn build<'a, T, U>(
     config: Desk0ViewerConfig<'a>,
     output_event_sender: OutputEventSender,
-    clipboard_event_callback: U,
+    clipboard_event_callback: T,
+    static_channel_callback: U,
   ) -> anyhow::Result<Self, Desk0ViewerError>
   where
-    U: Fn(ClipboardEvent) + 'static + Sync + Send,
+    T: Fn(ClipboardEvent) + Sync + Send + 'static,
+    U: Fn(StaticChannelOutput) + Sync + Send + Clone + 'static,
   {
     let mut endpoint =
       url::Url::parse(config.endpoint).map_err(Desk0ViewerError::InvalidEndpoint)?;
@@ -103,6 +123,8 @@ impl Desk0Viewer {
     let clipboard_handler = Arc::new(Mutex::new(clipboard_handler));
 
     let destination = Destination::new("127.0.0.1/0").unwrap();
+
+    let static_channel_callback = Arc::new(static_channel_callback);
 
     let mut config_builder = ConfigBuilder::new()
       .with_destination(destination)
@@ -134,6 +156,9 @@ impl Desk0Viewer {
           };
           Some(Cliprdr::new(backend))
         }
+      })
+      .with_static_channel({
+        move |_| Some(Desk0StaticChannel::new(static_channel_callback.clone()))
       });
 
     if let Some(desktop_size) = config.desktop_size {
@@ -263,8 +288,14 @@ impl Desk0Viewer {
     let events = self.database.apply(operations);
 
     if !events.is_empty() {
-      if let Err(error) = self.input.try_send(RdpInputEvent::FastPath(events)) {
-        tracing::error!(?error, "rdp input closed");
+      match self.input.try_send(RdpInputEvent::FastPath(events)) {
+        Ok(()) => {}
+        Err(TrySendError::Full(_)) => {
+          tracing::warn!("rdp input queue full");
+        }
+        Err(TrySendError::Closed(_)) => {
+          tracing::error!("rdp input channel closed");
+        }
       }
     }
   }

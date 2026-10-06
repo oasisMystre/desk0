@@ -1,4 +1,7 @@
-import 'dart:typed_data' show Uint8List, Uint32List;
+import 'dart:io' show Platform;
+import 'dart:typed_data' show Uint8List;
+import 'dart:ui'
+    show PixelFormat, ImageDescriptor, ImmutableBuffer, ImageByteFormat;
 
 import 'package:desk0/ffi/flutter.dart';
 import 'package:flutter/material.dart';
@@ -7,93 +10,27 @@ import 'package:flutter_custom_cursor/cursor_manager.dart'
     show CursorManager, CursorData;
 import 'package:flutter_custom_cursor/flutter_custom_cursor.dart'
     show FlutterCustomMemoryImageCursor;
-import 'package:texture_rgba_renderer/texture_rgba_renderer.dart'
-    show TextureRgbaRenderer;
-
-import '../../../ffi/types.dart' show SseInclusizeRectangle;
 
 class DisplayState extends GetxController {
-  Uint32List? frameBuffer;
-  int? textureWidth, textureHeight;
+  late Rx<int> width, height;
+  final Rx<MouseCursor> cursor = Rx<MouseCursor>(SystemMouseCursors.basic);
 
-  final Rx<int> frameBufferWidth = 0.obs, frameBufferHeight = 0.obs;
-
-  final TextureRgbaRenderer textureRgbaRenderer;
-  final Rx<MouseCursor> cursor = SystemMouseCursors.none.obs;
-
-  DisplayState({
-    required this.textureRgbaRenderer,
-    required int frameBufferWidth,
-    required int frameBufferHeight,
-  }) {
-    this.frameBufferWidth.value = frameBufferWidth;
-    this.frameBufferHeight.value = frameBufferHeight;
+  DisplayState({required int width, required int height}) {
+    this.width = width.obs;
+    this.height = height.obs;
   }
 
-  Future<void> onDesktopUpdate({
-    required int width,
-    required int height,
-    required Uint32List buffer,
-    required SseInclusizeRectangle region,
-  }) async {
-    if (frameBuffer == null ||
-        frameBufferWidth.value != width ||
-        frameBufferHeight.value != height) {
-      updateFrameSize(width, height);
-      frameBuffer = Uint32List(width * height);
+  void resize(int width, int height) {
+    if (this.width.value != width) {
+      this.width.value = width;
     }
 
-    final destination = frameBuffer!;
-
-    final regionWidth = region.width;
-    final regionHeight = region.height;
-
-    for (var y = 0; y < regionHeight; y++) {
-      final sourceStart = y * regionWidth;
-      final destinationStart = (region.top + y) * width + region.left;
-
-      for (var x = 0; x < regionWidth; x++) {
-        destination[destinationStart + x] =
-            buffer[sourceStart + x] | 0xFF000000;
-      }
-    }
-
-    final bytes = destination.buffer.asUint8List(
-      destination.offsetInBytes,
-      destination.lengthInBytes,
-    );
-
-    await textureRgbaRenderer.onRgba(0, bytes, height, width, 64);
-  }
-
-  void onImage({
-    required int width,
-    required int height,
-    required Uint32List buffer,
-  }) {
-    updateFrameSize(width, height);
-
-    final pixels = Uint32List(buffer.length);
-
-    for (var i = 0; i < buffer.length; i++) {
-      pixels[i] = buffer[i] | 0xFF000000;
-    }
-
-    final bytes = pixels.buffer.asUint8List();
-
-    textureRgbaRenderer.onRgba(0, bytes, height, width, 0);
-  }
-
-  void updateFrameSize(int width, int height) {
-    if (frameBufferWidth.value != width) {
-      frameBufferWidth.value = width;
-    }
-    if (frameBufferHeight.value != height) {
-      frameBufferHeight.value = height;
+    if (this.height.value != height) {
+      this.height.value = height;
     }
   }
 
-  void onCursorBitmap({
+  Future<void> onCursorBitmap({
     required int width,
     required int height,
     required Uint8List bitmapData,
@@ -102,7 +39,10 @@ class DisplayState extends GetxController {
   }) async {
     final cursorName = await CursorManager.instance.registerCursor(
       CursorData()
-        ..buffer = bitmapData
+        ..name = "desk0"
+        ..buffer = (Platform.isWindows
+            ? rgbaToBgra(width, height, bitmapData)
+            : await rgbaToPng(width, height, bitmapData))
         ..height = height
         ..width = width
         ..hotX = hotspotX.toDouble()
@@ -126,21 +66,20 @@ class DisplayState extends GetxController {
     BoxConstraints constraints,
   ) {
     final dpr = View.of(context).devicePixelRatio;
-    int alignDown(int v, int a) => (v ~/ a) * a;
 
-    final width = alignDown(constraints.maxWidth.round(), 16);
-    final height = alignDown(constraints.maxHeight.round(), 2);
+    final width = DisplayState.alignDown(constraints.maxWidth.round(), 64);
+    final height = DisplayState.alignDown(constraints.maxHeight.round(), 2);
 
     if (width <= 0 || height <= 0) {
       return;
     }
 
-    if (textureWidth == width && textureHeight == height) {
+    if (this.width.value == width && this.height.value == height) {
       return;
     }
 
-    textureWidth = width;
-    textureHeight = height;
+    this.width.value = width;
+    this.height.value = height;
 
     viewer.resize(
       width: width,
@@ -149,4 +88,40 @@ class DisplayState extends GetxController {
       physicalSize: ((width * dpr).round(), (height * dpr).round()),
     );
   }
+
+  Future<Uint8List> rgbaToPng(int width, int height, Uint8List rgba) async {
+    final buffer = await ImmutableBuffer.fromUint8List(rgba);
+    final descriptor = ImageDescriptor.raw(
+      buffer,
+      width: width,
+      height: height,
+      pixelFormat: PixelFormat.rgba8888,
+    );
+
+    final codec = await descriptor.instantiateCodec();
+    final frame = await codec.getNextFrame();
+    final png = await frame.image.toByteData(format: ImageByteFormat.png);
+
+    buffer.dispose();
+    descriptor.dispose();
+    codec.dispose();
+
+    return png!.buffer.asUint8List(png.offsetInBytes, png.lengthInBytes);
+  }
+
+  Uint8List rgbaToBgra(int width, int height, Uint8List rgba) {
+    final destination = Uint8List(rgba.length);
+
+    for (int index = 0; index < rgba.length; index += 4) {
+      destination[index] = rgba[index + 2];
+      destination[index + 1] = rgba[index + 1];
+      destination[index + 2] = rgba[index];
+      destination[index + 3] = rgba[index + 3];
+    }
+
+    return destination;
+  }
+
+  static int alignDown(int v, int a) => (v ~/ a) * a;
+  static int alignUp(int v, int a) => ((v + a - 1) ~/ a) * a;
 }

@@ -3,12 +3,14 @@ import 'dart:math' show Point;
 import 'package:flutter/gestures.dart'
     show
         kPrimaryButton,
-        kMiddleMouseButton,
-        PointerSignalEvent,
-        PointerScrollEvent,
         kSecondaryButton,
         kBackMouseButton,
-        kForwardMouseButton;
+        kForwardMouseButton,
+        kMiddleMouseButton,
+        PointerScrollEvent,
+        PointerSignalEvent,
+        PointerPanZoomStartEvent,
+        PointerPanZoomUpdateEvent;
 import 'package:flutter/cupertino.dart'
     show
         StatefulWidget,
@@ -55,6 +57,9 @@ class MouseListenerState extends State<MouseListener> {
   Offset? pendingMove;
   int lastButtons = 0;
   bool flushScheduled = false;
+
+  double accX = 0, accY = 0;
+  static const double kTrackpadSpeed = 1.0;
 
   static const Map<int, SseMouseButton> buttonMap = {
     kPrimaryButton: SseMouseButton.left,
@@ -132,27 +137,41 @@ class MouseListenerState extends State<MouseListener> {
     send(buttonEvents(held, false));
   }
 
+  void sendWheel(double dx, double dy) {
+    accX += dx / 100 * 120;
+    accY += dy / 100 * 120;
+
+    final x = accX.truncate();
+    final y = accY.truncate();
+
+    accX -= x;
+    accY -= y;
+
+    final events = <SseInputEvent>[
+      if (y != 0)
+        SseInputEvent.wheelRotations(isVertical: true, rotationUnits: y),
+      if (x != 0)
+        SseInputEvent.wheelRotations(isVertical: false, rotationUnits: x),
+    ];
+    if (events.isNotEmpty) send(events);
+  }
+
   void onScroll(PointerSignalEvent event) {
     if (event is! PointerScrollEvent) return;
-    final List<SseInputEvent> events = [];
 
-    if (event.scrollDelta.dy != 0) {
-      events.add(
-        SseInputEvent.wheelRotations(
-          isVertical: true,
-          rotationUnits: (event.scrollDelta.dy / 100 * 120).round(),
-        ),
-      );
-    }
+    sendWheel(event.scrollDelta.dx, event.scrollDelta.dy);
+  }
 
-    if (event.scrollDelta.dx != 0) {
-      events.add(
-        SseInputEvent.wheelRotations(
-          isVertical: false,
-          rotationUnits: (event.scrollDelta.dx / 100 * 120).round(),
-        ),
-      );
-    }
+  void onPanZoomStart(PointerPanZoomStartEvent event) {
+    accX = 0;
+    accY = 0;
+  }
+
+  void onPanZoomUpdate(PointerPanZoomUpdateEvent event) {
+    sendWheel(
+      -event.panDelta.dx * kTrackpadSpeed,
+      -event.panDelta.dy * kTrackpadSpeed,
+    );
   }
 
   @override
@@ -161,15 +180,13 @@ class MouseListenerState extends State<MouseListener> {
       cursor: widget.cursor,
       child: Listener(
         behavior: HitTestBehavior.opaque,
-        onPointerHover: (event) {
-          queueMove(event.localPosition);
-        },
-        onPointerMove: (event) {
-          queueMove(event.localPosition);
-        },
+        onPointerHover: (event) => queueMove(event.localPosition),
+        onPointerMove: (event) => queueMove(event.localPosition),
         onPointerSignal: onScroll,
         onPointerUp: onPointerUp,
         onPointerDown: onPointerDown,
+        onPointerPanZoomStart: onPanZoomStart,
+        onPointerPanZoomUpdate: onPanZoomUpdate,
         child: widget.child,
       ),
     );

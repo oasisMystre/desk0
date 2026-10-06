@@ -14,51 +14,6 @@ void store_dart_post_cobject(DartPostCObjectFnType ptr);
 // EXTRA END
 typedef struct _Dart_Handle* Dart_Handle;
 
-typedef enum OutputEvent_Tag {
-  Terminated,
-  ConnectionFailure,
-  Image,
-  PointerHidden,
-  PointerDefault,
-  PointerPosition,
-  PointerBitmap,
-} OutputEvent_Tag;
-
-typedef struct Image_Body {
-  uint16_t width;
-  uint16_t height;
-  uintptr_t buffer_len;
-  uint32_t *buffer;
-} Image_Body;
-
-typedef struct PointerPosition_Body {
-  uint16_t x;
-  uint16_t y;
-} PointerPosition_Body;
-
-typedef struct PointerBitmap_Body {
-  uint16_t width;
-  uint16_t height;
-  uintptr_t bitmap_data_len;
-  uint8_t *bitmap_data;
-  uint16_t hotspot_x;
-  uint16_t hotspot_y;
-} PointerBitmap_Body;
-
-typedef struct OutputEvent {
-  OutputEvent_Tag tag;
-  union {
-    struct {
-      const char *connection_failure;
-    };
-    Image_Body image;
-    PointerPosition_Body pointer_position;
-    PointerBitmap_Body pointer_bitmap;
-  };
-} OutputEvent;
-
-typedef void (*OnOutputEventCallback)(const struct OutputEvent *event);
-
 typedef struct wire_cst_list_prim_u_8_strict {
   uint8_t *ptr;
   int32_t len;
@@ -121,6 +76,37 @@ typedef struct wire_cst_list_sse_input_event {
   int32_t len;
 } wire_cst_list_sse_input_event;
 
+typedef struct wire_cst_SseTerminalInput_StdIn {
+  struct wire_cst_list_prim_u_8_strict *field0;
+} wire_cst_SseTerminalInput_StdIn;
+
+typedef union SseTerminalInputKind {
+  struct wire_cst_SseTerminalInput_StdIn StdIn;
+} SseTerminalInputKind;
+
+typedef struct wire_cst_sse_terminal_input {
+  int32_t tag;
+  union SseTerminalInputKind kind;
+} wire_cst_sse_terminal_input;
+
+typedef struct wire_cst_SseStaticChannelInput_Terminal {
+  struct wire_cst_sse_terminal_input *field0;
+} wire_cst_SseStaticChannelInput_Terminal;
+
+typedef union SseStaticChannelInputKind {
+  struct wire_cst_SseStaticChannelInput_Terminal Terminal;
+} SseStaticChannelInputKind;
+
+typedef struct wire_cst_sse_static_channel_input {
+  int32_t tag;
+  union SseStaticChannelInputKind kind;
+} wire_cst_sse_static_channel_input;
+
+typedef struct wire_cst_list_sse_static_channel_input {
+  struct wire_cst_sse_static_channel_input *ptr;
+  int32_t len;
+} wire_cst_list_sse_static_channel_input;
+
 typedef struct wire_cst_SseFileDownloadStatus_Download {
   uint32_t id;
   uint64_t total_size;
@@ -173,19 +159,36 @@ typedef struct wire_cst_sse_disconnect_reason {
   union SseDisconnectReasonKind kind;
 } wire_cst_sse_disconnect_reason;
 
-typedef struct wire_cst_sse_inclusize_rectangle {
-  uint16_t left;
-  uint16_t top;
-  uint16_t right;
-  uint16_t bottom;
-  uint16_t width;
-  uint16_t height;
-} wire_cst_sse_inclusize_rectangle;
+typedef struct wire_cst_SseTerminalOutput_StdOut {
+  struct wire_cst_list_prim_u_8_strict *field0;
+} wire_cst_SseTerminalOutput_StdOut;
 
-typedef struct wire_cst_list_prim_u_32_strict {
-  uint32_t *ptr;
-  int32_t len;
-} wire_cst_list_prim_u_32_strict;
+typedef struct wire_cst_SseTerminalOutput_StdErr {
+  struct wire_cst_list_prim_u_8_strict *field0;
+} wire_cst_SseTerminalOutput_StdErr;
+
+typedef union SseTerminalOutputKind {
+  struct wire_cst_SseTerminalOutput_StdOut StdOut;
+  struct wire_cst_SseTerminalOutput_StdErr StdErr;
+} SseTerminalOutputKind;
+
+typedef struct wire_cst_sse_terminal_output {
+  int32_t tag;
+  union SseTerminalOutputKind kind;
+} wire_cst_sse_terminal_output;
+
+typedef struct wire_cst_SseStaticChannelOutput_Terminal {
+  struct wire_cst_sse_terminal_output *field0;
+} wire_cst_SseStaticChannelOutput_Terminal;
+
+typedef union SseStaticChannelOutputKind {
+  struct wire_cst_SseStaticChannelOutput_Terminal Terminal;
+} SseStaticChannelOutputKind;
+
+typedef struct wire_cst_sse_static_channel_output {
+  int32_t tag;
+  union SseStaticChannelOutputKind kind;
+} wire_cst_sse_static_channel_output;
 
 typedef struct wire_cst_sse_monitor {
   int32_t left;
@@ -200,6 +203,28 @@ typedef struct wire_cst_list_sse_monitor {
   int32_t len;
 } wire_cst_list_sse_monitor;
 
+typedef struct wire_cst_SseOutputEvent_PointerPosition {
+  uint16_t x;
+  uint16_t y;
+} wire_cst_SseOutputEvent_PointerPosition;
+
+typedef struct wire_cst_SseOutputEvent_PointerBitmap {
+  uint16_t width;
+  uint16_t height;
+  uint16_t hotspot_x;
+  uint16_t hotspot_y;
+  struct wire_cst_list_prim_u_8_strict *bitmap_data;
+} wire_cst_SseOutputEvent_PointerBitmap;
+
+typedef struct wire_cst_SseOutputEvent_Resize {
+  uint16_t width;
+  uint16_t height;
+} wire_cst_SseOutputEvent_Resize;
+
+typedef struct wire_cst_SseOutputEvent_WindowingOrders {
+  struct wire_cst_list_prim_u_8_strict *field0;
+} wire_cst_SseOutputEvent_WindowingOrders;
+
 typedef struct wire_cst_SseOutputEvent_MonitorLayout {
   struct wire_cst_list_sse_monitor *field0;
 } wire_cst_SseOutputEvent_MonitorLayout;
@@ -207,6 +232,10 @@ typedef struct wire_cst_SseOutputEvent_MonitorLayout {
 typedef struct wire_cst_SseOutputEvent_Clipboard {
   struct wire_cst_sse_clipboard_event *field0;
 } wire_cst_SseOutputEvent_Clipboard;
+
+typedef struct wire_cst_SseOutputEvent_StaticChannel {
+  struct wire_cst_sse_static_channel_output *field0;
+} wire_cst_SseOutputEvent_StaticChannel;
 
 typedef struct wire_cst_SseOutputEvent_TerminatedError {
   struct wire_cst_list_prim_u_8_strict *field0;
@@ -220,36 +249,6 @@ typedef struct wire_cst_SseOutputEvent_ConnectionFailure {
   struct wire_cst_list_prim_u_8_strict *field0;
 } wire_cst_SseOutputEvent_ConnectionFailure;
 
-typedef struct wire_cst_SseOutputEvent_Image {
-  uint16_t width;
-  uint16_t height;
-  struct wire_cst_list_prim_u_32_strict *buffer;
-} wire_cst_SseOutputEvent_Image;
-
-typedef struct wire_cst_SseOutputEvent_DesktopUpdate {
-  uint16_t width;
-  uint16_t height;
-  struct wire_cst_list_prim_u_32_strict *buffer;
-  struct wire_cst_sse_inclusize_rectangle *region;
-} wire_cst_SseOutputEvent_DesktopUpdate;
-
-typedef struct wire_cst_SseOutputEvent_PointerPosition {
-  uint16_t x;
-  uint16_t y;
-} wire_cst_SseOutputEvent_PointerPosition;
-
-typedef struct wire_cst_SseOutputEvent_PointerBitmap {
-  uint16_t width;
-  uint16_t height;
-  struct wire_cst_list_prim_u_8_strict *bitmap_data;
-  uint16_t hotspot_x;
-  uint16_t hotspot_y;
-} wire_cst_SseOutputEvent_PointerBitmap;
-
-typedef struct wire_cst_SseOutputEvent_WindowingOrders {
-  struct wire_cst_list_prim_u_8_strict *field0;
-} wire_cst_SseOutputEvent_WindowingOrders;
-
 typedef struct wire_cst_SseOutputEvent_AutoReconnecting {
   uint32_t disconnect_reason;
   uint32_t attempt;
@@ -257,16 +256,16 @@ typedef struct wire_cst_SseOutputEvent_AutoReconnecting {
 } wire_cst_SseOutputEvent_AutoReconnecting;
 
 typedef union SseOutputEventKind {
+  struct wire_cst_SseOutputEvent_PointerPosition PointerPosition;
+  struct wire_cst_SseOutputEvent_PointerBitmap PointerBitmap;
+  struct wire_cst_SseOutputEvent_Resize Resize;
+  struct wire_cst_SseOutputEvent_WindowingOrders WindowingOrders;
   struct wire_cst_SseOutputEvent_MonitorLayout MonitorLayout;
   struct wire_cst_SseOutputEvent_Clipboard Clipboard;
+  struct wire_cst_SseOutputEvent_StaticChannel StaticChannel;
   struct wire_cst_SseOutputEvent_TerminatedError TerminatedError;
   struct wire_cst_SseOutputEvent_TerminatedSuccess TerminatedSuccess;
   struct wire_cst_SseOutputEvent_ConnectionFailure ConnectionFailure;
-  struct wire_cst_SseOutputEvent_Image Image;
-  struct wire_cst_SseOutputEvent_DesktopUpdate DesktopUpdate;
-  struct wire_cst_SseOutputEvent_PointerPosition PointerPosition;
-  struct wire_cst_SseOutputEvent_PointerBitmap PointerBitmap;
-  struct wire_cst_SseOutputEvent_WindowingOrders WindowingOrders;
   struct wire_cst_SseOutputEvent_AutoReconnecting AutoReconnecting;
 } SseOutputEventKind;
 
@@ -275,19 +274,12 @@ typedef struct wire_cst_sse_output_event {
   union SseOutputEventKind kind;
 } wire_cst_sse_output_event;
 
-Desk0Viewer *desk0_create_viewer(const char *token,
-                                 const char *endpoint,
-                                 OnOutputEventCallback callback);
-
-bool desk0_stop_viewer(Desk0Viewer *viewer);
-
-bool desk0_send_input_event(Desk0Viewer *viewer, const RawInputEvent *events, uintptr_t len);
-
-const char *desk0_last_error(void);
-
 void frbgen_desk0_wire__crate__flutter__ViewerHandle_connect(int64_t port_,
                                                              uintptr_t that,
                                                              struct wire_cst_list_prim_u_8_strict *events);
+
+WireSyncRust2DartDco frbgen_desk0_wire__crate__flutter__ViewerHandle_create_texture(uintptr_t that,
+                                                                                    int64_t engine_handle);
 
 WireSyncRust2DartDco frbgen_desk0_wire__crate__flutter__ViewerHandle_new(struct wire_cst_list_prim_u_8_strict *token,
                                                                          struct wire_cst_list_prim_u_8_strict *endpoint,
@@ -304,6 +296,10 @@ void frbgen_desk0_wire__crate__flutter__ViewerHandle_send_input_events(int64_t p
                                                                        uintptr_t that,
                                                                        struct wire_cst_list_sse_input_event *events);
 
+void frbgen_desk0_wire__crate__flutter__ViewerHandle_send_static_channel_events(int64_t port_,
+                                                                                uintptr_t that,
+                                                                                struct wire_cst_list_sse_static_channel_input *events);
+
 void frbgen_desk0_rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerViewerHandle(const void *ptr);
 
 void frbgen_desk0_rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerViewerHandle(const void *ptr);
@@ -318,15 +314,19 @@ struct wire_cst_sse_disconnect_reason *frbgen_desk0_cst_new_box_autoadd_sse_disc
 
 struct wire_cst_sse_file_download_status *frbgen_desk0_cst_new_box_autoadd_sse_file_download_status(void);
 
-struct wire_cst_sse_inclusize_rectangle *frbgen_desk0_cst_new_box_autoadd_sse_inclusize_rectangle(void);
+struct wire_cst_sse_static_channel_output *frbgen_desk0_cst_new_box_autoadd_sse_static_channel_output(void);
 
-struct wire_cst_list_prim_u_32_strict *frbgen_desk0_cst_new_list_prim_u_32_strict(int32_t len);
+struct wire_cst_sse_terminal_input *frbgen_desk0_cst_new_box_autoadd_sse_terminal_input(void);
+
+struct wire_cst_sse_terminal_output *frbgen_desk0_cst_new_box_autoadd_sse_terminal_output(void);
 
 struct wire_cst_list_prim_u_8_strict *frbgen_desk0_cst_new_list_prim_u_8_strict(int32_t len);
 
 struct wire_cst_list_sse_input_event *frbgen_desk0_cst_new_list_sse_input_event(int32_t len);
 
 struct wire_cst_list_sse_monitor *frbgen_desk0_cst_new_list_sse_monitor(int32_t len);
+
+struct wire_cst_list_sse_static_channel_input *frbgen_desk0_cst_new_list_sse_static_channel_input(int32_t len);
 static int64_t dummy_method_to_enforce_bundling(void) {
     int64_t dummy_var = 0;
     dummy_var ^= ((int64_t) (void*) frbgen_desk0_cst_new_box_autoadd_record_u_32_u_32);
@@ -334,17 +334,21 @@ static int64_t dummy_method_to_enforce_bundling(void) {
     dummy_var ^= ((int64_t) (void*) frbgen_desk0_cst_new_box_autoadd_sse_desktop_size);
     dummy_var ^= ((int64_t) (void*) frbgen_desk0_cst_new_box_autoadd_sse_disconnect_reason);
     dummy_var ^= ((int64_t) (void*) frbgen_desk0_cst_new_box_autoadd_sse_file_download_status);
-    dummy_var ^= ((int64_t) (void*) frbgen_desk0_cst_new_box_autoadd_sse_inclusize_rectangle);
-    dummy_var ^= ((int64_t) (void*) frbgen_desk0_cst_new_list_prim_u_32_strict);
+    dummy_var ^= ((int64_t) (void*) frbgen_desk0_cst_new_box_autoadd_sse_static_channel_output);
+    dummy_var ^= ((int64_t) (void*) frbgen_desk0_cst_new_box_autoadd_sse_terminal_input);
+    dummy_var ^= ((int64_t) (void*) frbgen_desk0_cst_new_box_autoadd_sse_terminal_output);
     dummy_var ^= ((int64_t) (void*) frbgen_desk0_cst_new_list_prim_u_8_strict);
     dummy_var ^= ((int64_t) (void*) frbgen_desk0_cst_new_list_sse_input_event);
     dummy_var ^= ((int64_t) (void*) frbgen_desk0_cst_new_list_sse_monitor);
+    dummy_var ^= ((int64_t) (void*) frbgen_desk0_cst_new_list_sse_static_channel_input);
     dummy_var ^= ((int64_t) (void*) frbgen_desk0_rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerViewerHandle);
     dummy_var ^= ((int64_t) (void*) frbgen_desk0_rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerViewerHandle);
     dummy_var ^= ((int64_t) (void*) frbgen_desk0_wire__crate__flutter__ViewerHandle_connect);
+    dummy_var ^= ((int64_t) (void*) frbgen_desk0_wire__crate__flutter__ViewerHandle_create_texture);
     dummy_var ^= ((int64_t) (void*) frbgen_desk0_wire__crate__flutter__ViewerHandle_new);
     dummy_var ^= ((int64_t) (void*) frbgen_desk0_wire__crate__flutter__ViewerHandle_resize);
     dummy_var ^= ((int64_t) (void*) frbgen_desk0_wire__crate__flutter__ViewerHandle_send_input_events);
+    dummy_var ^= ((int64_t) (void*) frbgen_desk0_wire__crate__flutter__ViewerHandle_send_static_channel_events);
     dummy_var ^= ((int64_t) (void*) store_dart_post_cobject);
     return dummy_var;
 }

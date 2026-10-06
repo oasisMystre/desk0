@@ -16,7 +16,7 @@ use tracing_subscriber::{EnvFilter, Layer, layer::SubscriberExt, util::Subscribe
 #[cfg(feature = "otel")]
 use tracing_throttle::TracingRateLimitLayer;
 
-#[cfg(any(feature = "otel", feature = "postgres", feature = "redis"))]
+#[cfg(any(feature = "opentelemetry", feature = "postgres", feature = "redis"))]
 use crate::env::{Env, FromEnv};
 
 #[cfg(feature = "postgres")]

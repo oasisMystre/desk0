@@ -19,10 +19,13 @@ import 'l10n/generated/app_localizations.dart';
 import 'components/connection/viewer/index.dart';
 
 void main() async {
-  await RustLib.init();
   WidgetsFlutterBinding.ensureInitialized();
 
+  await RustLib.init();
+  await LiquidGlassWidgets.initialize();
+
   final Api api = Api(baseUrl: Env.apiBaseUrl);
+
   final sharedPreferences = await SharedPreferences.getInstance();
   final guestUser = sharedPreferences.getStringList('user');
 
@@ -43,8 +46,6 @@ void main() async {
   api.updateUserId(user);
   api.updateOrganizationId(organization);
 
-  await LiquidGlassWidgets.initialize();
-
   final deviceState = DeviceState();
   final favoriteState = FavoriteState(sharedPreferences);
 
@@ -58,7 +59,6 @@ void main() async {
 
   runMultiApp(
     home: (context, publicId) => const MainApplication(),
-    globalScope: (child) => LiquidGlassWidgets.wrap(child: child),
     config: MultiAppConfig(
       generalParams: MultiPlatformParams(closeMode: CloseMode.softCascade),
       globalWindowOptions: WindowOptions(
@@ -76,7 +76,10 @@ final router = GoRouter(
   routes: [
     ShellRoute(
       builder: (context, state, child) {
-        return MainApplication.wrapper(child);
+        return LiquidGlassWidgets.wrap(
+          child: MainApplication.wrapper(child),
+          brightnessResolver: Theme.maybeBrightnessOf,
+        );
       },
       routes: [
         GoRoute(
@@ -152,9 +155,6 @@ class MainApplication extends StatelessWidget {
           if (!kDebugMode)
             Positioned(top: 0, left: 0, right: 0, child: Toolbar()),
         ],
-      ),
-      themeOverride: GlassThemeData(
-        dark: GlassThemeVariant(settings: GlassThemeSettings()),
       ),
     );
   }

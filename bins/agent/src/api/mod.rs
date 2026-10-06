@@ -6,6 +6,7 @@ use crate::api::{
 };
 
 mod api_impl;
+pub mod channel;
 pub mod device;
 
 pub struct Api {
