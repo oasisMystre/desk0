@@ -5,6 +5,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:terminal_view/terminal_view.dart';
 
 import '../../../ffi/flutter.dart' show ViewerHandle;
+import '../../../channels/channel.dart' show Channel;
 import '../../../ffi/types.dart'
     show
         SseTerminalInput,
@@ -69,21 +70,26 @@ class TerminalViewerState extends State<TerminalViewer> {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        const SizedBox(height: 36),
-        Expanded(
-          child: TerminalView(
-            terminal,
-            autofocus: true,
-            backgroundOpacity: 0,
-            controller: controller,
-            keyboardType: TextInputType.multiline,
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            blinkInterval: const Duration(milliseconds: 600),
+    return FutureBuilder(
+      future: Channel.getTrafficLightFrame(),
+      builder: (context, snapshot) {
+        final trafficLight = snapshot.data!;
+
+        return SafeArea(
+          child: Padding(
+            padding: EdgeInsets.only(top: trafficLight.height + 16),
+            child: TerminalView(
+              terminal,
+              autofocus: true,
+              backgroundOpacity: 0,
+              controller: controller,
+              keyboardType: TextInputType.multiline,
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              blinkInterval: const Duration(milliseconds: 600),
+            ),
           ),
-        ),
-      ],
+        );
+      },
     );
   }
 }
