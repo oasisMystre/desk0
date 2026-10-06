@@ -2,7 +2,7 @@ import 'dart:convert' show utf8;
 import 'dart:async' show StreamSubscription;
 
 import 'package:flutter/cupertino.dart';
-import 'package:terminal_view/terminal_view.dart';
+import 'package:xterm/xterm.dart';
 
 import '../../../ffi/flutter.dart' show ViewerHandle;
 import '../../../channels/channel.dart' show Channel;
@@ -37,13 +37,16 @@ class TerminalViewerState extends State<TerminalViewer> {
     super.initState();
 
     terminal.onOutput = (data) {
-      widget.viewer.sendStaticChannelEvents(
-        events: [
-          SseStaticChannelInput.terminal(
-            SseTerminalInput.stdIn(utf8.encode(data)),
-          ),
-        ],
-      );
+      // widget.viewer.sendStaticChannelEvents(
+      //   events: [
+      //     SseStaticChannelInput.terminal(
+      //       SseTerminalInput.stdIn(utf8.encode(data)),
+      //     ),
+      //   ],
+      // );
+      //
+      print(data);
+      terminal.write(data);
     };
 
     widget.viewer.onStaticChannelEventEvent().listen((event) {
@@ -73,11 +76,13 @@ class TerminalViewerState extends State<TerminalViewer> {
     return FutureBuilder(
       future: Channel.getTrafficLightFrame(),
       builder: (context, snapshot) {
-        final trafficLight = snapshot.data!;
+        final trafficLightHeight = snapshot.hasData
+            ? snapshot.data!.height
+            : 14;
 
         return SafeArea(
           child: Padding(
-            padding: EdgeInsets.only(top: trafficLight.height + 16),
+            padding: EdgeInsets.only(top: trafficLightHeight + 24),
             child: TerminalView(
               terminal,
               autofocus: true,
@@ -85,7 +90,9 @@ class TerminalViewerState extends State<TerminalViewer> {
               controller: controller,
               keyboardType: TextInputType.multiline,
               padding: const EdgeInsets.symmetric(horizontal: 12),
-              blinkInterval: const Duration(milliseconds: 600),
+              hardwareKeyboardOnly: true,
+
+              // blinkInterval: const Duration(milliseconds: 600),
             ),
           ),
         );

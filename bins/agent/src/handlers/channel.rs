@@ -1,11 +1,11 @@
 use ironrdp::{
   core::impl_as_any,
-  pdu::{PduResult, gcc::ChannelName},
+  pdu::PduResult,
   server::StaticChannelFactory,
   svc::{SvcMessage, SvcProcessor, SvcServerProcessor},
 };
 use pdu::{
-  static_channel::{StaticChannelInput, StaticChannelOutput},
+  static_channel::{STATIC_CHANNEL_NAME, StaticChannelInput, StaticChannelOutput},
   terminal::{TerminalInput, TerminalOutput},
 };
 use tokio::{
@@ -138,7 +138,7 @@ impl StaticChannelFactory for Desk0StaticChannelFactory {
 
 impl SvcProcessor for Desk0StaticChannel {
   fn channel_name(&self) -> ironrdp::pdu::gcc::ChannelName {
-    ChannelName::new(*b"desk0123")
+    STATIC_CHANNEL_NAME
   }
 
   fn process(&mut self, payload: &[u8]) -> PduResult<Vec<SvcMessage>> {
