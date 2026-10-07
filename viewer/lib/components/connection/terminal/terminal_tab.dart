@@ -5,7 +5,6 @@ import 'package:flutter/cupertino.dart';
 import 'package:xterm/xterm.dart'
     show Terminal, TerminalController, TerminalView;
 
-import '../../../channels/channel.dart' show Channel;
 import '../../../states/index.dart' show TerminalStaticChannelState;
 import '../../../ffi/types.dart'
     show
@@ -80,29 +79,15 @@ class TerminalTabState extends State<TerminalTab> {
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder(
-      future: Channel.getTrafficLightFrame(),
-      builder: (context, snapshot) {
-        final trafficLightHeight = snapshot.hasData
-            ? snapshot.data!.height
-            : 14;
-
-        return SafeArea(
-          child: Padding(
-            padding: EdgeInsets.only(top: trafficLightHeight + 24),
-            child: TerminalView(
-              terminal,
-              autofocus: true,
-              backgroundOpacity: 0,
-              controller: controller,
-              hardwareKeyboardOnly: true,
-              keyboardType: TextInputType.multiline,
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              // blinkInterval: const Duration(milliseconds: 600),
-            ),
-          ),
-        );
-      },
+    return TerminalView(
+      terminal,
+      autofocus: true,
+      backgroundOpacity: 0,
+      controller: controller,
+      hardwareKeyboardOnly: true,
+      keyboardType: TextInputType.multiline,
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      // blinkInterval: const Duration(milliseconds: 600),
     );
   }
 }

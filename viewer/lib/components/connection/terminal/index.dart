@@ -1,8 +1,10 @@
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/material.dart' show TextButton, IconButton;
+import 'package:flutter/material.dart' show IconButton;
 
 import 'terminal_tab.dart' show TerminalTab;
+import '../../../channels/channel.dart' show Channel;
 import '../../../ffi/flutter.dart' show ViewerHandle;
+import '../../../components/tab_button.dart' show TabButton;
 import '../../../states/index.dart' show TerminalStaticChannelState;
 
 class TerminalViewer extends StatefulWidget {
@@ -17,7 +19,10 @@ class TerminalViewer extends StatefulWidget {
 }
 
 class TerminalViewerState extends State<TerminalViewer> {
+  int id = 0;
   late final TerminalStaticChannelState terminalStaticChannelState;
+
+  int currentTabIndex = 0;
   final List<int> terminalIds = [];
 
   @override
@@ -25,6 +30,33 @@ class TerminalViewerState extends State<TerminalViewer> {
     super.initState();
 
     terminalStaticChannelState = TerminalStaticChannelState(widget.viewer);
+    createTerminal();
+  }
+
+  void createTerminal() {
+    final terminalId = id++;
+    terminalIds.add(terminalId);
+
+    terminalStaticChannelState.create(terminalId);
+
+    setState(() {
+      currentTabIndex = terminalIds.length - 1;
+    });
+  }
+
+  void removeTerminal(int index) {
+    if (terminalIds.length == 1) return;
+
+    terminalIds.removeAt(index);
+    if (currentTabIndex > index) {
+      currentTabIndex--;
+    } else if (currentTabIndex == index) {
+      if (currentTabIndex >= terminalIds.length) {
+        currentTabIndex = terminalIds.length - 1;
+      }
+    }
+
+    setState(() {});
   }
 
   @override
@@ -33,47 +65,58 @@ class TerminalViewerState extends State<TerminalViewer> {
     super.dispose();
   }
 
-  void createTerminal() {
-    final id = terminalIds.length;
-    terminalIds.add(id);
-
-    terminalStaticChannelState.create(id);
-
-    setState(() {});
-  }
-
-  void removeTerminal(int id) {
-    terminalIds.remove(id);
-    setState(() {});
-  }
-
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Row(
-          children: [
-            for (final id in terminalIds)
-              TextButton(onPressed: () {}, child: Text('Terminal ${id + 1}')),
-            IconButton(
-              onPressed: createTerminal,
-              icon: const Icon(CupertinoIcons.add),
-            ),
-          ],
-        ),
-        Expanded(
-          child: IndexedStack(
-            index: 0,
+    return FutureBuilder(
+      future: Channel.getTrafficLightFrame(),
+      builder: (context, snapshot) {
+        final trafficLightWidth = snapshot.hasData ? snapshot.data!.width : 14;
+
+        return SafeArea(
+          child: Column(
             children: [
-              for (final id in terminalIds)
-                TerminalTab(
-                  terminalId: id,
-                  terminalStaticChannelState: terminalStaticChannelState,
+              Container(
+                padding: EdgeInsetsGeometry.symmetric(vertical: 4),
+                child: Row(
+                  children: [
+                    SizedBox(width: trafficLightWidth + 64),
+                    for (final entry in terminalIds.asMap().entries)
+                      TabButton(
+                        selected: currentTabIndex == entry.key,
+                        onPressed: () {
+                          setState(() {
+                            currentTabIndex = entry.key;
+                          });
+                        },
+                        onClose: () {
+                          removeTerminal(entry.key);
+                        },
+                        data: 'Terminal ${entry.key + 1}',
+                      ),
+                    IconButton(
+                      onPressed: createTerminal,
+                      icon: const Icon(CupertinoIcons.add),
+                    ),
+                  ],
                 ),
+              ),
+              Expanded(
+                child: IndexedStack(
+                  index: currentTabIndex,
+                  children: [
+                    for (final id in terminalIds)
+                      TerminalTab(
+                        key: ValueKey(id),
+                        terminalId: id,
+                        terminalStaticChannelState: terminalStaticChannelState,
+                      ),
+                  ],
+                ),
+              ),
             ],
           ),
-        ),
-      ],
+        );
+      },
     );
   }
 }

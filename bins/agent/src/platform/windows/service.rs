@@ -1,9 +1,7 @@
 use std::{ffi::OsString, fs, os::windows::ffi::OsStrExt, path::PathBuf, time::Duration};
 
 use tokio::process::Command;
-use tokio_util::sync::CancellationToken;
 use windows_service::{
-  Result,
   service::{
     ServiceAccess, ServiceControl, ServiceControlAccept, ServiceErrorControl, ServiceExitCode,
     ServiceInfo, ServiceStartType, ServiceState, ServiceStatus, ServiceType,
