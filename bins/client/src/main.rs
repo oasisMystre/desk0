@@ -71,7 +71,7 @@ fn main() -> anyhow::Result<()> {
     },
     Desk0ViewerOutput::Channel {
       clipboard_event_sender: None,
-      static_channel_event_sender: None,
+      terminal_output_event_sender: None,
       rdp_output_event_sender: output_event_sender,
     },
   )?;

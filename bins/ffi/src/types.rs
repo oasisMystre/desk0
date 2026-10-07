@@ -37,28 +37,28 @@ pub enum SseInputEvent {
 
 #[repr(C)]
 #[derive(Clone)]
-pub enum SseTerminalInput {
-  StdIn(Vec<u8>),
+pub enum SseTerminalInputEvent {
+  Create(u8),
+  Data {
+    id: u8,
+    data: Vec<u8>,
+  },
+  Resize {
+    id: u8,
+    rows: u16,
+    cols: u16,
+    pw: u16,
+    ph: u16,
+  },
   Output,
 }
 
 #[repr(C)]
 #[derive(Clone)]
-pub enum SseTerminalOutput {
-  StdOut(Vec<u8>),
-  StdErr(Vec<u8>),
-}
-
-#[repr(C)]
-#[derive(Clone)]
-pub enum SseStaticChannelInput {
-  Terminal(SseTerminalInput),
-}
-
-#[repr(C)]
-#[derive(Clone)]
-pub enum SseStaticChannelOutput {
-  Terminal(SseTerminalOutput),
+pub enum SseTerminalOutputEvent {
+  Connected(u8),
+  Data { id: u8, data: Vec<u8> },
+  Exit { id: u8, code: u8 },
 }
 
 #[repr(C)]
@@ -189,38 +189,35 @@ impl Into<ironrdp::input::Operation> for SseInputEvent {
   }
 }
 
-impl Into<pdu::terminal::TerminalInput> for SseTerminalInput {
-  fn into(self) -> pdu::terminal::TerminalInput {
+impl Into<pdu::terminal::TerminalInputEvent> for SseTerminalInputEvent {
+  fn into(self) -> pdu::terminal::TerminalInputEvent {
     match self {
-      SseTerminalInput::StdIn(data) => pdu::terminal::TerminalInput::StdIn(data),
-      SseTerminalInput::Output => pdu::terminal::TerminalInput::Output,
+      Self::Output => pdu::terminal::TerminalInputEvent::Output,
+      Self::Create(id) => pdu::terminal::TerminalInputEvent::Create(id),
+      Self::Data { id, data } => pdu::terminal::TerminalInputEvent::Data { id, data },
+      Self::Resize {
+        id,
+        rows,
+        cols,
+        pw,
+        ph,
+      } => pdu::terminal::TerminalInputEvent::Resize {
+        id,
+        rows,
+        cols,
+        pw,
+        ph,
+      },
     }
   }
 }
 
-impl Into<pdu::static_channel::StaticChannelInput> for SseStaticChannelInput {
-  fn into(self) -> pdu::static_channel::StaticChannelInput {
-    match self {
-      SseStaticChannelInput::Terminal(value) => {
-        pdu::static_channel::StaticChannelInput::Terminal(value.into())
-      }
-    }
-  }
-}
-
-impl From<pdu::terminal::TerminalOutput> for SseTerminalOutput {
-  fn from(value: pdu::terminal::TerminalOutput) -> Self {
+impl From<pdu::terminal::TerminalOutputEvent> for SseTerminalOutputEvent {
+  fn from(value: pdu::terminal::TerminalOutputEvent) -> Self {
     match value {
-      pdu::terminal::TerminalOutput::StdOut(data) => Self::StdOut(data),
-      pdu::terminal::TerminalOutput::StdErr(data) => Self::StdErr(data),
-    }
-  }
-}
-
-impl From<pdu::static_channel::StaticChannelOutput> for SseStaticChannelOutput {
-  fn from(value: pdu::static_channel::StaticChannelOutput) -> Self {
-    match value {
-      pdu::static_channel::StaticChannelOutput::Terminal(value) => Self::Terminal(value.into()),
+      pdu::terminal::TerminalOutputEvent::Connected(id) => Self::Connected(id),
+      pdu::terminal::TerminalOutputEvent::Data { id, data } => Self::Data { id, data },
+      pdu::terminal::TerminalOutputEvent::Exit { id, code } => Self::Exit { id, code },
     }
   }
 }

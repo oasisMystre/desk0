@@ -9,6 +9,7 @@ mod api;
 mod handlers;
 mod platform;
 mod server;
+mod static_channels;
 
 rust_i18n::i18n!("locales");
 

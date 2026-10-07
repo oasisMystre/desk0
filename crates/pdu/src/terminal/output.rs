@@ -1,45 +1,49 @@
 use ironrdp::{
-  core::Encode,
-  pdu::{PduError, PduErrorKind},
+  core::{Decode, DecodeError, Encode, UnexpectedMessageTypeErr},
+  svc::SvcEncode,
 };
 
-pub enum TerminalOutput {
-  StdOut(Vec<u8>),
-  StdErr(Vec<u8>),
+pub enum TerminalOutputEvent {
+  Connected(u8),
+  Exit { id: u8, code: u8 },
+  Data { id: u8, data: Vec<u8> },
 }
 
-impl TerminalOutput {
-  const STDOUT: u8 = 0;
-  const STDERR: u8 = 1;
-
-  pub fn len(&self) -> usize {
-    match self {
-      TerminalOutput::StdOut(data) | TerminalOutput::StdErr(data) => data.len(),
-    }
-  }
-
-  pub fn is_empty(&self) -> bool {
-    match self {
-      TerminalOutput::StdOut(data) | TerminalOutput::StdErr(data) => data.is_empty(),
-    }
-  }
+impl TerminalOutputEvent {
+  const DATA: u8 = 0;
+  const EXIT: u8 = 1;
+  const CONNECTED: u8 = 2;
 }
 
-impl TryFrom<&[u8]> for TerminalOutput {
-  type Error = PduError;
+impl<'de> Decode<'de> for TerminalOutputEvent {
+  fn decode(src: &mut ironrdp::core::ReadCursor<'de>) -> ironrdp::core::DecodeResult<Self> {
+    let discriminator = src.read_u8();
 
-  fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
-    let (discriminator, data) = value
-      .split_first()
-      .ok_or_else(|| PduError::new("empty terminal message", PduErrorKind::Decode))?;
+    let value = match discriminator {
+      Self::DATA => {
+        let id = src.read_u8();
+        let length = src.read_u64();
+        let data = src.read_slice(length as usize);
 
-    let value = match *discriminator {
-      Self::STDOUT => Self::StdOut(data.to_vec()),
-      Self::STDERR => Self::StdErr(data.to_vec()),
+        Self::Data {
+          id,
+          data: data.to_vec(),
+        }
+      }
+      Self::EXIT => {
+        let id = src.read_u8();
+        let code = src.read_u8();
+        Self::Exit { id, code }
+      }
+      Self::CONNECTED => {
+        let id = src.read_u8();
+        Self::Connected(id)
+      }
       _ => {
-        return Err(PduError::new(
-          "unsupported terminal discriminator: {discriminator}",
-          PduErrorKind::Decode,
+        return Err(DecodeError::unexpected_message_type(
+          "unsupported terminal output discriminator",
+          discriminator,
+          Some(0),
         ));
       }
     };
@@ -48,15 +52,25 @@ impl TryFrom<&[u8]> for TerminalOutput {
   }
 }
 
-impl Encode for TerminalOutput {
+impl Encode for TerminalOutputEvent {
   fn encode(&self, dst: &mut ironrdp::core::WriteCursor<'_>) -> ironrdp::core::EncodeResult<()> {
-    let (discriminator, data) = match self {
-      TerminalOutput::StdOut(data) => (Self::STDOUT, data),
-      TerminalOutput::StdErr(data) => (Self::STDERR, data),
+    match self {
+      Self::Data { id, data } => {
+        dst.write_u8(Self::DATA);
+        dst.write_u8(*id);
+        dst.write_u64(data.len() as u64);
+        dst.write_slice(data);
+      }
+      Self::Exit { id, code } => {
+        dst.write_u8(Self::EXIT);
+        dst.write_u8(*id);
+        dst.write_u8(*code);
+      }
+      Self::Connected(id) => {
+        dst.write_u8(Self::CONNECTED);
+        dst.write_u8(*id);
+      }
     };
-
-    dst.write_u8(discriminator);
-    dst.write_slice(data);
 
     Ok(())
   }
@@ -66,9 +80,14 @@ impl Encode for TerminalOutput {
   }
 
   fn size(&self) -> usize {
-    size_of::<u8>()
-      + match self {
-        Self::StdOut(data) | Self::StdErr(data) => data.len(),
-      }
+    let size = match self {
+      TerminalOutputEvent::Exit { .. } => 2 * size_of::<u8>(),
+      TerminalOutputEvent::Connected(_) => size_of::<u8>(),
+      TerminalOutputEvent::Data { data, .. } => size_of::<u8>() + size_of::<u64>() + data.len(),
+    };
+
+    size_of::<u8>() + size
   }
 }
+
+impl SvcEncode for TerminalOutputEvent {}

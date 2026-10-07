@@ -3,15 +3,15 @@ use flutter_rust_bridge::frb;
 use ironrdp::{
   client::rdp::{RdpInputEvent, RdpOutputEvent},
   input::Operation,
-  pdu::gcc::ChannelName,
   svc::SvcMessage,
 };
+use pdu::terminal::TERMINAL_STATIC_CHANNEL_NAME;
 use shared::init::init_tracing;
 use std::sync::{Arc, Mutex};
 use tokio::sync::mpsc::error::TrySendError;
 
 use crate::{
-  SseClipboardEvent, SseInputEvent, SseStaticChannelInput, SseStaticChannelOutput,
+  SseClipboardEvent, SseInputEvent, SseTerminalInputEvent, SseTerminalOutputEvent,
   frame::TextureHandle,
   frb_generated::StreamSink,
   types::{SseDesktopSize, SseOutputEvent},
@@ -127,9 +127,9 @@ impl ViewerHandle {
     Ok(())
   }
 
-  pub fn on_static_channel_event_event(
+  pub fn on_terminal_output_event_event(
     &self,
-    events: StreamSink<SseStaticChannelOutput>,
+    events: StreamSink<SseTerminalOutputEvent>,
   ) -> anyhow::Result<()> {
     let mut inner = self
       .inner
@@ -139,7 +139,7 @@ impl ViewerHandle {
       .as_mut()
       .ok_or_else(|| anyhow::anyhow!("viewer is not connected"))?;
 
-    viewer.set_static_channel_event_callback(move |event| {
+    viewer.set_terminal_output_event_callback(move |event| {
       let _ = events.add(event.into());
     });
 
@@ -160,10 +160,7 @@ impl ViewerHandle {
     Ok(())
   }
 
-  pub fn send_static_channel_events(
-    &self,
-    events: Vec<SseStaticChannelInput>,
-  ) -> anyhow::Result<()> {
+  pub fn send_terminal_input_events(&self, events: Vec<SseTerminalInputEvent>) -> anyhow::Result<()> {
     let mut inner = self
       .inner
       .lock()
@@ -173,7 +170,7 @@ impl ViewerHandle {
       .ok_or_else(|| anyhow::anyhow!("viewer is not connected"))?;
 
     for event in events {
-      let message: pdu::static_channel::StaticChannelInput = event.into();
+      let message: pdu::terminal::TerminalInputEvent = event.into();
       let message: SvcMessage = message.into();
 
       let data = message
@@ -182,7 +179,7 @@ impl ViewerHandle {
 
       match viewer.input.try_send(RdpInputEvent::SendStaticChannelData {
         data,
-        channel_name: ChannelName::from_static(b"desk0123"),
+        channel_name: TERMINAL_STATIC_CHANNEL_NAME,
       }) {
         Ok(()) => {}
         Err(TrySendError::Full(_)) => {

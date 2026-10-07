@@ -76,36 +76,38 @@ typedef struct wire_cst_list_sse_input_event {
   int32_t len;
 } wire_cst_list_sse_input_event;
 
-typedef struct wire_cst_SseTerminalInput_StdIn {
-  struct wire_cst_list_prim_u_8_strict *field0;
-} wire_cst_SseTerminalInput_StdIn;
+typedef struct wire_cst_SseTerminalInputEvent_Create {
+  uint8_t field0;
+} wire_cst_SseTerminalInputEvent_Create;
 
-typedef union SseTerminalInputKind {
-  struct wire_cst_SseTerminalInput_StdIn StdIn;
-} SseTerminalInputKind;
+typedef struct wire_cst_SseTerminalInputEvent_Data {
+  uint8_t id;
+  struct wire_cst_list_prim_u_8_strict *data;
+} wire_cst_SseTerminalInputEvent_Data;
 
-typedef struct wire_cst_sse_terminal_input {
+typedef struct wire_cst_SseTerminalInputEvent_Resize {
+  uint8_t id;
+  uint16_t rows;
+  uint16_t cols;
+  uint16_t pw;
+  uint16_t ph;
+} wire_cst_SseTerminalInputEvent_Resize;
+
+typedef union SseTerminalInputEventKind {
+  struct wire_cst_SseTerminalInputEvent_Create Create;
+  struct wire_cst_SseTerminalInputEvent_Data Data;
+  struct wire_cst_SseTerminalInputEvent_Resize Resize;
+} SseTerminalInputEventKind;
+
+typedef struct wire_cst_sse_terminal_input_event {
   int32_t tag;
-  union SseTerminalInputKind kind;
-} wire_cst_sse_terminal_input;
+  union SseTerminalInputEventKind kind;
+} wire_cst_sse_terminal_input_event;
 
-typedef struct wire_cst_SseStaticChannelInput_Terminal {
-  struct wire_cst_sse_terminal_input *field0;
-} wire_cst_SseStaticChannelInput_Terminal;
-
-typedef union SseStaticChannelInputKind {
-  struct wire_cst_SseStaticChannelInput_Terminal Terminal;
-} SseStaticChannelInputKind;
-
-typedef struct wire_cst_sse_static_channel_input {
-  int32_t tag;
-  union SseStaticChannelInputKind kind;
-} wire_cst_sse_static_channel_input;
-
-typedef struct wire_cst_list_sse_static_channel_input {
-  struct wire_cst_sse_static_channel_input *ptr;
+typedef struct wire_cst_list_sse_terminal_input_event {
+  struct wire_cst_sse_terminal_input_event *ptr;
   int32_t len;
-} wire_cst_list_sse_static_channel_input;
+} wire_cst_list_sse_terminal_input_event;
 
 typedef struct wire_cst_SseDisconnectReason_Other {
   struct wire_cst_list_prim_u_8_strict *field0;
@@ -145,24 +147,6 @@ typedef struct wire_cst_sse_file_download_status {
   int32_t tag;
   union SseFileDownloadStatusKind kind;
 } wire_cst_sse_file_download_status;
-
-typedef struct wire_cst_SseTerminalOutput_StdOut {
-  struct wire_cst_list_prim_u_8_strict *field0;
-} wire_cst_SseTerminalOutput_StdOut;
-
-typedef struct wire_cst_SseTerminalOutput_StdErr {
-  struct wire_cst_list_prim_u_8_strict *field0;
-} wire_cst_SseTerminalOutput_StdErr;
-
-typedef union SseTerminalOutputKind {
-  struct wire_cst_SseTerminalOutput_StdOut StdOut;
-  struct wire_cst_SseTerminalOutput_StdErr StdErr;
-} SseTerminalOutputKind;
-
-typedef struct wire_cst_sse_terminal_output {
-  int32_t tag;
-  union SseTerminalOutputKind kind;
-} wire_cst_sse_terminal_output;
 
 typedef struct wire_cst_sse_monitor {
   int32_t left;
@@ -251,18 +235,30 @@ typedef struct wire_cst_sse_output_event {
   union SseOutputEventKind kind;
 } wire_cst_sse_output_event;
 
-typedef struct wire_cst_SseStaticChannelOutput_Terminal {
-  struct wire_cst_sse_terminal_output *field0;
-} wire_cst_SseStaticChannelOutput_Terminal;
+typedef struct wire_cst_SseTerminalOutputEvent_Connected {
+  uint8_t field0;
+} wire_cst_SseTerminalOutputEvent_Connected;
 
-typedef union SseStaticChannelOutputKind {
-  struct wire_cst_SseStaticChannelOutput_Terminal Terminal;
-} SseStaticChannelOutputKind;
+typedef struct wire_cst_SseTerminalOutputEvent_Data {
+  uint8_t id;
+  struct wire_cst_list_prim_u_8_strict *data;
+} wire_cst_SseTerminalOutputEvent_Data;
 
-typedef struct wire_cst_sse_static_channel_output {
+typedef struct wire_cst_SseTerminalOutputEvent_Exit {
+  uint8_t id;
+  uint8_t code;
+} wire_cst_SseTerminalOutputEvent_Exit;
+
+typedef union SseTerminalOutputEventKind {
+  struct wire_cst_SseTerminalOutputEvent_Connected Connected;
+  struct wire_cst_SseTerminalOutputEvent_Data Data;
+  struct wire_cst_SseTerminalOutputEvent_Exit Exit;
+} SseTerminalOutputEventKind;
+
+typedef struct wire_cst_sse_terminal_output_event {
   int32_t tag;
-  union SseStaticChannelOutputKind kind;
-} wire_cst_sse_static_channel_output;
+  union SseTerminalOutputEventKind kind;
+} wire_cst_sse_terminal_output_event;
 
 void frbgen_desk0_wire__crate__flutter__ViewerHandle_connect(int64_t port_, uintptr_t that);
 
@@ -281,9 +277,9 @@ void frbgen_desk0_wire__crate__flutter__ViewerHandle_on_rdp_event(int64_t port_,
                                                                   uintptr_t that,
                                                                   struct wire_cst_list_prim_u_8_strict *events);
 
-void frbgen_desk0_wire__crate__flutter__ViewerHandle_on_static_channel_event_event(int64_t port_,
-                                                                                   uintptr_t that,
-                                                                                   struct wire_cst_list_prim_u_8_strict *events);
+void frbgen_desk0_wire__crate__flutter__ViewerHandle_on_terminal_output_event_event(int64_t port_,
+                                                                                    uintptr_t that,
+                                                                                    struct wire_cst_list_prim_u_8_strict *events);
 
 void frbgen_desk0_wire__crate__flutter__ViewerHandle_resize(int64_t port_,
                                                             uintptr_t that,
@@ -296,9 +292,9 @@ void frbgen_desk0_wire__crate__flutter__ViewerHandle_send_input_events(int64_t p
                                                                        uintptr_t that,
                                                                        struct wire_cst_list_sse_input_event *events);
 
-void frbgen_desk0_wire__crate__flutter__ViewerHandle_send_static_channel_events(int64_t port_,
+void frbgen_desk0_wire__crate__flutter__ViewerHandle_send_terminal_input_events(int64_t port_,
                                                                                 uintptr_t that,
-                                                                                struct wire_cst_list_sse_static_channel_input *events);
+                                                                                struct wire_cst_list_sse_terminal_input_event *events);
 
 void frbgen_desk0_rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerViewerHandle(const void *ptr);
 
@@ -312,29 +308,23 @@ struct wire_cst_sse_disconnect_reason *frbgen_desk0_cst_new_box_autoadd_sse_disc
 
 struct wire_cst_sse_file_download_status *frbgen_desk0_cst_new_box_autoadd_sse_file_download_status(void);
 
-struct wire_cst_sse_terminal_input *frbgen_desk0_cst_new_box_autoadd_sse_terminal_input(void);
-
-struct wire_cst_sse_terminal_output *frbgen_desk0_cst_new_box_autoadd_sse_terminal_output(void);
-
 struct wire_cst_list_prim_u_8_strict *frbgen_desk0_cst_new_list_prim_u_8_strict(int32_t len);
 
 struct wire_cst_list_sse_input_event *frbgen_desk0_cst_new_list_sse_input_event(int32_t len);
 
 struct wire_cst_list_sse_monitor *frbgen_desk0_cst_new_list_sse_monitor(int32_t len);
 
-struct wire_cst_list_sse_static_channel_input *frbgen_desk0_cst_new_list_sse_static_channel_input(int32_t len);
+struct wire_cst_list_sse_terminal_input_event *frbgen_desk0_cst_new_list_sse_terminal_input_event(int32_t len);
 static int64_t dummy_method_to_enforce_bundling(void) {
     int64_t dummy_var = 0;
     dummy_var ^= ((int64_t) (void*) frbgen_desk0_cst_new_box_autoadd_record_u_32_u_32);
     dummy_var ^= ((int64_t) (void*) frbgen_desk0_cst_new_box_autoadd_sse_desktop_size);
     dummy_var ^= ((int64_t) (void*) frbgen_desk0_cst_new_box_autoadd_sse_disconnect_reason);
     dummy_var ^= ((int64_t) (void*) frbgen_desk0_cst_new_box_autoadd_sse_file_download_status);
-    dummy_var ^= ((int64_t) (void*) frbgen_desk0_cst_new_box_autoadd_sse_terminal_input);
-    dummy_var ^= ((int64_t) (void*) frbgen_desk0_cst_new_box_autoadd_sse_terminal_output);
     dummy_var ^= ((int64_t) (void*) frbgen_desk0_cst_new_list_prim_u_8_strict);
     dummy_var ^= ((int64_t) (void*) frbgen_desk0_cst_new_list_sse_input_event);
     dummy_var ^= ((int64_t) (void*) frbgen_desk0_cst_new_list_sse_monitor);
-    dummy_var ^= ((int64_t) (void*) frbgen_desk0_cst_new_list_sse_static_channel_input);
+    dummy_var ^= ((int64_t) (void*) frbgen_desk0_cst_new_list_sse_terminal_input_event);
     dummy_var ^= ((int64_t) (void*) frbgen_desk0_rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerViewerHandle);
     dummy_var ^= ((int64_t) (void*) frbgen_desk0_rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerViewerHandle);
     dummy_var ^= ((int64_t) (void*) frbgen_desk0_wire__crate__flutter__ViewerHandle_connect);
@@ -342,10 +332,10 @@ static int64_t dummy_method_to_enforce_bundling(void) {
     dummy_var ^= ((int64_t) (void*) frbgen_desk0_wire__crate__flutter__ViewerHandle_new);
     dummy_var ^= ((int64_t) (void*) frbgen_desk0_wire__crate__flutter__ViewerHandle_on_clipboard_event);
     dummy_var ^= ((int64_t) (void*) frbgen_desk0_wire__crate__flutter__ViewerHandle_on_rdp_event);
-    dummy_var ^= ((int64_t) (void*) frbgen_desk0_wire__crate__flutter__ViewerHandle_on_static_channel_event_event);
+    dummy_var ^= ((int64_t) (void*) frbgen_desk0_wire__crate__flutter__ViewerHandle_on_terminal_output_event_event);
     dummy_var ^= ((int64_t) (void*) frbgen_desk0_wire__crate__flutter__ViewerHandle_resize);
     dummy_var ^= ((int64_t) (void*) frbgen_desk0_wire__crate__flutter__ViewerHandle_send_input_events);
-    dummy_var ^= ((int64_t) (void*) frbgen_desk0_wire__crate__flutter__ViewerHandle_send_static_channel_events);
+    dummy_var ^= ((int64_t) (void*) frbgen_desk0_wire__crate__flutter__ViewerHandle_send_terminal_input_events);
     dummy_var ^= ((int64_t) (void*) store_dart_post_cobject);
     return dummy_var;
 }

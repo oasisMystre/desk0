@@ -14,12 +14,12 @@ use ironrdp::{
   input::{Database, Operation},
   pdu::rdp::capability_sets::MajorPlatformType,
 };
-use pdu::static_channel::StaticChannelOutput;
+use pdu::terminal::TerminalOutputEvent;
 use tokio::sync::mpsc::{UnboundedSender, error::TrySendError};
 use tokio_util::sync::CancellationToken;
 use winit::dpi::PhysicalSize;
 
-use crate::static_channel::Desk0StaticChannel;
+use crate::static_channel::TerminalStaticChannel;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Desk0ViewerError {
@@ -42,13 +42,13 @@ pub enum Desk0ViewerOutput {
       Arc<Mutex<Option<Arc<dyn Fn(RdpOutputEvent) + 'static + Sync + Send>>>>,
     clipboard_event_callback:
       Arc<Mutex<Option<Arc<dyn Fn(ClipboardEvent) + 'static + Sync + Send>>>>,
-    static_channel_event_callback:
-      Arc<Mutex<Option<Arc<dyn Fn(StaticChannelOutput) + Sync + Send + 'static>>>>,
+    terminal_output_event_callback:
+      Arc<Mutex<Option<Arc<dyn Fn(TerminalOutputEvent) + Sync + Send + 'static>>>>,
   },
   Channel {
     rdp_output_event_sender: OutputEventSender,
     clipboard_event_sender: Option<UnboundedSender<ClipboardEvent>>,
-    static_channel_event_sender: Option<UnboundedSender<StaticChannelOutput>>,
+    terminal_output_event_sender: Option<UnboundedSender<TerminalOutputEvent>>,
   },
 }
 
@@ -73,7 +73,7 @@ impl Desk0ViewerOutput {
     Self::Callback {
       rdp_output_event_callback: Arc::new(Mutex::new(None)),
       clipboard_event_callback: Arc::new(Mutex::new(None)),
-      static_channel_event_callback: Arc::new(Mutex::new(None)),
+      terminal_output_event_callback: Arc::new(Mutex::new(None)),
     }
   }
 
@@ -121,23 +121,23 @@ impl Desk0ViewerOutput {
     }
   }
 
-  pub fn send_static_output_event(&self, event: StaticChannelOutput) {
+  pub fn send_terminal_output_event(&self, event: TerminalOutputEvent) {
     match self {
       Self::Callback {
-        static_channel_event_callback,
+        terminal_output_event_callback,
         ..
       } => {
-        let callback = static_channel_event_callback.lock().unwrap().clone();
+        let callback = terminal_output_event_callback.lock().unwrap().clone();
 
         if let Some(callback) = callback {
           (callback)(event);
         }
       }
       Self::Channel {
-        static_channel_event_sender,
+        terminal_output_event_sender,
         ..
       } => {
-        if let Some(sender) = static_channel_event_sender {
+        if let Some(sender) = terminal_output_event_sender {
           let _ = sender.send(event);
         };
       }
@@ -148,14 +148,12 @@ impl Desk0ViewerOutput {
   where
     F: Fn(RdpOutputEvent) + Send + Sync + 'static,
   {
-    match self {
-      Desk0ViewerOutput::Callback {
-        rdp_output_event_callback,
-        ..
-      } => {
-        *rdp_output_event_callback.lock().unwrap() = Some(Arc::new(callback));
-      }
-      Desk0ViewerOutput::Channel { .. } => unimplemented!(),
+    if let Desk0ViewerOutput::Callback {
+      rdp_output_event_callback,
+      ..
+    } = self
+    {
+      *rdp_output_event_callback.lock().unwrap() = Some(Arc::new(callback));
     }
   }
 
@@ -163,29 +161,25 @@ impl Desk0ViewerOutput {
   where
     F: Fn(ClipboardEvent) + Send + Sync + 'static,
   {
-    match self {
-      Desk0ViewerOutput::Callback {
-        clipboard_event_callback,
-        ..
-      } => {
-        *clipboard_event_callback.lock().unwrap() = Some(Arc::new(callback));
-      }
-      Desk0ViewerOutput::Channel { .. } => unimplemented!(),
+    if let Desk0ViewerOutput::Callback {
+      clipboard_event_callback,
+      ..
+    } = self
+    {
+      *clipboard_event_callback.lock().unwrap() = Some(Arc::new(callback));
     }
   }
 
-  pub fn set_static_channel_event_callback<F>(&self, callback: F)
+  pub fn set_terminal_output_event_callback<F>(&self, callback: F)
   where
-    F: Fn(StaticChannelOutput) + Send + Sync + 'static,
+    F: Fn(TerminalOutputEvent) + Send + Sync + 'static,
   {
-    match self {
-      Desk0ViewerOutput::Callback {
-        static_channel_event_callback,
-        ..
-      } => {
-        *static_channel_event_callback.lock().unwrap() = Some(Arc::new(callback));
-      }
-      Desk0ViewerOutput::Channel { .. } => unimplemented!(),
+    if let Desk0ViewerOutput::Callback {
+      terminal_output_event_callback,
+      ..
+    } = self
+    {
+      *terminal_output_event_callback.lock().unwrap() = Some(Arc::new(callback));
     }
   }
 }
@@ -267,8 +261,8 @@ impl Desk0Viewer {
         move |_| {
           let output = output.clone();
 
-          Some(Desk0StaticChannel::new(move |event| {
-            output.send_static_output_event(event);
+          Some(TerminalStaticChannel::new(move |event| {
+            output.send_terminal_output_event(event);
           }))
         }
       });
@@ -362,11 +356,11 @@ impl Desk0Viewer {
     self.output.set_clipboard_event_callback(callback);
   }
 
-  pub fn set_static_channel_event_callback<F>(&self, callback: F)
+  pub fn set_terminal_output_event_callback<F>(&self, callback: F)
   where
-    F: Fn(StaticChannelOutput) + Send + Sync + 'static,
+    F: Fn(TerminalOutputEvent) + Send + Sync + 'static,
   {
-    self.output.set_static_channel_event_callback(callback);
+    self.output.set_terminal_output_event_callback(callback);
   }
 
   fn platform() -> MajorPlatformType {

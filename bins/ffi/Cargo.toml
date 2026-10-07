@@ -7,10 +7,6 @@ edition = "2024"
 name = "rust_lib_desk0"
 crate-type = ["cdylib", "staticlib"]
 
-[features]
-flutter = []
-default = ["flutter"]
-
 [dependencies]
 pdu.workspace = true
 winit = "0.30.13"
