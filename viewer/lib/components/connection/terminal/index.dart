@@ -90,6 +90,7 @@ class TerminalViewerState extends State<TerminalViewer> {
                         },
                         onClose: () {
                           removeTerminal(entry.key);
+                          terminalStaticChannelState.exit(entry.value);
                         },
                         data: 'Terminal ${entry.key + 1}',
                       ),

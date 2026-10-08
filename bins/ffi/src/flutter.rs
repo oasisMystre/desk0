@@ -11,7 +11,8 @@ use std::sync::{Arc, Mutex};
 use tokio::sync::mpsc::error::TrySendError;
 
 use crate::{
-  SseClipboardEvent, SseInputEvent, SseTerminalInputEvent, SseTerminalOutputEvent,
+  SseClipboardEvent, SseInputEvent, SseIoOutputEvent, SseStaticChannelInputEvent,
+  SseTerminalOutputEvent,
   frame::TextureHandle,
   frb_generated::StreamSink,
   types::{SseDesktopSize, SseOutputEvent},
@@ -127,6 +128,25 @@ impl ViewerHandle {
     Ok(())
   }
 
+  pub fn on_io_output_event_event(
+    &self,
+    events: StreamSink<SseIoOutputEvent>,
+  ) -> anyhow::Result<()> {
+    let mut inner = self
+      .inner
+      .lock()
+      .map_err(|_| anyhow::anyhow!("viewer lock poisoned"))?;
+    let viewer = inner
+      .as_mut()
+      .ok_or_else(|| anyhow::anyhow!("viewer is not connected"))?;
+
+    viewer.set_io_output_event_callback(move |event| {
+      let _ = events.add(event.into());
+    });
+
+    Ok(())
+  }
+
   pub fn on_terminal_output_event_event(
     &self,
     events: StreamSink<SseTerminalOutputEvent>,
@@ -160,7 +180,10 @@ impl ViewerHandle {
     Ok(())
   }
 
-  pub fn send_terminal_input_events(&self, events: Vec<SseTerminalInputEvent>) -> anyhow::Result<()> {
+  pub fn send_static_channel_input_events(
+    &self,
+    events: Vec<SseStaticChannelInputEvent>,
+  ) -> anyhow::Result<()> {
     let mut inner = self
       .inner
       .lock()
@@ -170,8 +193,7 @@ impl ViewerHandle {
       .ok_or_else(|| anyhow::anyhow!("viewer is not connected"))?;
 
     for event in events {
-      let message: pdu::terminal::TerminalInputEvent = event.into();
-      let message: SvcMessage = message.into();
+      let message: SvcMessage = event.into();
 
       let data = message
         .encode_unframed_pdu()

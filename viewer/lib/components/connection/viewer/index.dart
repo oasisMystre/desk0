@@ -24,7 +24,7 @@ import 'keyboard.dart' show KeyboardListener;
 import '../../../ffi/flutter.dart' show ViewerHandle;
 import '../../../states/display_state.dart' show DisplayState;
 import 'connection_loading.dart' show ConnectionOverlay, ConnectionPhase;
-import '../../../ffi/types.dart'
+import '../../../ffi/types/rdp.dart'
     show
         SseDesktopSize,
         SseOutputEvent,

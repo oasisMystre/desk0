@@ -2,16 +2,17 @@ import 'dart:async' show Timer;
 import 'dart:convert' show utf8;
 
 import 'package:flutter/cupertino.dart';
-import 'package:xterm/xterm.dart'
+import 'package:terminal_view/terminal_view.dart'
     show Terminal, TerminalController, TerminalView;
 
 import '../../../states/index.dart' show TerminalStaticChannelState;
-import '../../../ffi/types.dart'
+import '../../../ffi/types/static_channels/terminal.dart'
     show
         SseTerminalOutputEvent,
         SseTerminalOutputEvent_Connected,
         SseTerminalOutputEvent_Data,
-        SseTerminalOutputEvent_Exit;
+        SseTerminalOutputEvent_Exit,
+        SseTerminalOutputEvent_Error;
 
 class TerminalTab extends StatefulWidget {
   final int terminalId;
@@ -63,8 +64,18 @@ class TerminalTabState extends State<TerminalTab> {
         break;
       case SseTerminalOutputEvent_Data(:final data):
         terminal.write(utf8.decode(data, allowMalformed: true));
-      case SseTerminalOutputEvent_Exit(:final code):
-        terminal.write("\r\n[Process exited $code]\r\n");
+      case SseTerminalOutputEvent_Exit(:final code, :final description):
+        terminal.write("\r\n[Process exited with $code]\r\n");
+        if (description != null) {
+          terminal.write("$description\r\n");
+        }
+
+      case SseTerminalOutputEvent_Error(
+        :final id,
+        :final code,
+        :final description,
+      ):
+        debugPrint("$id, $code $description");
     }
   }
 
@@ -87,7 +98,7 @@ class TerminalTabState extends State<TerminalTab> {
       hardwareKeyboardOnly: true,
       keyboardType: TextInputType.multiline,
       padding: const EdgeInsets.symmetric(horizontal: 12),
-      // blinkInterval: const Duration(milliseconds: 600),
+      blinkInterval: const Duration(milliseconds: 600),
     );
   }
 }
@@ -117,7 +128,7 @@ class Shell {
     final data = inputBuffer;
     inputBuffer = '';
 
-    terminalStaticChannelState.sendInput(terminalId, data);
+    terminalStaticChannelState.send(terminalId, data);
   }
 
   void dispose() {

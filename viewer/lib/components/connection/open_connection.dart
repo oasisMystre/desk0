@@ -3,7 +3,7 @@ import 'package:flutter/cupertino.dart';
 import 'viewer/index.dart' show DeviceViewer;
 import 'terminal/index.dart' show TerminalViewer;
 import '../../ffi/flutter.dart' show ViewerHandle;
-import '../../ffi/types.dart' show SseDesktopSize;
+import '../../ffi/types/rdp.dart' show SseDesktopSize;
 import '../../states/display_state.dart' show DisplayState;
 
 enum ConnectionType { terminal, desktop }

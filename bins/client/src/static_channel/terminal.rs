@@ -18,9 +18,9 @@ impl Debug for TerminalStaticChannel {
 }
 
 impl TerminalStaticChannel {
-  pub fn new<T>(callback: T) -> Self
+  pub fn new<F>(callback: F) -> Self
   where
-    T: Fn(TerminalOutputEvent) + Send + Sync + 'static,
+    F: Fn(TerminalOutputEvent) + Send + Sync + 'static,
   {
     Self {
       callback: Arc::new(callback),
@@ -38,7 +38,7 @@ impl SvcProcessor for TerminalStaticChannel {
 
   fn process(&mut self, payload: &[u8]) -> PduResult<Vec<SvcMessage>> {
     let payload = decode::<TerminalOutputEvent>(payload)
-      .map_err(|error| PduError::decode("static channel output", error))?;
+      .map_err(|error| PduError::decode("terminal static channel output", error))?;
     (self.callback)(payload);
 
     Ok(vec![])

@@ -1,15 +1,6 @@
-# desk0
+> [!Caution]
+> **Misuse Disclaimer: ** <br>
+> The developers of Desk0 do not condone or support any unethical or illegal use of this software. Misuse, such as unauthorized access, control or invasion of privacy, is strictly against our guidelines. The authors are not responsible for any misuse of the application.
 
-To install dependencies:
+Chat with us: 
 
-```bash
-bun install
-```
-
-To run:
-
-```bash
-bun run index.ts
-```
-
-This project was created using `bun init` in bun v1.3.14. [Bun](https://bun.com) is a fast all-in-one JavaScript runtime.

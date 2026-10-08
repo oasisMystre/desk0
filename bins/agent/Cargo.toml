@@ -14,7 +14,7 @@ display-info = "0.5.9"
 enigo = "0.6.1"
 futures.workspace = true
 ironrdp = { workspace = true, features = ["acceptor", "server", "cliprdr", "svc"] }
-reqwest = { version = "0.13.4", features = ["json"]}
+reqwest = { version = "0.13.4", features = ["json", "stream"] }
 rocksdb = "0.25.0"
 rs_capture.workspace = true
 rust-i18n = "4.2.1"

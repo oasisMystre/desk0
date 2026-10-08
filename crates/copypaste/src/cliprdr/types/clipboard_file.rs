@@ -31,9 +31,10 @@ impl ClipboardState {
   pub fn clear(&mut self) {
     self.text = None;
     self.html = None;
-    self.rich_text = None;
-    self.files.clear();
     self.image = None;
+    self.rich_text = None;
+
+    self.files.clear();
     self.active_locks.clear();
   }
 

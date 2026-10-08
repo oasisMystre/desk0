@@ -1,4 +1,3 @@
-import 'package:desk0/ffi/types.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
@@ -11,6 +10,7 @@ import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'env.dart';
 import 'dio/index.dart';
 import 'states/index.dart';
+import 'ffi/types/rdp.dart';
 import 'screens/index.dart';
 import 'theme/app_theme.dart';
 import 'components/index.dart';

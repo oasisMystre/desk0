@@ -1,4 +1,4 @@
-import 'package:desk0/ffi/types.dart' show SseDesktopSize;
+import 'package:desk0/ffi/types/rdp.dart' show SseDesktopSize;
 
 const kDefaultDeviceWidth = 1280;
 const kDefaultDeviceHeight = 720;

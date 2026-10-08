@@ -14,12 +14,12 @@ use ironrdp::{
   input::{Database, Operation},
   pdu::rdp::capability_sets::MajorPlatformType,
 };
-use pdu::terminal::TerminalOutputEvent;
+use pdu::{io::IoOutputEvent, terminal::TerminalOutputEvent};
 use tokio::sync::mpsc::{UnboundedSender, error::TrySendError};
 use tokio_util::sync::CancellationToken;
 use winit::dpi::PhysicalSize;
 
-use crate::static_channel::TerminalStaticChannel;
+use crate::static_channel::{IoStaticChannel, TerminalStaticChannel};
 
 #[derive(Debug, thiserror::Error)]
 pub enum Desk0ViewerError {
@@ -42,12 +42,15 @@ pub enum Desk0ViewerOutput {
       Arc<Mutex<Option<Arc<dyn Fn(RdpOutputEvent) + 'static + Sync + Send>>>>,
     clipboard_event_callback:
       Arc<Mutex<Option<Arc<dyn Fn(ClipboardEvent) + 'static + Sync + Send>>>>,
+    io_output_event_callback:
+      Arc<Mutex<Option<Arc<dyn Fn(IoOutputEvent) + Sync + Send + 'static>>>>,
     terminal_output_event_callback:
       Arc<Mutex<Option<Arc<dyn Fn(TerminalOutputEvent) + Sync + Send + 'static>>>>,
   },
   Channel {
     rdp_output_event_sender: OutputEventSender,
     clipboard_event_sender: Option<UnboundedSender<ClipboardEvent>>,
+    io_output_event_sender: Option<UnboundedSender<IoOutputEvent>>,
     terminal_output_event_sender: Option<UnboundedSender<TerminalOutputEvent>>,
   },
 }
@@ -73,6 +76,7 @@ impl Desk0ViewerOutput {
     Self::Callback {
       rdp_output_event_callback: Arc::new(Mutex::new(None)),
       clipboard_event_callback: Arc::new(Mutex::new(None)),
+      io_output_event_callback: Arc::new(Mutex::new(None)),
       terminal_output_event_callback: Arc::new(Mutex::new(None)),
     }
   }
@@ -121,6 +125,28 @@ impl Desk0ViewerOutput {
     }
   }
 
+  pub fn send_io_output_event(&self, event: IoOutputEvent) {
+    match self {
+      Self::Callback {
+        io_output_event_callback,
+        ..
+      } => {
+        let callback = io_output_event_callback.lock().unwrap().clone();
+
+        if let Some(callback) = callback {
+          (callback)(event);
+        }
+      }
+      Self::Channel {
+        io_output_event_sender,
+        ..
+      } => {
+        if let Some(sender) = io_output_event_sender {
+          let _ = sender.send(event);
+        }
+      }
+    }
+  }
   pub fn send_terminal_output_event(&self, event: TerminalOutputEvent) {
     match self {
       Self::Callback {
@@ -139,7 +165,7 @@ impl Desk0ViewerOutput {
       } => {
         if let Some(sender) = terminal_output_event_sender {
           let _ = sender.send(event);
-        };
+        }
       }
     }
   }
@@ -167,6 +193,19 @@ impl Desk0ViewerOutput {
     } = self
     {
       *clipboard_event_callback.lock().unwrap() = Some(Arc::new(callback));
+    }
+  }
+
+  pub fn set_io_output_event_callback<F>(&self, callback: F)
+  where
+    F: Fn(IoOutputEvent) + Send + Sync + 'static,
+  {
+    if let Desk0ViewerOutput::Callback {
+      io_output_event_callback,
+      ..
+    } = self
+    {
+      *io_output_event_callback.lock().unwrap() = Some(Arc::new(callback));
     }
   }
 
@@ -254,6 +293,16 @@ impl Desk0Viewer {
             handler.build_cliprdr_backend()
           };
           Some(Cliprdr::new(backend))
+        }
+      })
+      .with_static_channel({
+        let output = output.clone();
+        move |_| {
+          let output = output.clone();
+
+          Some(IoStaticChannel::new(move |event| {
+            output.send_io_output_event(event);
+          }))
         }
       })
       .with_static_channel({
@@ -354,6 +403,13 @@ impl Desk0Viewer {
     F: Fn(ClipboardEvent) + Send + Sync + 'static,
   {
     self.output.set_clipboard_event_callback(callback);
+  }
+
+  pub fn set_io_output_event_callback<F>(&self, callback: F)
+  where
+    F: Fn(IoOutputEvent) + Send + Sync + 'static,
+  {
+    self.output.set_io_output_event_callback(callback);
   }
 
   pub fn set_terminal_output_event_callback<F>(&self, callback: F)

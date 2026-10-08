@@ -30,7 +30,7 @@ import 'package:flutter/cupertino.dart'
         MouseRegion;
 
 import '../../../ffi/flutter.dart' show ViewerHandle;
-import '../../../ffi/types.dart' show SseMouseButton, SseInputEvent;
+import '../../../ffi/types/rdp.dart' show SseMouseButton, SseInputEvent;
 
 class MouseListener extends StatefulWidget {
   final Point scale;

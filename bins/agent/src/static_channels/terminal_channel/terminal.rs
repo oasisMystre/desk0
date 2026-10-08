@@ -1,14 +1,17 @@
 use std::{
   fmt::Debug,
   io::{Read, Write},
+  process::Output,
 };
 
-use portable_pty::{CommandBuilder, MasterPty, PtySize, native_pty_system};
+use pdu::MAX_DATA_SIZE;
+use portable_pty::{Child, CommandBuilder, MasterPty, PtySize, native_pty_system};
 
 pub struct Terminal {
-  pub master: Box<dyn MasterPty + Send>,
   pub reader: Box<dyn Read + Send>,
   pub writer: Box<dyn Write + Send>,
+  pub master: Box<dyn MasterPty + Send>,
+  pub child: Box<dyn Child + Send>,
 }
 
 impl Debug for Terminal {
@@ -18,30 +21,18 @@ impl Debug for Terminal {
 }
 
 impl Terminal {
-  fn shell() -> CommandBuilder {
+  pub fn shell<'a>() -> (String, &'a [&'a str]) {
     #[cfg(target_os = "windows")]
-    let command = {
-      let mut command = CommandBuilder::new("cmd.exe");
-      command.arg("/Q");
-      command
-    };
+    return ("cmd.exe".into(), &["/Q"]);
 
     #[cfg(target_os = "macos")]
-    let command = {
-      let mut command = CommandBuilder::new("/bin/zsh");
-      command.arg("-l");
-      command
-    };
+    return ("/bin/zsh".into(), &["-l"]);
 
     #[cfg(not(any(target_os = "windows", target_os = "macos")))]
-    let command = {
+    {
       let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string());
-      let mut command = CommandBuilder::new(shell);
-      command.arg("-l");
-      command
-    };
-
-    command
+      (shell, &["-l"])
+    }
   }
 
   pub fn spawn() -> anyhow::Result<Self> {
@@ -53,8 +44,11 @@ impl Terminal {
       pixel_height: 0,
     })?;
 
-    let command = Self::shell();
-    pair.slave.spawn_command(command)?;
+    let (program, args) = Self::shell();
+    let mut command = CommandBuilder::new(program);
+    command.args(args);
+
+    let child = pair.slave.spawn_command(command)?;
 
     let reader = pair.master.try_clone_reader()?;
     let writer = pair.master.take_writer()?;
@@ -62,18 +56,19 @@ impl Terminal {
     Ok(Self {
       reader,
       writer,
+      child,
       master: pair.master,
     })
   }
 
-  pub async fn write<W: Write + Unpin>(w: &mut W, data: &[u8]) -> std::io::Result<()> {
+  pub fn write<W: Write + Unpin>(w: &mut W, data: &[u8]) -> std::io::Result<()> {
     w.write_all(data)?;
     w.flush()?;
     Ok(())
   }
 
-  pub async fn read<R: Read + Unpin>(r: &mut R) -> std::io::Result<Option<Vec<u8>>> {
-    let mut buffer = vec![0u8; 16 * 1024];
+  pub fn read<R: Read + Unpin>(r: &mut R) -> std::io::Result<Option<Vec<u8>>> {
+    let mut buffer = vec![0u8; MAX_DATA_SIZE];
     let n = r.read(&mut buffer)?;
     let result = match n {
       0 => None,
@@ -99,5 +94,21 @@ impl Terminal {
       pixel_width: pw,
       pixel_height: ph,
     })
+  }
+
+  pub fn run(stdin: &[u8]) -> std::io::Result<Output> {
+    let (program, args) = Self::shell();
+    let mut child = std::process::Command::new(program)
+      .args(args)
+      .stdin(std::process::Stdio::piped())
+      .stdout(std::process::Stdio::piped())
+      .stderr(std::process::Stdio::piped())
+      .spawn()?;
+
+    if let Some(mut writer) = child.stdin.take() {
+      writer.write_all(stdin)?;
+    }
+
+    child.wait_with_output()
   }
 }

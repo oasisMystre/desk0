@@ -10,7 +10,7 @@ import 'package:flutter/cupertino.dart'
         Focus;
 
 import 'hid_to_scancode.dart' show hidToScancode;
-import '../../../ffi/types.dart' show SseInputEvent;
+import '../../../ffi/types/rdp.dart' show SseInputEvent;
 import '../../../ffi/flutter.dart' show ViewerHandle;
 
 class KeyboardListener extends StatefulWidget {

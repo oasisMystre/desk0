@@ -6,9 +6,11 @@ use ironrdp::{
   server::StaticChannelFactory,
   svc::{SvcMessage, SvcProcessor, SvcServerProcessor},
 };
-use pdu::terminal::{TERMINAL_STATIC_CHANNEL_NAME, TerminalInputEvent, TerminalOutputEvent};
+use pdu::terminal::{
+  Mode, TERMINAL_STATIC_CHANNEL_NAME, TerminalError, TerminalInputEvent, TerminalOutputEvent,
+};
 use tokio::{
-  sync::mpsc::{Receiver, Sender, channel},
+  sync::mpsc::{Sender, UnboundedReceiver, UnboundedSender, channel, unbounded_channel},
   task::JoinHandle,
 };
 use tokio_util::sync::CancellationToken;
@@ -21,10 +23,10 @@ pub struct TerminalHandle {
 }
 
 struct TerminalStaticChannel {
-  output_sender: Sender<TerminalOutputEvent>,
-  output_receiver: Receiver<TerminalOutputEvent>,
+  output_sender: UnboundedSender<TerminalOutputEvent>,
+  output_receiver: UnboundedReceiver<TerminalOutputEvent>,
 
-  terminals: HashMap<u8, TerminalHandle>,
+  terminals: HashMap<u32, TerminalHandle>,
   cancellation_token: CancellationToken,
 }
 
@@ -52,55 +54,105 @@ impl TerminalHandle {
 }
 
 impl TerminalStaticChannel {
-  fn create(&mut self, id: u8) -> SvcMessage {
+  const MAX_CHANNEL_SIZE: usize = 512;
+
+  fn create(&mut self, id: u32) -> SvcMessage {
     if let Some(mut terminal) = self.terminals.remove(&id) {
       terminal.abort();
     }
 
-    let (sender, mut receiver) = channel(64);
-    let output_sender = self.output_sender.clone();
+    let (input_sender, mut input_receiver) = channel(Self::MAX_CHANNEL_SIZE);
 
     let terminal = match Terminal::spawn() {
       Ok(value) => value,
       Err(error) => {
-        tracing::error!(?error, "failed to create terminal");
-        return TerminalOutputEvent::Exit { id, code: 1 }.into();
+        tracing::error!(?id, ?error, "failed to create terminal");
+        return TerminalOutputEvent::Error {
+          id,
+          code: TerminalError::SpawnFailed,
+          description: Some(error.to_string()),
+        }
+        .into();
       }
     };
 
     let mut handles = vec![];
 
     handles.push(tokio::spawn({
+      let mut child = terminal.child;
       let mut writer = terminal.writer;
       let mut master = terminal.master;
 
+      let output_sender = self.output_sender.clone();
       let cancellation_token = self.cancellation_token.clone();
 
       async move {
-        loop {
-          tokio::select! {
-              _ = cancellation_token.cancelled() => break,
-              result = receiver.recv() => {
-                  let Some(input) = result else {
-                     break;
-                  };
+        let result = tokio::task::spawn_blocking(move || {
+          loop {
+            let input = match input_receiver.blocking_recv() {
+              Some(input) => input,
+              None => break,
+            };
 
-                  match input {
-                    TerminalInputEvent::Data { data, .. } => {
-                        if let Err(error) = Terminal::write(&mut writer, &data).await  {
-                            tracing::error!(?error, "failed to execute terminal command");
-                            continue;
-                        }
-                    },
-                    TerminalInputEvent::Resize { rows, cols, pw, ph, .. } => {
-                        if let Err(error) = Terminal::resize(&mut master, rows, cols, pw, ph)  {
-                            tracing::error!(?error, "failed to resize terminal");
-                            continue;
-                        }
-                    },
-                    _ => {}
+            match input {
+              TerminalInputEvent::Data { data, .. } => {
+                if let Err(error) = Terminal::write(&mut writer, &data) {
+                  tracing::error!(?id, ?error, "failed to write to terminal");
+
+                  let _ = output_sender.send(TerminalOutputEvent::Error {
+                    id,
+                    code: TerminalError::WriteFailed,
+                    description: Some(error.to_string()),
+                  });
+
+                  continue;
                 }
-             }
+              }
+              TerminalInputEvent::Resize {
+                rows, cols, pw, ph, ..
+              } => {
+                if let Err(error) = Terminal::resize(&mut master, rows, cols, pw, ph) {
+                  tracing::error!(?error, "failed to resize terminal");
+
+                  let _ = output_sender.send(TerminalOutputEvent::Error {
+                    id,
+                    code: TerminalError::ResizeFailed,
+                    description: Some(error.to_string()),
+                  });
+
+                  continue;
+                }
+              }
+              _ => {}
+            }
+          }
+
+          let code = match child.wait() {
+            Ok(status) => status.exit_code(),
+            Err(error) => {
+              tracing::error!(?id, ?error, "failed to wait for terminal process");
+
+              let _ = output_sender.send(TerminalOutputEvent::Error {
+                id,
+                code: TerminalError::ReadFailed,
+                description: Some(error.to_string()),
+              });
+
+              1
+            }
+          };
+
+          let _ = output_sender.send(TerminalOutputEvent::Exit {
+            id,
+            code: code as i32,
+            description: None,
+          });
+        })
+        .await;
+
+        if let Err(error) = result {
+          if !cancellation_token.is_cancelled() {
+            tracing::error!(?id, ?error, "terminal writer task failed");
           }
         }
       }
@@ -108,43 +160,68 @@ impl TerminalStaticChannel {
 
     handles.push(tokio::spawn({
       let mut reader = terminal.reader;
+      let output_sender = self.output_sender.clone();
       let cancellation_token = self.cancellation_token.clone();
 
       async move {
-        loop {
-          tokio::select! {
-              _ = cancellation_token.cancelled() => break,
-              result = Terminal::read(&mut reader) => {
-                  match result {
-                    Ok(Some(data)) => {
-                        if output_sender.send(TerminalOutputEvent::Data{id, data}).await.is_err(){
-                            break;
-                        }
-                    },
-                    Ok(None)| Err(_) => {
-                        let _ = output_sender.send(TerminalOutputEvent::Exit { id, code: 0 }).await;
-                        break;
-                    },
-                  }
+        let result = tokio::task::spawn_blocking(move || {
+          loop {
+            match Terminal::read(&mut reader) {
+              Ok(Some(data)) => {
+                if output_sender
+                  .send(TerminalOutputEvent::Data { id, data })
+                  .is_err()
+                {
+                  break;
+                }
+              }
+              Ok(None) => {
+                break;
+              }
+              Err(error) => {
+                let _ = output_sender.send(TerminalOutputEvent::Error {
+                  id,
+                  code: TerminalError::ReadFailed,
+                  description: Some(error.to_string()),
+                });
+                break;
+              }
+            }
+          }
+        })
+        .await;
 
-             }
+        if let Err(error) = result {
+          if !cancellation_token.is_cancelled() {
+            tracing::error!(?id, ?error, "terminal reader task failed");
           }
         }
+      }
+    }));
+
+    handles.push(tokio::spawn({
+      let input_sender = input_sender.clone();
+      let cancellation_token = self.cancellation_token.clone();
+
+      async move {
+        cancellation_token.cancelled().await;
+
+        drop(input_sender);
       }
     }));
 
     self.terminals.insert(
       id,
       TerminalHandle {
+        input_sender,
         handles: Some(handles),
-        input_sender: sender,
       },
     );
 
     TerminalOutputEvent::Connected(id).into()
   }
 
-  pub fn drain(&mut self) -> Vec<SvcMessage> {
+  fn drain(&mut self) -> Vec<SvcMessage> {
     let mut outputs: Vec<SvcMessage> = vec![];
 
     while let Ok(output) = self.output_receiver.try_recv() {
@@ -160,7 +237,7 @@ impl SvcServerProcessor for TerminalStaticChannel {}
 
 impl StaticChannelFactory for TerminalStaticChannelFactory {
   fn attach(&self, acceptor: &mut ironrdp::server::Acceptor) {
-    let (output_sender, output_receiver) = channel(64);
+    let (output_sender, output_receiver) = unbounded_channel();
 
     let channel = TerminalStaticChannel {
       output_sender,
@@ -182,28 +259,79 @@ impl SvcProcessor for TerminalStaticChannel {
     let input = decode::<TerminalInputEvent>(payload)
       .map_err(|error| PduError::decode("terminal channel input", error))?;
 
-    if let TerminalInputEvent::Output = input {
-      return Ok(self.drain());
-    }
+    match input {
+      TerminalInputEvent::Poll => Ok(self.drain()),
+      TerminalInputEvent::Create(id) => Ok(vec![self.create(id)]),
+      TerminalInputEvent::Exit(id) => {
+        if let Some(mut terminal) = self.terminals.remove(&id) {
+          terminal.abort();
+        }
 
-    if let TerminalInputEvent::Create(id) = input {
-      return Ok(vec![self.create(id)]);
-    }
+        return Ok(vec![]);
+      }
 
-    let id = match input {
-      TerminalInputEvent::Data { id, .. } => id,
-      TerminalInputEvent::Resize { id, .. } => id,
-      _ => return Ok(vec![]),
-    };
+      TerminalInputEvent::Data { id, mode, data } => {
+        if matches!(mode, Mode::Sync) {
+          return Ok(self.run_sync(id, &data));
+        }
+
+        self.send_input(id, TerminalInputEvent::Data { id, mode, data });
+
+        Ok(vec![])
+      }
+      input @ TerminalInputEvent::Resize { id, .. } => {
+        self.send_input(id, input);
+        Ok(vec![])
+      }
+    }
+  }
+}
+
+impl TerminalStaticChannel {
+  fn send_input(&mut self, id: u32, input: TerminalInputEvent) {
     let Some(terminal) = self.terminals.get(&id) else {
-      return Ok(vec![]);
+      return;
     };
 
     if let Err(error) = terminal.input_sender.try_send(input) {
-      tracing::warn!(?error, "failed to queue terminal input");
+      tracing::warn!(?id, ?error, "failed to queue terminal input");
     }
+  }
 
-    Ok(vec![])
+  fn run_sync(&self, id: u32, data: &[u8]) -> Vec<SvcMessage> {
+    match Terminal::run(data) {
+      Ok(output) => {
+        let mut outputs: Vec<SvcMessage> = vec![];
+
+        let mut data = output.stdout;
+        data.extend_from_slice(&output.stderr);
+
+        if !data.is_empty() {
+          outputs.push(TerminalOutputEvent::Data { id, data }.into());
+        }
+
+        let code = output.status.code().unwrap_or(1);
+
+        outputs.push(
+          TerminalOutputEvent::Exit {
+            id,
+            code,
+            description: None,
+          }
+          .into(),
+        );
+
+        outputs
+      }
+      Err(error) => vec![
+        TerminalOutputEvent::Error {
+          id,
+          code: TerminalError::SpawnFailed,
+          description: Some(error.to_string()),
+        }
+        .into(),
+      ],
+    }
   }
 }
 
@@ -212,11 +340,7 @@ impl Drop for TerminalStaticChannel {
     self.cancellation_token.cancel();
 
     for terminal in self.terminals.values_mut() {
-      if let Some(handles) = terminal.handles.take() {
-        for handle in handles {
-          handle.abort();
-        }
-      }
+      terminal.abort();
     }
   }
 }
