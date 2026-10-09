@@ -214,10 +214,10 @@ class DeviceViewerState extends State<DeviceViewer> {
       fit: StackFit.expand,
       children: [
         content,
-        if (phase != ConnectionPhase.connected)
-          Positioned.fill(
-            child: ConnectionOverlay(phase: phase, message: connectionMessage),
-          ),
+      //   if (phase != ConnectionPhase.connected)
+      //     Positioned.fill(
+      //       child: ConnectionOverlay(phase: phase, message: connectionMessage),
+      //     ),
       ],
     );
   }

@@ -127,7 +127,7 @@ impl DisplayHandler {
           || needs_full_frame.contains(&frame.monitor.source)
           || frame.inner.damage.is_none();
 
-        let updates = if full_frame {
+        let updates = if true {
           Self::full_frame_update(&pixels, width, height, frame.monitor.x, frame.monitor.y)
             .into_iter()
             .collect()
