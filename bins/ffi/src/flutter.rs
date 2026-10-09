@@ -7,7 +7,10 @@ use ironrdp::{
 };
 use pdu::terminal::TERMINAL_STATIC_CHANNEL_NAME;
 use shared::init::init_tracing;
-use std::sync::{Arc, Mutex};
+use std::sync::{
+  Arc, Mutex,
+  atomic::{AtomicBool, Ordering},
+};
 use tokio::sync::mpsc::error::TrySendError;
 
 use crate::{
@@ -23,6 +26,7 @@ pub struct ViewerHandle {
   token: String,
   endpoint: String,
   size: SseDesktopSize,
+  initialized: AtomicBool,
   inner: Mutex<Option<Desk0Viewer>>,
 
   // texture
@@ -37,6 +41,7 @@ impl ViewerHandle {
       token,
       endpoint,
       inner: Mutex::new(None),
+      initialized: AtomicBool::new(false),
       texture_handle: Arc::new(TextureHandle::new(size.width, size.height)),
     }
   }
@@ -48,8 +53,22 @@ impl ViewerHandle {
   }
 
   #[frb(sync)]
-  pub fn connect(&self) -> anyhow::Result<()> {
-    init_tracing()?;
+  pub fn connect(&self, events: Option<StreamSink<SseOutputEvent>>) -> anyhow::Result<()> {
+    if self.initialized.load(Ordering::Acquire) {
+      return Ok(());
+    }
+
+    let mut inner = self
+      .inner
+      .lock()
+      .map_err(|_| anyhow::anyhow!("viewer lock poisoned"))?;
+
+    if inner.is_some() {
+      self.initialized.store(true, Ordering::Release);
+      return Ok(());
+    }
+
+    let _ = init_tracing();
 
     let rt = tokio::runtime::Builder::new_multi_thread()
       .enable_all()
@@ -69,31 +88,16 @@ impl ViewerHandle {
     )
     .map_err(|error| anyhow::anyhow!(error.to_string()))?;
 
-    *self
-      .inner
-      .lock()
-      .map_err(|_| anyhow::anyhow!("viewer lock poisoned"))? = Some(viewer);
-    
-    Ok(())
-  }
-
-  pub fn on_rdp_event(&self, events: StreamSink<SseOutputEvent>) -> anyhow::Result<()> {
     let texture = self.texture_handle.clone();
-    let mut inner = self
-      .inner
-      .lock()
-      .map_err(|_| anyhow::anyhow!("viewer lock poisoned"))?;
-    let viewer = inner
-      .as_mut()
-      .ok_or_else(|| anyhow::anyhow!("viewer is not connected"))?;
-
     viewer.set_rdp_output_event_callback(move |event| match event {
       RdpOutputEvent::DesktopUpdate(update) => {
         let width = update.width().get();
         let height = update.height().get();
 
         texture.apply_desktop_update(update);
-        let _ = events.add(SseOutputEvent::Resize { width, height });
+        if let Some(events) = &events {
+          let _ = events.add(SseOutputEvent::Resize { width, height });
+        }
       }
       RdpOutputEvent::Image {
         buffer,
@@ -104,12 +108,19 @@ impl ViewerHandle {
         let height = height.get();
 
         texture.apply_image(width, height, &buffer);
-        let _ = events.add(SseOutputEvent::Resize { width, height });
+        if let Some(events) = &events {
+          let _ = events.add(SseOutputEvent::Resize { width, height });
+        }
       }
       event => {
-        let _ = events.add(SseOutputEvent::from(event));
+        if let Some(events) = &events {
+          let _ = events.add(SseOutputEvent::from(event));
+        }
       }
     });
+
+    *inner = Some(viewer);
+    self.initialized.store(true, Ordering::Release);
 
     Ok(())
   }

@@ -2338,6 +2338,7 @@ dependencies = [
  "irondash_texture",
  "ironrdp",
  "pdu",
+ "rayon",
  "shared",
  "tokio",
  "tracing",

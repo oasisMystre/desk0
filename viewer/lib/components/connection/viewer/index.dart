@@ -1,6 +1,7 @@
 import 'dart:math' show Point;
 import 'dart:async' show StreamSubscription;
 
+import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:get/get.dart' show Obx;
 import 'package:flutter/material.dart' hide KeyboardListener;
 import 'package:irondash_engine_context/irondash_engine_context.dart'
@@ -75,7 +76,9 @@ class DeviceViewerState extends State<DeviceViewer> {
       this.textureId = textureId;
     });
 
-    viewerSubscription = widget.viewer.onRdpEvent().listen(
+    final sink = RustStreamSink<SseOutputEvent>();
+    widget.viewer.connect(events: sink);
+    viewerSubscription = sink.stream.listen(
       onEvent,
       onError: (Object error, _) {
         setPhase(ConnectionPhase.failed, error.toString());
@@ -214,10 +217,10 @@ class DeviceViewerState extends State<DeviceViewer> {
       fit: StackFit.expand,
       children: [
         content,
-      //   if (phase != ConnectionPhase.connected)
-      //     Positioned.fill(
-      //       child: ConnectionOverlay(phase: phase, message: connectionMessage),
-      //     ),
+        //   if (phase != ConnectionPhase.connected)
+        //     Positioned.fill(
+        //       child: ConnectionOverlay(phase: phase, message: connectionMessage),
+        //     ),
       ],
     );
   }

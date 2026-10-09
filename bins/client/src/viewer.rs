@@ -96,11 +96,13 @@ impl Desk0ViewerOutput {
           (callback)(event);
         }
       }
-      Desk0ViewerOutput::Channel {
+      Self::Channel {
         rdp_output_event_sender,
         ..
       } => {
-        let _ = rdp_output_event_sender.send(event);
+        if let Err(error) = rdp_output_event_sender.try_send(event) {
+          tracing::error!(?error, "sending rdp output event failed");
+        }
       }
     }
   }
@@ -359,6 +361,8 @@ impl Desk0Viewer {
     mut rdp_output_event_receiver: OutputEventReceiver,
   ) -> anyhow::Result<(), Desk0ViewerError> {
     let client = self.client.take();
+    let cancellation_token = self._cancellation_token.clone();
+
     if let Some(client) = client {
       let thread = thread::Builder::new()
         .name(Self::THREAD_NAME.into())
@@ -374,6 +378,9 @@ impl Desk0Viewer {
               loop {
                 tokio::select! {
                   biased;
+                  _ = cancellation_token.cancelled() => {
+                     break;
+                  },
                   event = rdp_output_event_receiver.recv() => {
                       match event {
                           Some(event) => output.send_rdp_output_event(event),

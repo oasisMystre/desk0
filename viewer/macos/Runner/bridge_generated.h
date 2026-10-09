@@ -352,7 +352,8 @@ typedef struct wire_cst_sse_terminal_output_event {
   union SseTerminalOutputEventKind kind;
 } wire_cst_sse_terminal_output_event;
 
-WireSyncRust2DartDco frbgen_desk0_wire__crate__flutter__ViewerHandle_connect(uintptr_t that);
+WireSyncRust2DartDco frbgen_desk0_wire__crate__flutter__ViewerHandle_connect(uintptr_t that,
+                                                                             struct wire_cst_list_prim_u_8_strict *events);
 
 WireSyncRust2DartDco frbgen_desk0_wire__crate__flutter__ViewerHandle_create_texture(uintptr_t that,
                                                                                     int64_t engine_handle);
@@ -368,10 +369,6 @@ void frbgen_desk0_wire__crate__flutter__ViewerHandle_on_clipboard_event(int64_t 
 void frbgen_desk0_wire__crate__flutter__ViewerHandle_on_io_output_event_event(int64_t port_,
                                                                               uintptr_t that,
                                                                               struct wire_cst_list_prim_u_8_strict *events);
-
-void frbgen_desk0_wire__crate__flutter__ViewerHandle_on_rdp_event(int64_t port_,
-                                                                  uintptr_t that,
-                                                                  struct wire_cst_list_prim_u_8_strict *events);
 
 void frbgen_desk0_wire__crate__flutter__ViewerHandle_on_terminal_output_event_event(int64_t port_,
                                                                                     uintptr_t that,
@@ -440,7 +437,6 @@ static int64_t dummy_method_to_enforce_bundling(void) {
     dummy_var ^= ((int64_t) (void*) frbgen_desk0_wire__crate__flutter__ViewerHandle_new);
     dummy_var ^= ((int64_t) (void*) frbgen_desk0_wire__crate__flutter__ViewerHandle_on_clipboard_event);
     dummy_var ^= ((int64_t) (void*) frbgen_desk0_wire__crate__flutter__ViewerHandle_on_io_output_event_event);
-    dummy_var ^= ((int64_t) (void*) frbgen_desk0_wire__crate__flutter__ViewerHandle_on_rdp_event);
     dummy_var ^= ((int64_t) (void*) frbgen_desk0_wire__crate__flutter__ViewerHandle_on_terminal_output_event_event);
     dummy_var ^= ((int64_t) (void*) frbgen_desk0_wire__crate__flutter__ViewerHandle_resize);
     dummy_var ^= ((int64_t) (void*) frbgen_desk0_wire__crate__flutter__ViewerHandle_send_input_events);

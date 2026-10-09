@@ -4,6 +4,10 @@ use irondash_texture::{
   BoxedPixelData, PayloadProvider, PixelData, PixelDataProvider, SendableTexture, Texture,
 };
 use ironrdp::{client::rdp::DesktopUpdate, pdu::geometry::Rectangle};
+use rayon::{
+  iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator},
+  slice::{ParallelSlice, ParallelSliceMut},
+};
 
 pub struct Frame {
   width: u16,
@@ -84,16 +88,19 @@ impl TextureHandle {
     let source = update.buffer();
     let pixels = Arc::make_mut(&mut frame.pixels);
 
-    for y in 0..rheight {
-      let destination_row = ((rtop + y) * fwidth + rleft) * 4;
+    let start_index = rtop * fwidth * 4;
+    let end_index = (rtop + rheight) * fwidth * 4;
+    let target_rows = &mut pixels[start_index..end_index];
 
-      for x in 0..rwidth {
-        let destination = destination_row + x * 4;
-        let pixel = source[y * rwidth + x];
-
-        write_pixel(&mut pixels[destination..destination + 4], pixel);
-      }
-    }
+    target_rows
+      .par_chunks_exact_mut(fwidth * 4)
+      .zip(source.par_chunks_exact(rwidth))
+      .for_each(|(destination_frame_row, source_row)| {
+        let destination_segment = &mut destination_frame_row[(rleft * 4)..((rleft + rwidth) * 4)];
+        for (destination, &pixel) in destination_segment.chunks_exact_mut(4).zip(source_row) {
+          write_pixel(destination, pixel);
+        }
+      });
 
     drop(frame);
 
@@ -102,16 +109,28 @@ impl TextureHandle {
 
   pub fn apply_image(&self, width: u16, height: u16, buffer: &[u32]) {
     let mut frame = self.frame.lock().unwrap();
-
     Self::ensure_size(&mut frame, width, height);
+
+    let width = width as usize;
+    let height = height as usize;
+    let frame_width = frame.width as usize;
+
     let pixels = Arc::make_mut(&mut frame.pixels);
 
-    for (index, &pixel) in buffer.iter().enumerate() {
-      let pixel = pixel | 0xFF000000;
-      let destination = index * 4;
+    (0..height).into_par_iter().for_each(|y| {
+      let destination_start = y * frame_width * 4;
+      let source_start = y * width;
 
-      write_pixel(&mut pixels[destination..destination + 4], pixel);
-    }
+      let source_row = &buffer[source_start..source_start + width];
+      let destination_row = unsafe {
+        let ptr = pixels.as_ptr().cast_mut().add(destination_start);
+        std::slice::from_raw_parts_mut(ptr, width * 4)
+      };
+
+      for (destination, &pixel) in destination_row.chunks_exact_mut(4).zip(source_row) {
+        write_pixel(destination, pixel);
+      }
+    });
 
     drop(frame);
     self.update();
@@ -123,7 +142,14 @@ impl TextureHandle {
     if frame.width != aligned_width || frame.height != height {
       frame.width = aligned_width;
       frame.height = height;
-      frame.pixels = Arc::new(vec![0; (aligned_width as usize) * (height as usize) * 4]);
+      let len = (aligned_width as usize) * (height as usize) * 4;
+      let mut pixels = Vec::with_capacity(len);
+
+      unsafe {
+        pixels.set_len(len);
+      }
+
+      frame.pixels = Arc::new(pixels);
     }
   }
 

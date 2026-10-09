@@ -28,6 +28,7 @@ class TerminalViewerState extends State<TerminalViewer> {
   @override
   void initState() {
     super.initState();
+    widget.viewer.connect();
 
     terminalStaticChannelState = TerminalStaticChannelState(widget.viewer);
     createTerminal();

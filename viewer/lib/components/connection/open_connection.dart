@@ -45,8 +45,6 @@ class OpenConnectionState extends State<OpenConnection> {
       endpoint: uri.path == '/ws' ? widget.endpoint : '${uri.host}/ws',
     );
 
-    viewer.connect();
-
     super.initState();
   }
 

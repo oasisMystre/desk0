@@ -55,7 +55,7 @@ fn main() -> anyhow::Result<()> {
     .enable_all()
     .build()?;
 
-  let mut viewer = Desk0Viewer::new(
+  let viewer = Desk0Viewer::new(
     rt,
     Desk0ViewerConfig {
       token: &args.token,

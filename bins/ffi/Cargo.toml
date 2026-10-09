@@ -21,3 +21,4 @@ ironrdp = { workspace = true, features = ["client", "connector", "cliprdr", "inp
 winit = "0.30.13"
 irondash_texture = "0.5.0"
 flutter_rust_bridge = "=2.13.0"
+rayon = "1.12.0"
