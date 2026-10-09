@@ -51,7 +51,7 @@ impl AgentTunnel {
     format!("{addr}/ws?token={token}")
   }
 
-  async fn connect(&self) -> anyhow::Result<()> {
+  async fn connect(&self, cancellation_token: CancellationToken) -> anyhow::Result<()> {
     let token = self.api.device.get_token(&self.identity.device_id).await?;
     let url = self.websocket_url(&token);
 
@@ -62,15 +62,16 @@ impl AgentTunnel {
 
     let mut bytes = [0; 16 * 1024];
     loop {
+      let rdp_cancellation_token = cancellation_token.child_token();
       let (mut rdp_peer, rdp_stream) = tokio::io::duplex(1024 * 1024);
-      let rdp_cancellation = CancellationToken::new();
+
       let rdp = AgentServer::handle(
         AgentServerConfig {
           tunnel: true,
           ..Default::default()
         },
         rdp_stream,
-        rdp_cancellation.clone(),
+        rdp_cancellation_token.clone(),
       );
       tokio::pin!(rdp);
 
@@ -105,7 +106,7 @@ impl AgentTunnel {
         }
       };
 
-      rdp_cancellation.cancel();
+      rdp_cancellation_token.cancel();
       if reset {
         if let Err(error) = rdp.await {
           tracing::debug!(?error, "previous embedded RDP session stopped during reset");
@@ -128,15 +129,25 @@ impl AgentTunnel {
 #[async_trait::async_trait]
 impl Tunnel for AgentTunnel {
   async fn run(&self, cancellation_token: CancellationToken) -> anyhow::Result<()> {
-    while !cancellation_token.is_cancelled() {
-      match self.connect().await {
-        Ok(()) => tracing::info!("Agent WebSocket closed; reconnecting in 5 seconds..."),
-        Err(error) => tracing::error!(?error, "Agent WebSocket connection failed"),
-      }
+    let run = async { self.connect(cancellation_token.clone()).await };
+    tokio::pin!(run);
 
+    loop {
       tokio::select! {
-        _ = cancellation_token.cancelled() => break,
-        _ = tokio::time::sleep(Duration::from_secs(5)) => {},
+          _ = cancellation_token.cancelled() => {
+              if let Err(error) = (&mut run).await {
+                  tracing::error!(?error, "shutting down tunnel failed");
+              }
+              break;
+          }
+          result =  &mut run => {
+              match result {
+                Ok(()) => tracing::info!("Agent WebSocket closed; reconnecting in 5 seconds..."),
+                Err(error) => tracing::error!(?error, "Agent WebSocket connection failed"),
+              }
+
+              tokio::time::sleep(Duration::from_secs(5)).await;
+          }
       }
     }
 

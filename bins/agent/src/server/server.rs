@@ -177,8 +177,14 @@ impl AgentServer {
     tasks.spawn_local({
       let cancellation_token = cancellation_token.clone();
       async move {
-        if let Err(error) = media.capture(source_receiver, cancellation_token).await {
-          tracing::error!(?error, "Display handler error");
+        match media.capture(source_receiver, cancellation_token).await {
+          Ok(mut tasks) => {
+            tasks.abort_all();
+            while tasks.join_next().await.is_some() {}
+          }
+          Err(error) => {
+            tracing::error!(?error, "Display handler error");
+          }
         }
       }
     });
@@ -186,11 +192,15 @@ impl AgentServer {
     tasks.spawn_local({
       let cancellation_token = cancellation_token.clone();
       async move {
-        if let Err(error) = display_handler
-          .capture(video_frames_receiver, cancellation_token)
-          .await
-        {
-          tracing::error!(?error, "Display handler error");
+        match display_handler.capture(video_frames_receiver, cancellation_token) {
+          Ok(handle) => {
+            if let Err(error) = handle.await {
+              tracing::error!(?error, "capture task error");
+            }
+          }
+          Err(error) => {
+            tracing::error!(?error, "Display handler error");
+          }
         }
       }
     });

@@ -120,37 +120,47 @@ pub fn main() {
 
   local.block_on(&rt, async {
     let cancellation_token = CancellationToken::new();
-    let cancellation_token_clone = cancellation_token.clone();
 
+    let run_cancellation_token = cancellation_token.clone();
+
+    let run = async {
+      rustls::crypto::ring::default_provider()
+        .install_default()
+        .unwrap();
+
+      if args.listen {
+        use crate::server::traits::Server;
+
+        let addr = format!("{}:{}", args.bind_addr, args.port);
+        println!("Starting Desk0 RDP Agent standalone on RDP://{}", addr);
+        let server = crate::server::server::AgentServer::new(addr.parse()?);
+        server.run(run_cancellation_token).await?;
+      } else {
+        use crate::server::traits::Tunnel;
+
+        let api = Api::from_config(ApiConfig {
+          base_url: &args.api_addr,
+        });
+        let db = rocksdb::DB::open_default("data")?;
+
+        let identity = crate::server::identity::Identity::upsert(&api, &db, args.org_id).await?;
+        let tunnel = crate::server::tunnel::AgentTunnel::new(args.server_addr, identity, api);
+        tunnel.run(run_cancellation_token).await?;
+      }
+      Ok::<_, anyhow::Error>(())
+    };
+
+    tokio::pin!(run);
     tokio::select! {
       _ = tokio::signal::ctrl_c() => {
         println!("Received shutdown signal. Stopping Desk0 Agent...");
         cancellation_token.cancel();
-      }
-      result = async {
-        rustls::crypto::ring::default_provider()
-            .install_default()
-            .unwrap();
 
-        if args.listen {
-          use crate::server::traits::Server;
-
-          let addr = format!("{}:{}", args.bind_addr, args.port);
-          println!("Starting Desk0 RDP Agent standalone on RDP://{}", addr);
-          let server = crate::server::server::AgentServer::new(addr.parse()?);
-          server.run(cancellation_token_clone).await?;
-        } else {
-          use crate::server::traits::Tunnel;
-
-          let api = Api::from_config(ApiConfig{base_url: &args.api_addr});
-          let db = rocksdb::DB::open_default("data")?;
-
-          let identity = crate::server::identity::Identity::upsert(&api, &db, args.org_id).await?;
-          let tunnel = crate::server::tunnel::AgentTunnel::new(args.server_addr, identity, api);
-          tunnel.run( cancellation_token_clone).await?;
+        if let Err(error) = (&mut run).await {
+            eprintln!("Desk0 agent shutdown error: {error:#}");
         }
-        Ok::<_, anyhow::Error>(())
-      } => {
+      }
+      result = &mut run => {
         if let Err(error) = result {
           let _ = MessageDialog::new()
               .set_title(t!("error_title"))

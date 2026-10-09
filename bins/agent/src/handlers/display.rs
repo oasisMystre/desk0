@@ -1,4 +1,5 @@
 use std::{
+  collections::HashSet,
   num::{NonZeroU16, NonZeroUsize},
   sync::Arc,
 };
@@ -7,10 +8,13 @@ use ironrdp::server::{
   BitmapUpdate, DesktopSize, DisplayUpdate, PixelFormat, RdpServerDisplay, RdpServerDisplayUpdates,
   ServerError, ServerErrorExt, ServerErrorKind, ServerResult,
 };
-use pinray::Rect;
-use tokio::sync::{
-  Mutex,
-  mpsc::{Receiver, Sender, UnboundedReceiver, channel, error::TrySendError},
+use pinray::{Rect, SourceId};
+use tokio::{
+  sync::{
+    Mutex,
+    mpsc::{Receiver, Sender, UnboundedReceiver, channel, error::TrySendError},
+  },
+  task::JoinHandle,
 };
 use tokio_util::sync::CancellationToken;
 
@@ -19,7 +23,7 @@ use crate::handlers::media::{MediaHandler, WrapVideoFrame};
 #[derive(Clone)]
 pub struct DisplayHandler {
   media: Arc<MediaHandler>,
-  display_updates_sender: Arc<Sender<DisplayUpdate>>,
+  display_updates_sender: Sender<DisplayUpdate>,
   display_updates_receiver: Arc<Mutex<Option<Receiver<DisplayUpdate>>>>,
 }
 
@@ -33,7 +37,7 @@ impl DisplayHandler {
 
     Self {
       media,
-      display_updates_sender: Arc::new(display_updates_sender),
+      display_updates_sender,
       display_updates_receiver: Arc::new(Mutex::new(Some(display_updates_receiver))),
     }
   }
@@ -44,15 +48,22 @@ impl RdpServerDisplay for DisplayHandler {
   async fn size(&mut self) -> DesktopSize {
     let monitors = self.media.monitors();
 
-    monitors
+    let width = monitors
       .iter()
-      .find(|monitor| monitor.primary)
-      .or_else(|| monitors.first())
-      .map(|monitor| DesktopSize {
-        width: monitor.width,
-        height: monitor.height,
-      })
-      .expect("primary display")
+      .map(|monitor| monitor.x as u32 + monitor.width as u32)
+      .max()
+      .unwrap_or(1282);
+
+    let height = monitors
+      .iter()
+      .map(|monitor| monitor.y as u32 + monitor.height as u32)
+      .max()
+      .unwrap_or(720);
+
+    DesktopSize {
+      width: width.clamp(1, u16::MAX as u32) as u16,
+      height: height.clamp(1, u16::MAX as u32) as u16,
+    }
   }
 
   async fn updates(&mut self) -> ServerResult<Box<dyn RdpServerDisplayUpdates>> {
@@ -84,21 +95,24 @@ impl RdpServerDisplayUpdates for DisplayUpdates {
 }
 
 impl DisplayHandler {
-  pub async fn capture(
+  pub fn capture(
     &self,
     mut video_frame_receiver: UnboundedReceiver<WrapVideoFrame>,
     cancellation_token: CancellationToken,
-  ) -> anyhow::Result<()> {
+  ) -> anyhow::Result<JoinHandle<()>> {
     let display_updates_sender = self.display_updates_sender.clone();
-    tokio::spawn(async move {
-      loop {
-        if cancellation_token.is_cancelled() {
-          break;
-        }
 
-        let frame = match video_frame_receiver.recv().await {
-          Some(frame) => frame,
-          None => break,
+    let handle = tokio::spawn(async move {
+      let mut needs_full_frame: HashSet<SourceId> = HashSet::new();
+
+      'capture: loop {
+        let frame = tokio::select! {
+            _ = cancellation_token.cancelled() => break 'capture,
+            result = video_frame_receiver.recv() => match result {
+                Some(frame) => frame,
+                None => break 'capture,
+            },
+            _ = display_updates_sender.closed() => break 'capture,
         };
 
         let Some(pixels) = frame.inner.to_tight_bytes() else {
@@ -109,66 +123,66 @@ impl DisplayHandler {
         let width = frame.inner.width as usize;
         let height = frame.inner.height as usize;
 
-        // let updates = if frame.first_frame {
-        //   Self::full_frame_update(
-        //     &pixels,
-        //     width,
-        //     height,
-        //     frame.monitor.left,
-        //     frame.monitor.top,
-        //   )
-        //   .into_iter()
-        //   .collect()
-        // } else {
-        //   Self::damage_updates(
-        //     &pixels,
-        //     width,
-        //     height,
-        //     frame.monitor.left,
-        //     frame.monitor.top,
-        //     frame.inner.damage.as_deref(),
-        //   )
-        // };
-        //
-        let updates: Vec<DisplayUpdate> = Self::full_frame_update(
-          &pixels,
-          width,
-          height,
-          frame.monitor.left,
-          frame.monitor.top,
-        )
-        .into_iter()
-        .collect();
+        let full_frame = frame.first_frame
+          || needs_full_frame.contains(&frame.monitor.source)
+          || frame.inner.damage.is_none();
+
+        let updates = if full_frame {
+          Self::full_frame_update(&pixels, width, height, frame.monitor.x, frame.monitor.y)
+            .into_iter()
+            .collect()
+        } else {
+          Self::damage_updates(
+            &pixels,
+            width,
+            height,
+            frame.monitor.x,
+            frame.monitor.y,
+            frame.inner.damage.as_deref(),
+          )
+        };
+
+        let mut sent_full_frame = full_frame;
 
         for update in updates {
           match display_updates_sender.try_send(update) {
             Ok(()) => {}
             Err(TrySendError::Full(_)) => {
-              tracing::trace!("dropping display update because encoder is behind");
+              sent_full_frame = true;
+              needs_full_frame.insert(frame.monitor.source.clone());
+
+              tracing::trace!(
+                  monitor = ?frame.monitor.source,
+                  "dropping display update because encoder is behind"
+              );
+              break;
             }
             Err(TrySendError::Closed(_)) => {
               tracing::debug!("display update receiver disconnected; stopping capture");
-              break;
+              break 'capture;
             }
           }
+        }
+
+        if sent_full_frame {
+          needs_full_frame.remove(&frame.monitor.source);
         }
       }
     });
 
-    Ok(())
+    Ok(handle)
   }
 
   fn full_frame_update(
     pixels: &[u8],
     width: usize,
     height: usize,
-    offset_x: i32,
-    offset_y: i32,
+    x: u16,
+    y: u16,
   ) -> Option<DisplayUpdate> {
-    let x = u16::try_from(offset_x).ok()?;
-    let y = u16::try_from(offset_y).ok()?;
     let w = u16::try_from(width).ok()?;
     let h = u16::try_from(height).ok()?;
+    let stride = width.checked_mul(4)?;
 
     Some(DisplayUpdate::Bitmap(BitmapUpdate {
       x,
@@ -176,8 +190,8 @@ impl DisplayHandler {
       width: NonZeroU16::new(w)?,
       height: NonZeroU16::new(h)?,
       format: PixelFormat::BgrA32,
+      stride: NonZeroUsize::new(stride)?,
       data: bytes::Bytes::copy_from_slice(pixels),
-      stride: NonZeroUsize::new(width.checked_mul(4)?)?,
     }))
   }
 
@@ -185,8 +199,8 @@ impl DisplayHandler {
     pixels: &[u8],
     width: usize,
     height: usize,
-    offset_x: i32,
-    offset_y: i32,
+    offset_x: u16,
+    offset_y: u16,
     damage: Option<&[Rect]>,
   ) -> Vec<DisplayUpdate> {
     let Some(damage) = damage else {
@@ -203,11 +217,9 @@ impl DisplayHandler {
     let mut updates = Vec::with_capacity(damage.len());
 
     for rect in damage {
-      let (Ok(x), Ok(y), Ok(ox), Ok(oy), Ok(w), Ok(h)) = (
+      let (Ok(x), Ok(y), Ok(w), Ok(h)) = (
         u16::try_from(rect.x.max(0)),
         u16::try_from(rect.y.max(0)),
-        u16::try_from(offset_x.max(0)),
-        u16::try_from(offset_y.max(0)),
         u16::try_from(rect.width),
         u16::try_from(rect.height),
       ) else {
@@ -245,8 +257,8 @@ impl DisplayHandler {
         stride: nz_stride,
         data: cropped.into(),
         format: PixelFormat::BgrA32,
-        x: ox.saturating_add(x as u16),
-        y: oy.saturating_add(y as u16),
+        x: offset_x.saturating_add(x as u16),
+        y: offset_y.saturating_add(y as u16),
       }));
     }
 
