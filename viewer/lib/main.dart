@@ -88,7 +88,7 @@ final router = GoRouter(
               ? const OpenConnection(
                   token: Env.rdpToken,
                   endpoint: Env.rdpEndpoint,
-                  connectionType: ConnectionType.terminal,
+                  connectionType: ConnectionType.desktop,
                   size: SseDesktopSize(width: 1280, height: 720),
                 )
               : const HomeScreen(),

@@ -3,12 +3,9 @@ use std::{
   sync::Arc,
 };
 
-use ironrdp::{
-  displaycontrol::pdu::DisplayControlMonitorLayout,
-  server::{
-    BitmapUpdate, DesktopSize, DisplayUpdate, PixelFormat, RdpServerDisplay,
-    RdpServerDisplayUpdates, ServerError, ServerErrorExt, ServerErrorKind, ServerResult,
-  },
+use ironrdp::server::{
+  BitmapUpdate, DesktopSize, DisplayUpdate, PixelFormat, RdpServerDisplay, RdpServerDisplayUpdates,
+  ServerError, ServerErrorExt, ServerErrorKind, ServerResult,
 };
 use pinray::Rect;
 use tokio::sync::{
@@ -74,8 +71,6 @@ impl RdpServerDisplay for DisplayHandler {
     Ok(Box::new(DisplayUpdates { receiver }))
   }
 
-  fn request_layout(&mut self, layout: DisplayControlMonitorLayout) {}
-
   async fn monitor_count(&mut self) -> u32 {
     self.media.monitor_count() as u32
   }
@@ -114,26 +109,36 @@ impl DisplayHandler {
         let width = frame.inner.width as usize;
         let height = frame.inner.height as usize;
 
-        let updates = if frame.first_frame {
-          Self::full_frame_update(
-            &pixels,
-            width,
-            height,
-            frame.monitor.left as u16,
-            frame.monitor.top as u16,
-          )
-          .into_iter()
-          .collect()
-        } else {
-          Self::damage_updates(
-            &pixels,
-            width,
-            height,
-            frame.monitor.left as u16,
-            frame.monitor.top as u16,
-            frame.inner.damage.as_deref(),
-          )
-        };
+        // let updates = if frame.first_frame {
+        //   Self::full_frame_update(
+        //     &pixels,
+        //     width,
+        //     height,
+        //     frame.monitor.left,
+        //     frame.monitor.top,
+        //   )
+        //   .into_iter()
+        //   .collect()
+        // } else {
+        //   Self::damage_updates(
+        //     &pixels,
+        //     width,
+        //     height,
+        //     frame.monitor.left,
+        //     frame.monitor.top,
+        //     frame.inner.damage.as_deref(),
+        //   )
+        // };
+        //
+        let updates: Vec<DisplayUpdate> = Self::full_frame_update(
+          &pixels,
+          width,
+          height,
+          frame.monitor.left,
+          frame.monitor.top,
+        )
+        .into_iter()
+        .collect();
 
         for update in updates {
           match display_updates_sender.try_send(update) {
@@ -157,8 +162,8 @@ impl DisplayHandler {
     pixels: &[u8],
     width: usize,
     height: usize,
-    offset_x: u16,
-    offset_y: u16,
+    offset_x: i32,
+    offset_y: i32,
   ) -> Option<DisplayUpdate> {
     let x = u16::try_from(offset_x).ok()?;
     let y = u16::try_from(offset_y).ok()?;
@@ -180,8 +185,8 @@ impl DisplayHandler {
     pixels: &[u8],
     width: usize,
     height: usize,
-    offset_x: u16,
-    offset_y: u16,
+    offset_x: i32,
+    offset_y: i32,
     damage: Option<&[Rect]>,
   ) -> Vec<DisplayUpdate> {
     let Some(damage) = damage else {
@@ -198,9 +203,11 @@ impl DisplayHandler {
     let mut updates = Vec::with_capacity(damage.len());
 
     for rect in damage {
-      let (Ok(x), Ok(y), Ok(w), Ok(h)) = (
+      let (Ok(x), Ok(y), Ok(ox), Ok(oy), Ok(w), Ok(h)) = (
         u16::try_from(rect.x.max(0)),
         u16::try_from(rect.y.max(0)),
+        u16::try_from(offset_x.max(0)),
+        u16::try_from(offset_y.max(0)),
         u16::try_from(rect.width),
         u16::try_from(rect.height),
       ) else {
@@ -238,8 +245,8 @@ impl DisplayHandler {
         stride: nz_stride,
         data: cropped.into(),
         format: PixelFormat::BgrA32,
-        x: offset_x.saturating_add(x as u16),
-        y: offset_y.saturating_add(y as u16),
+        x: ox.saturating_add(x as u16),
+        y: oy.saturating_add(y as u16),
       }));
     }
 

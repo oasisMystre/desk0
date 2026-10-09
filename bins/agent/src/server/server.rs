@@ -138,7 +138,7 @@ impl AgentServer {
 
     let media = Arc::new(MediaHandler::new(
       None,
-      CursorMode::Hidden,
+      CursorMode::Embedded,
       PixelFormat::Bgra8888,
       video_frames_sender,
       Some(audio_frames_sender),

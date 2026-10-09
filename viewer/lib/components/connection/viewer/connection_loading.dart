@@ -50,7 +50,6 @@ class ConnectionOverlay extends StatelessWidget {
                 const SizedBox(height: 8),
                 Text(
                   message!,
-                  textAlign: TextAlign.center,
                   style: const TextStyle(color: Colors.white70),
                 ),
               ],

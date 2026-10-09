@@ -5,7 +5,7 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "$0")" && pwd)"
 cd "$SCRIPT_DIR"
 
 set -a
-source "$SCRIPT_DIR/.env"
+source "$SCRIPT_DIR/../.env"
 set +a
 
 flutter build macos \

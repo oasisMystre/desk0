@@ -3,15 +3,15 @@ use std::{ops::Deref, sync::Arc};
 use display_info::DisplayInfo;
 use ironrdp::pdu::gcc::{Monitor, MonitorFlags};
 use pinray::{
-  AudioDeviceSource, AudioFrame, CaptureEvent, CaptureSession, CaptureSource, CursorMode,
-  PixelFormat, SourceId, VideoFrame,
+  AudioDeviceSource, AudioFrame, CaptureEvent, CaptureSession, CursorMode, PixelFormat, SourceId,
+  VideoFrame,
 };
 use tokio::{
   sync::{
     Mutex,
-    mpsc::{Receiver, Sender, UnboundedSender},
+    mpsc::{Receiver, UnboundedSender},
   },
-  task::{JoinHandle, JoinSet},
+  task::JoinSet,
 };
 use tokio_util::sync::CancellationToken;
 
@@ -84,7 +84,6 @@ impl MediaHandler {
     let result: anyhow::Result<()> = 'source: loop {
       tokio::select! {
          _ = cancellation_token.cancelled() => {
-             tracing::info!("omo shutting down");
              tasks.abort_all();
              while tasks.join_next().await.is_some() {}
              break 'source Ok(());
@@ -195,15 +194,6 @@ impl MediaHandler {
     }
 
     result
-  }
-
-  pub async fn stop(&self) {
-    self
-      .current_session_cancellation_token
-      .lock()
-      .await
-      .as_ref()
-      .map(|token| token.cancel());
   }
 
   pub fn monitors(&self) -> Vec<MonitorSource> {

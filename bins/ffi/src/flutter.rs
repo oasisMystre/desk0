@@ -47,6 +47,7 @@ impl ViewerHandle {
     Ok(id)
   }
 
+  #[frb(sync)]
   pub fn connect(&self) -> anyhow::Result<()> {
     init_tracing()?;
 
@@ -72,6 +73,7 @@ impl ViewerHandle {
       .inner
       .lock()
       .map_err(|_| anyhow::anyhow!("viewer lock poisoned"))? = Some(viewer);
+    
     Ok(())
   }
 

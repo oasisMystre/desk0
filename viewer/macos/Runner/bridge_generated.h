@@ -352,7 +352,7 @@ typedef struct wire_cst_sse_terminal_output_event {
   union SseTerminalOutputEventKind kind;
 } wire_cst_sse_terminal_output_event;
 
-void frbgen_desk0_wire__crate__flutter__ViewerHandle_connect(int64_t port_, uintptr_t that);
+WireSyncRust2DartDco frbgen_desk0_wire__crate__flutter__ViewerHandle_connect(uintptr_t that);
 
 WireSyncRust2DartDco frbgen_desk0_wire__crate__flutter__ViewerHandle_create_texture(uintptr_t that,
                                                                                     int64_t engine_handle);
