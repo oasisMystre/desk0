@@ -21,10 +21,7 @@ use tokio_util::sync::CancellationToken;
 
 use crate::{
   handlers::{
-    audio::AudioHandlerStaticChannelFactory,
-    display::DisplayHandler,
-    input::InputHandler,
-    media::{MediaHandler, Source},
+    AudioHandler, DisplayHandler, InputHandler, {MediaHandler, Source},
   },
   server::traits::Server,
   static_channels::{IoStaticChannelFactory, TerminalStaticChannelFactory},
@@ -145,13 +142,18 @@ impl AgentServer {
     ));
 
     media.discover()?;
+    let audio = media.audios();
     source_sender.try_send(Source {
-      audio: None,
       monitors: media.monitors(),
+      audio: audio
+        .iter()
+        .find(|audio| audio.is_default)
+        .or_else(|| audio.first())
+        .cloned(),
     })?;
 
-    let audio_handler = AudioHandlerStaticChannelFactory::new(Arc::clone(&media));
     let display_handler = DisplayHandler::new(Arc::clone(&media));
+    let audio_handler = AudioHandler::new(Arc::clone(&media), audioframes_receiver);
 
     let input_handler = InputHandler::new(&Settings::default())?;
 
@@ -170,7 +172,7 @@ impl AgentServer {
       .with_cliprdr_factory(Some(Box::new(CliprdrHandler::new())))
       .with_static_channel_factory(Box::new(IoStaticChannelFactory))
       .with_static_channel_factory(Box::new(TerminalStaticChannelFactory))
-      .with_static_channel_factory(Box::new(audio_handler));
+      .with_sound_factory(Some(Box::new(audio_handler)));
 
     let mut server = server.build();
 

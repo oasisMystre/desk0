@@ -1,7 +1,11 @@
-use std::{sync::Arc, time::Duration};
+use std::{fmt::Debug, sync::Arc};
 
+use cpal::traits::{DeviceTrait, HostTrait};
 use display_info::DisplayInfo;
-use ironrdp::pdu::gcc::{Monitor, MonitorFlags};
+use ironrdp::{
+  pdu::gcc::{Monitor, MonitorFlags},
+  rdpsnd::pdu::{AudioFormat, WaveFormat},
+};
 use pinray::{
   AudioDeviceSource, AudioFrame, CaptureEvent, CaptureSession, CursorMode, PixelFormat, SourceId,
   VideoFrame,
@@ -24,20 +28,29 @@ struct RawDisplay {
   source: SourceId,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct MonitorSource {
   pub x: u16,
   pub y: u16,
   pub width: u16,
   pub height: u16,
-  pub primary: bool,
   pub inner: Monitor,
   pub source: SourceId,
+  pub is_primary: bool,
 }
 
-pub enum AudioSource {
+#[derive(Debug, Clone)]
+pub enum AudioDeviceSourceId {
   SystemMix,
   MicroPhone(AudioDeviceSource),
+}
+
+#[derive(Debug, Clone)]
+pub struct AudioSource {
+  pub is_default: bool,
+  pub is_current: bool,
+  pub formats: Vec<AudioFormat>,
+  pub source: AudioDeviceSourceId,
 }
 
 pub struct Source {
@@ -59,13 +72,28 @@ pub struct MediaHandler {
   video_sender: UnboundedSender<WrapVideoFrame>,
   audio_sender: Option<UnboundedSender<AudioFrame>>,
 
+  audios: Arc<std::sync::Mutex<Vec<AudioSource>>>,
   monitors: Arc<std::sync::Mutex<Vec<MonitorSource>>>,
-  audios: Arc<std::sync::Mutex<Vec<AudioDeviceSource>>>,
 
   current_session_cancellation_token: Arc<Mutex<Option<CancellationToken>>>,
 }
 
-const CAPTURE_POLL_INTERVAL: Duration = Duration::from_millis(200);
+impl Debug for MediaHandler {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    f.debug_struct("MediaHandler")
+      .field("frame_rate", &self.frame_rate)
+      .field("cursor_mode", &self.cursor_mode)
+      .field("pixel_format", &self.pixel_format)
+      .field("video_sender", &self.video_sender)
+      .field("audio_sender", &self.audio_sender)
+      .field("audios", &self.audios)
+      .field(
+        "current_session_cancellation_token",
+        &self.current_session_cancellation_token,
+      )
+      .finish()
+  }
+}
 
 impl MediaHandler {
   pub fn new(
@@ -137,11 +165,13 @@ impl MediaHandler {
           let mut builder = CaptureSession::builder()
             .video_target(pinray::VideoCaptureTarget::Display(monitor.source.clone()));
 
-          if monitor.primary {
+          if monitor.is_primary {
             if let Some(audio) = &source.audio {
-              match audio {
-                AudioSource::SystemMix => builder = builder.audio(pinray::AudioCapture::SystemMix),
-                AudioSource::MicroPhone(source) => {
+              match &audio.source {
+                AudioDeviceSourceId::SystemMix => {
+                  builder = builder.audio(pinray::AudioCapture::SystemMix)
+                }
+                AudioDeviceSourceId::MicroPhone(source) => {
                   builder = builder.audio(pinray::AudioCapture::Microphone(source.id.clone()))
                 }
               }
@@ -253,12 +283,65 @@ impl MediaHandler {
     self.monitors().len()
   }
 
+  pub fn audios(&self) -> Vec<AudioSource> {
+    self.audios.lock().unwrap().clone()
+  }
+
+  pub fn audio_formats(&self) -> Vec<AudioFormat> {
+    self
+      .audios
+      .lock()
+      .unwrap()
+      .iter()
+      .flat_map(|audio| audio.formats.iter().cloned())
+      .collect()
+  }
+
   pub fn discover(&self) -> anyhow::Result<()> {
     let displays = DisplayInfo::all()?;
     let sources = pinray::enumerate_sources()?;
 
-    let mut audios = vec![];
     let mut raw = Vec::with_capacity(displays.len());
+
+    let mut audios = vec![];
+    let mut audio_formats = vec![];
+
+    let host = cpal::default_host();
+    let default_audio_input = host.default_input_device();
+
+    let default_audio_input_id = default_audio_input
+      .as_ref()
+      .and_then(|device| device.id().ok().map(|id| id.id().to_string()));
+
+    if let Some(device) = default_audio_input {
+      if let Ok(supported_configs) = device.supported_input_configs() {
+        for config in supported_configs {
+          let n_channels = config.channels();
+          let n_samples_per_sec = config.max_sample_rate();
+          let sample_format = config.sample_format();
+
+          let bits_per_sample = match sample_format {
+            cpal::SampleFormat::I16 => 16,
+            cpal::SampleFormat::F64 => 64,
+            cpal::SampleFormat::I32 | cpal::SampleFormat::F32 => 32,
+            _ => continue,
+          };
+
+          let n_block_align = n_channels * (bits_per_sample / 8);
+          let n_avg_bytes_per_sec = n_samples_per_sec * n_block_align as u32;
+
+          audio_formats.push(AudioFormat {
+            n_channels,
+            n_block_align,
+            bits_per_sample,
+            n_samples_per_sec,
+            n_avg_bytes_per_sec,
+            data: None,
+            format: WaveFormat::PCM,
+          });
+        }
+      }
+    }
 
     for source in sources {
       match source {
@@ -290,8 +373,27 @@ impl MediaHandler {
             source: source.id.clone(),
           });
         }
-        pinray::CaptureSource::SystemAudio(source) | pinray::CaptureSource::Microphone(source) => {
-          audios.push(source);
+        pinray::CaptureSource::SystemAudio(source) => {
+          tracing::info!(id=?source.id.0, default_audio_input_id, "audio id",);
+          audios.push(AudioSource {
+            is_default: source.is_default,
+            formats: audio_formats.clone(),
+            is_current: default_audio_input_id
+              .as_ref()
+              .is_some_and(|name| name == &source.id.0),
+            source: AudioDeviceSourceId::SystemMix,
+          });
+        }
+        pinray::CaptureSource::Microphone(source) => {
+          tracing::info!(id=?source.id.0, default_audio_input_id, "audio id",);
+          audios.push(AudioSource {
+            is_default: source.is_default,
+            formats: audio_formats.clone(),
+            is_current: default_audio_input_id
+              .as_ref()
+              .is_some_and(|name| name == &source.id.0),
+            source: AudioDeviceSourceId::MicroPhone(source),
+          });
         }
         pinray::CaptureSource::Window(_) => {}
       }
@@ -304,14 +406,14 @@ impl MediaHandler {
       .into_iter()
       .map(|raw| {
         let x = (raw.x - origin_x) as u16;
-        let y = (raw.x - origin_y) as u16;
+        let y = (raw.y - origin_y) as u16;
 
         MonitorSource {
           x,
           y,
           width: raw.width,
           height: raw.height,
-          primary: raw.primary,
+          is_primary: raw.primary,
           source: raw.source.clone(),
           inner: Monitor {
             left: x as i32,
@@ -327,6 +429,9 @@ impl MediaHandler {
         }
       })
       .collect();
+
+    tracing::debug!(?audios, "audio lmao");
+    tracing::debug!(?monitors, "video lmao");
 
     *self.audios.lock().unwrap() = audios;
     *self.monitors.lock().unwrap() = monitors;

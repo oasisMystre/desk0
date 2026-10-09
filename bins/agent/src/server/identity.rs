@@ -1,6 +1,6 @@
 use anyhow::Context;
 
-use crate::{api::Api, handlers::display::DisplayHandler};
+use crate::api::Api;
 
 #[derive(Clone)]
 pub struct Identity {
@@ -65,7 +65,6 @@ impl Identity {
   }
 
   pub fn metadata(&self) -> Option<serde_json::Value> {
-    // let (width, height) = DisplayHandler::get_display_size();
     Some(serde_json::json!({
         "_version": 1,
         // "width": width,

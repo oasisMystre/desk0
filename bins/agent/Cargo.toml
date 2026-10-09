@@ -42,6 +42,8 @@ portable-pty = "0.9.0"
 display-info = "0.5.9"
 tokio-tungstenite = "0.30.0"
 reqwest = { version = "0.13.4", features = ["json", "stream"] }
+thiserror = "2.0.21"
+cpal = "0.18.2"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows = { version = "0.62.2", features = [

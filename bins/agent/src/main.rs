@@ -11,6 +11,7 @@ mod handlers;
 mod platform;
 mod server;
 mod static_channels;
+mod utils;
 
 rust_i18n::i18n!("locales");
 

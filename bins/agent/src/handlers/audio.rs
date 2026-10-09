@@ -1,45 +1,159 @@
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use ironrdp::{
   rdpsnd::{
     pdu::AudioFormat,
-    server::{NegotiatedFormat, RdpsndError, RdpsndServer},
+    server::{NegotiatedFormat, RdpsndError},
   },
-  server::{RdpsndServerHandler, StaticChannelFactory},
+  server::{
+    RdpsndServerHandler, RdpsndServerMessage, ServerEvent, ServerEventSender, SoundServerFactory,
+  },
+};
+use pinray::AudioFrame;
+use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
+use tokio_util::sync::CancellationToken;
+
+use crate::{
+  handlers::media::{AudioDeviceSourceId, MediaHandler},
+  utils::audio::from_audio_frame_to_wav,
 };
 
-use crate::handlers::media::MediaHandler;
-
-#[derive(Debug)]
-pub struct AudioHandler;
-pub struct AudioHandlerStaticChannelFactory {
-  media: Arc<MediaHandler>,
+#[derive(thiserror::Error, Debug)]
+pub enum AudioHandlerError {
+  #[error("audio backend already initialized")]
+  AlreadyInitialized,
+  #[error("audio backend is not initialized")]
+  NotInitialized,
 }
 
-impl AudioHandlerStaticChannelFactory {
-  pub fn new(media: Arc<MediaHandler>) -> Self {
-    Self { media }
+#[derive(Clone, Debug)]
+pub struct AudioHandler {
+  media: Arc<MediaHandler>,
+  sender: Option<UnboundedSender<ServerEvent>>,
+  audio_frames_receiver: Arc<Mutex<Option<UnboundedReceiver<AudioFrame>>>>,
+}
+
+#[derive(Debug)]
+pub struct AudioHandlerStaticChannelFactory {
+  handler: AudioHandler,
+  audio_formats: Vec<AudioFormat>,
+  handle: Option<std::thread::JoinHandle<()>>,
+  cancellation_token: Option<CancellationToken>,
+}
+
+impl AudioHandler {
+  pub fn new(
+    media: Arc<MediaHandler>,
+    audio_frames_receiver: UnboundedReceiver<AudioFrame>,
+  ) -> Self {
+    Self {
+      media,
+      sender: None,
+      audio_frames_receiver: Arc::new(Mutex::new(Some(audio_frames_receiver))),
+    }
+  }
+
+  pub fn send(&self, message: RdpsndServerMessage) -> anyhow::Result<()> {
+    match &self.sender {
+      Some(sender) => sender.send(ServerEvent::Rdpsnd(message))?,
+      None => return Err(AudioHandlerError::NotInitialized.into()),
+    };
+
+    Ok(())
   }
 }
 
-impl RdpsndServerHandler for AudioHandler {
+impl SoundServerFactory for AudioHandler {
+  fn build_backend(&self) -> Box<dyn RdpsndServerHandler> {
+    Box::new(AudioHandlerStaticChannelFactory {
+      handle: None,
+      handler: self.clone(),
+      cancellation_token: None,
+      audio_formats: self.media.audio_formats(),
+    })
+  }
+}
+
+impl ServerEventSender for AudioHandler {
+  fn set_sender(&mut self, sender: UnboundedSender<ServerEvent>) {
+    self.sender = Some(sender);
+  }
+}
+
+impl RdpsndServerHandler for AudioHandlerStaticChannelFactory {
   fn get_formats(&self) -> &[AudioFormat] {
-    &[]
+    &self.audio_formats
   }
 
   fn choose_format<'a>(&mut self, common: &'a [NegotiatedFormat]) -> Option<&'a NegotiatedFormat> {
-    None
+    let audios = self.handler.media.audios();
+
+    let audio = audios
+      .iter()
+      .find(|audio| audio.is_default && matches!(audio.source, AudioDeviceSourceId::SystemMix))?;
+
+    common.iter().find(|negotiated| {
+      audio
+        .formats
+        .iter()
+        .any(|format| negotiated.format().matches_for_negotiation(format))
+    })
   }
 
-  fn start(&mut self, format: &NegotiatedFormat) -> Result<(), Box<dyn RdpsndError>> {
+  fn start(&mut self, _f: &NegotiatedFormat) -> Result<(), Box<dyn RdpsndError>> {
+    let mut receiver = self
+      .handler
+      .audio_frames_receiver
+      .lock()
+      .unwrap()
+      .take()
+      .ok_or_else(|| Box::new(AudioHandlerError::AlreadyInitialized) as Box<dyn RdpsndError>)?;
+
+    let handler = self.handler.clone();
+    let cancellation_token = CancellationToken::new();
+    self.cancellation_token = Some(cancellation_token.clone());
+
+    std::thread::spawn(move || {
+      loop {
+        if cancellation_token.is_cancelled() {
+          break;
+        }
+
+        let frame = match receiver.blocking_recv() {
+          Some(frame) => frame,
+          None => break,
+        };
+
+        let (pcm16, timestamp_ms) = from_audio_frame_to_wav(&frame);
+        if pcm16.is_empty() {
+          continue;
+        }
+
+        if handler
+          .send(RdpsndServerMessage::Wave(pcm16, timestamp_ms))
+          .is_err()
+        {
+          break;
+        }
+      }
+    });
+
     Ok(())
   }
 
-  fn stop(&mut self) {}
+  fn stop(&mut self) {
+    if let Some(cancellation_token) = self.cancellation_token.take() {
+      cancellation_token.cancel();
+    }
+
+    if let Some(handle) = self.handle.take() {
+      let _ = handle.join();
+    }
+  }
 }
 
-impl StaticChannelFactory for AudioHandlerStaticChannelFactory {
-  fn attach(&self, acceptor: &mut ironrdp::server::Acceptor) {
-    acceptor.attach_static_channel(RdpsndServer::new(Box::new(AudioHandler)));
+impl Drop for AudioHandlerStaticChannelFactory {
+  fn drop(&mut self) {
+    self.stop();
   }
 }
