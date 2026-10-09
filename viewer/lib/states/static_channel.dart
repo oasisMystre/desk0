@@ -6,13 +6,12 @@ typedef Listener<T> = void Function(T);
 abstract class StaticChannel<T> {
   static const maxQueue = 64;
 
+  Timer? pollTimer;
   int listenerId = 0;
   StreamSubscription? subscription;
 
-  Timer? pollTimer;
-
-  final Map<int, Map<int, Listener<T>>> subscriptions = {};
   final Map<int, List<T>> queues = {};
+  final Map<int, Map<int, Listener<T>>> subscriptions = {};
 
   StaticChannel() {
     pollTimer = Timer.periodic(

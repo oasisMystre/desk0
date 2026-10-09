@@ -1,5 +1,15 @@
-import 'package:get/get.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:shared_preferences/shared_preferences.dart'
+    show SharedPreferences;
+import 'package:get/get.dart'
+    show
+        Get,
+        Inst,
+        RxList,
+        RxSet,
+        GetxController,
+        ListExtension,
+        SetExtension,
+        BoolExtension;
 
 import '../dio/index.dart' show Api;
 import '../dio/models/device.dart' show Device;

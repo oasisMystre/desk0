@@ -1,5 +1,5 @@
-import 'dart:async';
-import 'dart:convert';
+import 'dart:convert' show utf8;
+import 'dart:async' show Completer;
 
 import 'static_channel.dart' show StaticChannel;
 import '../../ffi/flutter.dart' show ViewerHandle;

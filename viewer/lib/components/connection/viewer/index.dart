@@ -1,23 +1,10 @@
 import 'dart:math' show Point;
 import 'dart:async' show StreamSubscription;
 
-import 'package:flutter/foundation.dart';
 import 'package:get/get.dart' show Obx;
+import 'package:flutter/material.dart' hide KeyboardListener;
 import 'package:irondash_engine_context/irondash_engine_context.dart'
     show EngineContext;
-import 'package:flutter/material.dart'
-    show CircularProgressIndicator, Positioned, Stack, StackFit;
-
-import 'package:flutter/cupertino.dart'
-    show
-        AspectRatio,
-        BuildContext,
-        Center,
-        LayoutBuilder,
-        State,
-        StatefulWidget,
-        Texture,
-        Widget;
 
 import 'mouse.dart' show MouseListener;
 import 'keyboard.dart' show KeyboardListener;
@@ -28,21 +15,21 @@ import '../../../ffi/types/rdp.dart'
     show
         SseDesktopSize,
         SseOutputEvent,
-        SseOutputEvent_AutoReconnected,
-        SseOutputEvent_AutoReconnecting,
-        SseOutputEvent_Connected,
-        SseOutputEvent_ConnectionFailure,
+        SseOutputEvent_Resize,
         SseOutputEvent_Ignored,
+        SseOutputEvent_Connected,
         SseOutputEvent_LoginComplete,
         SseOutputEvent_MonitorLayout,
         SseOutputEvent_PointerBitmap,
         SseOutputEvent_PointerDefault,
         SseOutputEvent_PointerHidden,
         SseOutputEvent_PointerPosition,
-        SseOutputEvent_Resize,
         SseOutputEvent_TerminatedError,
+        SseOutputEvent_WindowingOrders,
+        SseOutputEvent_AutoReconnected,
+        SseOutputEvent_AutoReconnecting,
         SseOutputEvent_TerminatedSuccess,
-        SseOutputEvent_WindowingOrders;
+        SseOutputEvent_ConnectionFailure;
 
 class DeviceViewer extends StatefulWidget {
   final SseDesktopSize size;
@@ -58,11 +45,11 @@ class DeviceViewer extends StatefulWidget {
 
 class DeviceViewerState extends State<DeviceViewer> {
   int? textureId;
-  late final DisplayState displayState;
-  StreamSubscription<SseOutputEvent>? viewerSubscription;
-
   String? connectionMessage;
   ConnectionPhase phase = ConnectionPhase.connecting;
+  StreamSubscription<SseOutputEvent>? viewerSubscription;
+
+  late final DisplayState displayState;
 
   @override
   void initState() {

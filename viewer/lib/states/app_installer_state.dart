@@ -22,8 +22,6 @@ import '../ffi/types/static_channels/io.dart'
         SseIoOutputEvent_DownloadCompleted;
 
 class AppInstallerState {
-  int id = 0;
-
   final ViewerHandle viewer;
   final IoStaticChannelState io;
   final TerminalStaticChannelState terminal;

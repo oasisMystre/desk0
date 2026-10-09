@@ -37,6 +37,7 @@ pub enum Desk0ViewerError {
 
 #[derive(Clone)]
 pub enum Desk0ViewerOutput {
+  #[cfg(feature = "ffi")]
   Callback {
     rdp_output_event_callback:
       Arc<Mutex<Option<Arc<dyn Fn(RdpOutputEvent) + 'static + Sync + Send>>>>,
@@ -72,17 +73,19 @@ pub struct Desk0Viewer {
 }
 
 impl Desk0ViewerOutput {
+  #[cfg(feature = "ffi")]
   pub fn callback() -> Self {
-    Self::Callback {
+    return Self::Callback {
       rdp_output_event_callback: Arc::new(Mutex::new(None)),
       clipboard_event_callback: Arc::new(Mutex::new(None)),
       io_output_event_callback: Arc::new(Mutex::new(None)),
       terminal_output_event_callback: Arc::new(Mutex::new(None)),
-    }
+    };
   }
 
   pub fn send_rdp_output_event(&self, event: RdpOutputEvent) {
     match self {
+      #[cfg(feature = "ffi")]
       Self::Callback {
         rdp_output_event_callback,
         ..
@@ -104,6 +107,7 @@ impl Desk0ViewerOutput {
 
   pub fn send_clipboard_event(&self, event: ClipboardEvent) {
     match self {
+      #[cfg(feature = "ffi")]
       Self::Callback {
         clipboard_event_callback,
         ..
@@ -127,6 +131,7 @@ impl Desk0ViewerOutput {
 
   pub fn send_io_output_event(&self, event: IoOutputEvent) {
     match self {
+      #[cfg(feature = "ffi")]
       Self::Callback {
         io_output_event_callback,
         ..
@@ -149,6 +154,7 @@ impl Desk0ViewerOutput {
   }
   pub fn send_terminal_output_event(&self, event: TerminalOutputEvent) {
     match self {
+      #[cfg(feature = "ffi")]
       Self::Callback {
         terminal_output_event_callback,
         ..
@@ -170,6 +176,7 @@ impl Desk0ViewerOutput {
     }
   }
 
+  #[cfg(feature = "ffi")]
   pub fn set_rdp_output_event_callback<F>(&self, callback: F)
   where
     F: Fn(RdpOutputEvent) + Send + Sync + 'static,
@@ -183,6 +190,7 @@ impl Desk0ViewerOutput {
     }
   }
 
+  #[cfg(feature = "ffi")]
   pub fn set_clipboard_event_callback<F>(&self, callback: F)
   where
     F: Fn(ClipboardEvent) + Send + Sync + 'static,
@@ -196,6 +204,7 @@ impl Desk0ViewerOutput {
     }
   }
 
+  #[cfg(feature = "ffi")]
   pub fn set_io_output_event_callback<F>(&self, callback: F)
   where
     F: Fn(IoOutputEvent) + Send + Sync + 'static,
@@ -209,6 +218,7 @@ impl Desk0ViewerOutput {
     }
   }
 
+  #[cfg(feature = "ffi")]
   pub fn set_terminal_output_event_callback<F>(&self, callback: F)
   where
     F: Fn(TerminalOutputEvent) + Send + Sync + 'static,
@@ -391,6 +401,7 @@ impl Desk0Viewer {
     Ok(())
   }
 
+  #[cfg(feature = "ffi")]
   pub fn set_rdp_output_event_callback<F>(&self, callback: F)
   where
     F: Fn(RdpOutputEvent) + Send + Sync + 'static,
@@ -398,6 +409,7 @@ impl Desk0Viewer {
     self.output.set_rdp_output_event_callback(callback);
   }
 
+  #[cfg(feature = "ffi")]
   pub fn set_clipboard_event_callback<F>(&self, callback: F)
   where
     F: Fn(ClipboardEvent) + Send + Sync + 'static,
@@ -405,6 +417,7 @@ impl Desk0Viewer {
     self.output.set_clipboard_event_callback(callback);
   }
 
+  #[cfg(feature = "ffi")]
   pub fn set_io_output_event_callback<F>(&self, callback: F)
   where
     F: Fn(IoOutputEvent) + Send + Sync + 'static,
@@ -412,6 +425,7 @@ impl Desk0Viewer {
     self.output.set_io_output_event_callback(callback);
   }
 
+  #[cfg(feature = "ffi")]
   pub fn set_terminal_output_event_callback<F>(&self, callback: F)
   where
     F: Fn(TerminalOutputEvent) + Send + Sync + 'static,
@@ -425,6 +439,12 @@ impl Desk0Viewer {
 
     #[cfg(target_os = "macos")]
     return MajorPlatformType::MACINTOSH;
+
+    #[cfg(target_os = "linux")]
+    return MajorPlatformType::UNIX;
+
+    #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
+    return MajorPlatformType::UNSPECIFIED;
   }
 
   pub fn client_name() -> String {

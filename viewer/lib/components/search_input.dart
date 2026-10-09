@@ -16,8 +16,8 @@ class SearchInput extends StatefulWidget {
 class SearchInputState extends State<SearchInput> {
   late bool expanded;
 
-  final controller = TextEditingController();
   final focusNode = FocusNode();
+  final controller = TextEditingController();
 
   @override
   void initState() {
@@ -53,7 +53,7 @@ class SearchInputState extends State<SearchInput> {
     super.dispose();
   }
 
-  Widget buildChild() {
+  Widget get child {
     return Row(
       children: [
         if (expanded)
@@ -100,9 +100,9 @@ class SearchInputState extends State<SearchInput> {
       child: expanded
           ? GlassContainer(
               shape: LiquidRoundedSuperellipse(borderRadius: 100),
-              child: buildChild(),
+              child: child,
             )
-          : buildChild(),
+          : child,
     );
   }
 }

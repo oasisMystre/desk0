@@ -1,6 +1,6 @@
 import 'dart:io';
 
-import 'package:flutter/services.dart';
+import 'package:flutter/services.dart' show MethodChannel;
 
 class TrafficLight {
   final double x;

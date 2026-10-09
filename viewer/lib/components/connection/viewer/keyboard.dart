@@ -1,17 +1,9 @@
-import 'package:flutter/services.dart' show KeyEvent, KeyUpEvent;
-import 'package:flutter/cupertino.dart'
-    show
-        State,
-        StatefulWidget,
-        Widget,
-        FocusNode,
-        KeyEventResult,
-        BuildContext,
-        Focus;
+import 'package:flutter/services.dart';
+import 'package:flutter/cupertino.dart';
 
 import 'hid_to_scancode.dart' show hidToScancode;
-import '../../../ffi/types/rdp.dart' show SseInputEvent;
 import '../../../ffi/flutter.dart' show ViewerHandle;
+import '../../../ffi/types/rdp.dart' show SseInputEvent;
 
 class KeyboardListener extends StatefulWidget {
   final Widget child;
@@ -30,9 +22,8 @@ class KeyboardListener extends StatefulWidget {
 }
 
 class KeyboardListenerState extends State<KeyboardListener> {
-  final focusNode = FocusNode(debugLabel: 'RdpKeyboardListener');
-
   final Set<int> held = {};
+  final focusNode = FocusNode(debugLabel: 'RdpKeyboardListener');
 
   @override
   void dispose() {

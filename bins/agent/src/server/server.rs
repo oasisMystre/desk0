@@ -3,9 +3,11 @@ use std::{net::SocketAddr, sync::Arc};
 use copypaste::CliprdrHandler;
 use enigo::Settings;
 use ironrdp::server::{RdpServer, ServerError, ServerErrorKind, TransportTls};
+use pinray::{CursorMode, PixelFormat};
 use tokio::{
   io::{AsyncRead, AsyncWrite},
   net::TcpListener,
+  sync::mpsc::{channel, unbounded_channel},
   task::JoinSet,
 };
 use tokio_rustls::{
@@ -18,7 +20,12 @@ use tokio_rustls::{
 use tokio_util::sync::CancellationToken;
 
 use crate::{
-  handlers::{display::DisplayHandler, input::InputHandler},
+  handlers::{
+    audio::AudioHandlerStaticChannelFactory,
+    display::DisplayHandler,
+    input::InputHandler,
+    media::{MediaHandler, Source},
+  },
   server::traits::Server,
   static_channels::{IoStaticChannelFactory, TerminalStaticChannelFactory},
 };
@@ -125,7 +132,27 @@ impl AgentServer {
   where
     S: AsyncRead + AsyncWrite + Sync + Send + Unpin + 'static,
   {
-    let display_handler = DisplayHandler::new()?;
+    let (source_sender, source_receiver) = channel(1);
+    let (video_frames_sender, video_frames_receiver) = unbounded_channel();
+    let (audio_frames_sender, audioframes_receiver) = unbounded_channel();
+
+    let media = Arc::new(MediaHandler::new(
+      None,
+      CursorMode::Hidden,
+      PixelFormat::Bgra8888,
+      video_frames_sender,
+      Some(audio_frames_sender),
+    ));
+
+    media.discover()?;
+    source_sender.try_send(Source {
+      audio: None,
+      monitors: media.monitors(),
+    })?;
+
+    let audio_handler = AudioHandlerStaticChannelFactory::new(Arc::clone(&media));
+    let display_handler = DisplayHandler::new(Arc::clone(&media));
+
     let input_handler = InputHandler::new(&Settings::default())?;
 
     let mut tasks = JoinSet::new();
@@ -142,14 +169,29 @@ impl AgentServer {
       .with_display_handler(display_handler.clone())
       .with_cliprdr_factory(Some(Box::new(CliprdrHandler::new())))
       .with_static_channel_factory(Box::new(IoStaticChannelFactory))
-      .with_static_channel_factory(Box::new(TerminalStaticChannelFactory));
+      .with_static_channel_factory(Box::new(TerminalStaticChannelFactory))
+      .with_static_channel_factory(Box::new(audio_handler));
 
     let mut server = server.build();
 
-    let display_cancellation = cancellation_token.clone();
-    tasks.spawn_local(async move {
-      if let Err(error) = display_handler.capture(display_cancellation).await {
-        tracing::error!(?error, "Display handler error");
+    tasks.spawn_local({
+      let cancellation_token = cancellation_token.clone();
+      async move {
+        if let Err(error) = media.capture(source_receiver, cancellation_token).await {
+          tracing::error!(?error, "Display handler error");
+        }
+      }
+    });
+
+    tasks.spawn_local({
+      let cancellation_token = cancellation_token.clone();
+      async move {
+        if let Err(error) = display_handler
+          .capture(video_frames_receiver, cancellation_token)
+          .await
+        {
+          tracing::error!(?error, "Display handler error");
+        }
       }
     });
 

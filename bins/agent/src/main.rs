@@ -1,3 +1,4 @@
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 use clap::Parser;
 use rfd::{MessageButtons, MessageDialog, MessageLevel};
 use rust_i18n::t;
@@ -36,8 +37,8 @@ struct Args {
   api_addr: String,
 
   /// Organization ID / fingerprint override
-  // #[arg(long, default_value = "11111111-1111-1111-1111-111111111111")]
-  #[arg(long, default_value = "5c6514f7-6225-4fe5-a22f-46c5d335ebec")]
+  #[arg(long, default_value = "11111111-1111-1111-1111-111111111111")]
+  // #[arg(long, default_value = "5c6514f7-6225-4fe5-a22f-46c5d335ebec")]
   org_id: String,
 
   /// Run standalone direct RDP listener instead of connecting outbound to Desk0 Server

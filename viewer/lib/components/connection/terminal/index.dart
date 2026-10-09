@@ -20,10 +20,10 @@ class TerminalViewer extends StatefulWidget {
 
 class TerminalViewerState extends State<TerminalViewer> {
   int id = 0;
-  late final TerminalStaticChannelState terminalStaticChannelState;
-
   int currentTabIndex = 0;
+
   final List<int> terminalIds = [];
+  late final TerminalStaticChannelState terminalStaticChannelState;
 
   @override
   void initState() {

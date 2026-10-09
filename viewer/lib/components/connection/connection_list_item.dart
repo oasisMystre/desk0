@@ -3,6 +3,7 @@ import 'package:flutter_svg/svg.dart' show SvgPicture;
 
 import '../../dio/index.dart' show Device;
 import 'connection_menu.dart' show ConnectionMenu;
+import 'platform_image_card.dart' show PlatformImageCard;
 
 class ConnectionListItem extends StatelessWidget {
   final Device device;
@@ -24,16 +25,15 @@ class ConnectionListItem extends StatelessWidget {
         child: Row(
           spacing: 8,
           children: [
-            ClipRRect(
-              borderRadius: BorderRadius.only(
-                topLeft: Radius.circular(8),
-                bottomLeft: Radius.circular(8),
-              ),
-              child: Image.asset(
-                "assets/card_background.png",
-                width: 46,
-                height: double.infinity,
-                fit: BoxFit.cover,
+            SizedBox(
+              width: 46,
+              height: double.infinity,
+              child: PlatformImageCard(
+                os: device.os,
+                borderRadius: BorderRadius.only(
+                  topLeft: Radius.circular(8),
+                  bottomLeft: Radius.circular(8),
+                ),
               ),
             ),
             Expanded(
@@ -48,26 +48,28 @@ class ConnectionListItem extends StatelessWidget {
                           children: [
                             const Badge(),
                             const SizedBox(width: 4),
-                            Text(
-                              "Unknown",
-                              style: theme.textTheme.bodySmall?.copyWith(
-                                color: Colors.white,
-                                fontWeight: FontWeight.w600,
-                                height: 1.2,
+                            if (device.username != null)
+                              Text(
+                                device.username!,
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w600,
+                                  height: 1.2,
+                                ),
+                                overflow: TextOverflow.ellipsis,
                               ),
-                              overflow: TextOverflow.ellipsis,
-                            ),
                           ],
                         ),
-                        Text(
-                          "unknown.com",
-                          style: theme.textTheme.labelSmall?.copyWith(
-                            color: Colors.white70,
-                            fontWeight: FontWeight.w300,
-                            height: 1.0,
+                        if (device.hostname != null)
+                          Text(
+                            device.hostname!,
+                            style: theme.textTheme.labelSmall?.copyWith(
+                              color: Colors.white70,
+                              fontWeight: FontWeight.w300,
+                              height: 1.0,
+                            ),
+                            overflow: TextOverflow.ellipsis,
                           ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
                       ],
                     ),
                   ),

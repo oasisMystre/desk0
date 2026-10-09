@@ -65,11 +65,11 @@ impl Identity {
   }
 
   pub fn metadata(&self) -> Option<serde_json::Value> {
-    let (width, height) = DisplayHandler::get_display_size();
+    // let (width, height) = DisplayHandler::get_display_size();
     Some(serde_json::json!({
         "_version": 1,
-        "width": width,
-        "height": height,
+        // "width": width,
+        // "height": height,
     }))
   }
 }

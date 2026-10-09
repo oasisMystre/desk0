@@ -35,7 +35,6 @@ class TerminalTabState extends State<TerminalTab> {
   final controller = TerminalController();
 
   late Shell shell;
-
   VoidCallback? removeEventListener;
 
   @override

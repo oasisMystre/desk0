@@ -1,10 +1,12 @@
-import 'package:get/get.dart';
-import 'package:flutter/material.dart';
-import 'package:flutter_svg/svg.dart';
-import 'package:go_router/go_router.dart';
+import 'dart:io' show Platform;
 
-import './sidenav_item.dart';
-import '../../states/app_state.dart';
+import 'package:flutter/material.dart';
+import 'package:get/get.dart' show Get, Inst, Obx;
+import 'package:flutter_svg/svg.dart' show SvgPicture;
+import 'package:go_router/go_router.dart' show GoRouterState, GoRouterHelper;
+
+import '../../states/app_state.dart' show AppState;
+import './sidenav_item.dart' show SideNavData, SideNavGroup;
 
 class SideNav extends StatefulWidget {
   final String? selectedRoute;
@@ -54,16 +56,17 @@ class SideNavState extends State<SideNav> {
       name: "Devices",
       path: "/devices",
     ),
-    SideNavData(
-      icon: (color) {
-        return SvgPicture.asset(
-          "assets/icons/apps.svg",
-          colorFilter: ColorFilter.mode(color, BlendMode.srcIn),
-        );
-      },
-      name: "Applications",
-      path: "/apps",
-    ),
+    if (Platform.isWindows)
+      SideNavData(
+        icon: (color) {
+          return SvgPicture.asset(
+            "assets/icons/apps.svg",
+            colorFilter: ColorFilter.mode(color, BlendMode.srcIn),
+          );
+        },
+        name: "Applications",
+        path: "/apps",
+      ),
   ];
 
   @override

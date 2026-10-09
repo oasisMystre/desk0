@@ -1,23 +1,5 @@
-import 'dart:ui';
-
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart' show CircularProgressIndicator, Colors;
-import 'package:flutter/cupertino.dart'
-    show
-        StatelessWidget,
-        Widget,
-        BuildContext,
-        Color,
-        EdgeInsets,
-        SizedBox,
-        TextStyle,
-        BorderRadius,
-        BoxDecoration,
-        MainAxisSize,
-        Text,
-        TextAlign,
-        Column,
-        Container,
-        Center;
 
 import '../../../l10n/generated/app_localizations.dart' show AppLocalizations;
 

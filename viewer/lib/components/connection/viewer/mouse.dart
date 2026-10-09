@@ -1,33 +1,7 @@
 import 'dart:math' show Point;
 
-import 'package:flutter/gestures.dart'
-    show
-        kPrimaryButton,
-        kSecondaryButton,
-        kBackMouseButton,
-        kForwardMouseButton,
-        kMiddleMouseButton,
-        PointerScrollEvent,
-        PointerSignalEvent,
-        PointerPanZoomStartEvent,
-        PointerPanZoomUpdateEvent;
-import 'package:flutter/cupertino.dart'
-    show
-        StatefulWidget,
-        SystemMouseCursors,
-        Widget,
-        MouseCursor,
-        State,
-        Offset,
-        PointerDownEvent,
-        PointerUpEvent,
-        PointerCancelEvent,
-        BuildContext,
-        WidgetsBinding,
-        Focus,
-        HitTestBehavior,
-        Listener,
-        MouseRegion;
+import 'package:flutter/gestures.dart';
+import 'package:flutter/cupertino.dart';
 
 import '../../../ffi/flutter.dart' show ViewerHandle;
 import '../../../ffi/types/rdp.dart' show SseMouseButton, SseInputEvent;
@@ -35,9 +9,8 @@ import '../../../ffi/types/rdp.dart' show SseMouseButton, SseInputEvent;
 class MouseListener extends StatefulWidget {
   final Point scale;
   final Widget child;
-  final ViewerHandle viewer;
-
   final MouseCursor cursor;
+  final ViewerHandle viewer;
 
   const MouseListener({
     super.key,
@@ -56,9 +29,9 @@ class MouseListener extends StatefulWidget {
 class MouseListenerState extends State<MouseListener> {
   Offset? pendingMove;
   int lastButtons = 0;
+  double accX = 0, accY = 0;
   bool flushScheduled = false;
 
-  double accX = 0, accY = 0;
   static const double kTrackpadSpeed = 1.0;
 
   static const Map<int, SseMouseButton> buttonMap = {

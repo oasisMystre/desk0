@@ -7,6 +7,7 @@ import 'package:liquid_glass_widgets/widgets/interactive/glass_button.dart'
 import 'connection_menu.dart' show ConnectionMenu;
 import '../../dio/models/device.dart' show Device;
 import '../../states/index.dart' show FavoriteState;
+import 'platform_image_card.dart' show PlatformImageCard;
 
 class ConnectionCard extends StatefulWidget {
   final Device device;
@@ -51,12 +52,9 @@ class ConnectionCardState extends State<ConnectionCard> {
       child: Stack(
         children: [
           Positioned.fill(
-            child: ClipRRect(
+            child: PlatformImageCard(
+              os: device.os,
               borderRadius: BorderRadius.all(Radius.circular(8)),
-              child: Image.asset(
-                "assets/card_background.png",
-                fit: BoxFit.cover,
-              ),
             ),
           ),
           Positioned(

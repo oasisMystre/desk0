@@ -9,13 +9,15 @@ crate-type = ["cdylib", "staticlib"]
 
 [dependencies]
 pdu.workspace = true
-winit = "0.30.13"
-tracing.workspace = true
 shared = { workspace = true, features=["otel"] }
-copypaste = { workspace = true }
-desk0-client = { path = "../client" }
+desk0-client = { path = "../client", features=["ffi"] }
+
 anyhow.workspace = true
-ironrdp = { workspace = true, features = ["client", "connector", "cliprdr", "input", "session", "client-clipboard", "graphics"] }
-flutter_rust_bridge = "=2.13.0"
-irondash_texture = "0.5.0"
+tracing.workspace = true
+copypaste = { workspace = true }
 tokio = {workspace = true, features=["sync"]}
+ironrdp = { workspace = true, features = ["client", "connector", "cliprdr", "input", "session", "client-clipboard", "graphics"] }
+
+winit = "0.30.13"
+irondash_texture = "0.5.0"
+flutter_rust_bridge = "=2.13.0"

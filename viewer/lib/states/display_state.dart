@@ -3,13 +3,15 @@ import 'dart:typed_data' show Uint8List;
 import 'dart:ui'
     show PixelFormat, ImageDescriptor, ImmutableBuffer, ImageByteFormat;
 
-import 'package:desk0/ffi/flutter.dart';
-import 'package:flutter/material.dart';
 import 'package:get/get.dart' show GetxController, Rx, RxT;
 import 'package:flutter_custom_cursor/cursor_manager.dart'
     show CursorManager, CursorData;
 import 'package:flutter_custom_cursor/flutter_custom_cursor.dart'
     show FlutterCustomMemoryImageCursor;
+import 'package:flutter/material.dart'
+    show View, MouseCursor, SystemMouseCursors, BuildContext, BoxConstraints;
+
+import '../ffi/flutter.dart' show ViewerHandle;
 
 class DisplayState extends GetxController {
   late Rx<int> width, height;

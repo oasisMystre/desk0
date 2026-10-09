@@ -1,0 +1,21 @@
+name: Build the flutter version of Desk0
+
+on:
+  workflow_call:
+    inputs:
+      upload-artifact:
+        type: boolean
+        default: true
+      upload-tag:
+        type: string
+        default: "nightly"
+
+env:
+  RUST_VERSION: "1.97.0"
+  LLVM_VERSION: "23.1.2"
+  FLUTTER_VERSION: "3.47.2"
+  TAG_NAME: "${{ inputs.upload-tag }}"
+
+jobs:
+  generate-bridge:
+    uses: ./.github/workflows/bridge.yml

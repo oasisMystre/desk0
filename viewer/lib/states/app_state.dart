@@ -1,4 +1,4 @@
-import 'package:get/get.dart';
+import 'package:get/get.dart' show GetxController, RxT;
 
 enum ListType { grid, list }
 

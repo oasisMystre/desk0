@@ -1,30 +1,29 @@
 use std::{
   num::{NonZeroU16, NonZeroUsize},
-  sync::{Arc, atomic::Ordering},
+  sync::Arc,
 };
 
-use display_info::DisplayInfo;
 use ironrdp::{
-  pdu::pointer::PointerPositionAttribute,
+  displaycontrol::pdu::DisplayControlMonitorLayout,
   server::{
-    BitmapUpdate, ColorPointer, DesktopSize, DisplayUpdate, PixelFormat, RGBAPointer,
-    RdpServerDisplay, RdpServerDisplayUpdates, ServerError, ServerErrorExt, ServerErrorKind,
-    ServerResult,
+    BitmapUpdate, DesktopSize, DisplayUpdate, PixelFormat, RdpServerDisplay,
+    RdpServerDisplayUpdates, ServerError, ServerErrorExt, ServerErrorKind, ServerResult,
   },
 };
-use rs_capture::{
-  CaptureBackend, FrameMetadata, PixelFormat as CapturePixelFormat, ScreenCapture,
-  ScreenCaptureConfig, backend::PointerShape,
+use pinray::Rect;
+use tokio::sync::{
+  Mutex,
+  mpsc::{Receiver, Sender, UnboundedReceiver, channel, error::TrySendError},
 };
-use tokio::sync::mpsc::{Receiver, Sender, channel, error::TrySendError};
 use tokio_util::sync::CancellationToken;
+
+use crate::handlers::media::{MediaHandler, WrapVideoFrame};
 
 #[derive(Clone)]
 pub struct DisplayHandler {
-  width: u16,
-  height: u16,
-  sender: Sender<DisplayUpdate>,
-  receiver: Arc<tokio::sync::Mutex<Option<Receiver<DisplayUpdate>>>>,
+  media: Arc<MediaHandler>,
+  display_updates_sender: Arc<Sender<DisplayUpdate>>,
+  display_updates_receiver: Arc<Mutex<Option<Receiver<DisplayUpdate>>>>,
 }
 
 struct DisplayUpdates {
@@ -32,38 +31,53 @@ struct DisplayUpdates {
 }
 
 impl DisplayHandler {
-  pub fn new() -> anyhow::Result<Self> {
-    let (sender, receiver) = channel(8);
-    let (width, height) = Self::get_display_size();
+  pub fn new(media: Arc<MediaHandler>) -> Self {
+    let (display_updates_sender, display_updates_receiver) = channel(8);
 
-    Ok(Self {
-      width,
-      height,
-      sender,
-      receiver: Arc::new(tokio::sync::Mutex::new(Some(receiver))),
-    })
+    Self {
+      media,
+      display_updates_sender: Arc::new(display_updates_sender),
+      display_updates_receiver: Arc::new(Mutex::new(Some(display_updates_receiver))),
+    }
   }
 }
 
 #[async_trait::async_trait]
 impl RdpServerDisplay for DisplayHandler {
   async fn size(&mut self) -> DesktopSize {
-    DesktopSize {
-      width: self.width,
-      height: self.height,
-    }
+    let monitors = self.media.monitors();
+
+    monitors
+      .iter()
+      .find(|monitor| monitor.primary)
+      .or_else(|| monitors.first())
+      .map(|monitor| DesktopSize {
+        width: monitor.width,
+        height: monitor.height,
+      })
+      .expect("primary display")
   }
 
   async fn updates(&mut self) -> ServerResult<Box<dyn RdpServerDisplayUpdates>> {
-    let mut guard = self.receiver.lock().await;
-    if let Some(receiver) = guard.take() {
-      Ok(Box::new(DisplayUpdates { receiver }))
-    } else {
-      return Err(ServerError::custom(
-        "Display updates channel already taken",
-        ServerErrorKind::Custom,
-      ));
-    }
+    let receiver = self
+      .display_updates_receiver
+      .lock()
+      .await
+      .take()
+      .ok_or_else(|| {
+        ServerError::custom(
+          "Display updates channel already taken",
+          ServerErrorKind::Custom,
+        )
+      })?;
+
+    Ok(Box::new(DisplayUpdates { receiver }))
+  }
+
+  fn request_layout(&mut self, layout: DisplayControlMonitorLayout) {}
+
+  async fn monitor_count(&mut self) -> u32 {
+    self.media.monitor_count() as u32
   }
 }
 
@@ -75,118 +89,129 @@ impl RdpServerDisplayUpdates for DisplayUpdates {
 }
 
 impl DisplayHandler {
-  pub async fn capture(&self, cancellation_token: CancellationToken) -> anyhow::Result<()> {
-    let sender = self.sender.clone();
-    let first_frame = Arc::new(std::sync::atomic::AtomicBool::new(true));
+  pub async fn capture(
+    &self,
+    mut video_frame_receiver: UnboundedReceiver<WrapVideoFrame>,
+    cancellation_token: CancellationToken,
+  ) -> anyhow::Result<()> {
+    let display_updates_sender = self.display_updates_sender.clone();
+    tokio::spawn(async move {
+      loop {
+        if cancellation_token.is_cancelled() {
+          break;
+        }
 
-    let capture = ScreenCapture::with_callback_arc(
-      ScreenCaptureConfig {
-        fps: Some(60),
-        backend: Some(CaptureBackend::Auto),
-        pixel_format: Some(CapturePixelFormat::Bgra),
-      },
-      Arc::new({
-        let first_frame = first_frame.clone();
+        let frame = match video_frame_receiver.recv().await {
+          Some(frame) => frame,
+          None => break,
+        };
 
-        move |frame: rs_capture::FrameData, this: &ScreenCapture| {
-          let width = frame.width as usize;
-          let height = frame.height as usize;
-          let is_first = first_frame.swap(false, Ordering::Relaxed);
+        let Some(pixels) = frame.inner.to_tight_bytes() else {
+          tracing::trace!("dropping frame with unsupported pixel data");
+          continue;
+        };
 
-          let mut updates = if is_first {
-            match Self::get_full_frame_update(&frame.data, width, height) {
-              Some(update) => vec![update],
-              None => return,
+        let width = frame.inner.width as usize;
+        let height = frame.inner.height as usize;
+
+        let updates = if frame.first_frame {
+          Self::full_frame_update(
+            &pixels,
+            width,
+            height,
+            frame.monitor.left as u16,
+            frame.monitor.top as u16,
+          )
+          .into_iter()
+          .collect()
+        } else {
+          Self::damage_updates(
+            &pixels,
+            width,
+            height,
+            frame.monitor.left as u16,
+            frame.monitor.top as u16,
+            frame.inner.damage.as_deref(),
+          )
+        };
+
+        for update in updates {
+          match display_updates_sender.try_send(update) {
+            Ok(()) => {}
+            Err(TrySendError::Full(_)) => {
+              tracing::trace!("dropping display update because encoder is behind");
             }
-          } else {
-            Self::get_frame_updates_from_metadata(&frame.data, width, height, &frame.metadata)
-          };
-
-          Self::append_pointer_updates(&mut updates, &frame.metadata);
-
-          for update in updates {
-            match sender.try_send(update) {
-              Ok(()) => {}
-              Err(TrySendError::Full(_)) => {
-                tracing::trace!("dropping display update because encoder is behind");
-              }
-              Err(TrySendError::Closed(_)) => {
-                tracing::debug!("Display update receiver disconnected; stopping capture");
-
-                if let Err(error) = this.stop() {
-                  tracing::error!(?error, "Failed to gracefully exit screen capture");
-                }
-                break;
-              }
+            Err(TrySendError::Closed(_)) => {
+              tracing::debug!("display update receiver disconnected; stopping capture");
+              break;
             }
           }
         }
-      }),
-    )?;
-
-    tokio::select! {
-      result = capture.start() => result?,
-      _ = cancellation_token.cancelled() => {
-        if let Err(error) = capture.stop() {
-          tracing::warn!(?error, "failed to stop screen capture during session reset");
-        }
       }
-    }
+    });
 
     Ok(())
   }
 
-  fn get_full_frame_update(pixels: &[u8], width: usize, height: usize) -> Option<DisplayUpdate> {
-    Some(DisplayUpdate::Bitmap(BitmapUpdate {
-      x: 0,
-      y: 0,
-      format: PixelFormat::BgrA32,
-      width: NonZeroU16::new(width as u16)?,
-      height: NonZeroU16::new(height as u16)?,
-      stride: NonZeroUsize::new(width * 4)?,
-      data: bytes::Bytes::copy_from_slice(pixels),
-    }))
-  }
-
-  fn get_frame_updates_from_metadata(
+  fn full_frame_update(
     pixels: &[u8],
     width: usize,
     height: usize,
-    metadata: &FrameMetadata,
+    offset_x: u16,
+    offset_y: u16,
+  ) -> Option<DisplayUpdate> {
+    let x = u16::try_from(offset_x).ok()?;
+    let y = u16::try_from(offset_y).ok()?;
+    let w = u16::try_from(width).ok()?;
+    let h = u16::try_from(height).ok()?;
+
+    Some(DisplayUpdate::Bitmap(BitmapUpdate {
+      x,
+      y,
+      width: NonZeroU16::new(w)?,
+      height: NonZeroU16::new(h)?,
+      format: PixelFormat::BgrA32,
+      data: bytes::Bytes::copy_from_slice(pixels),
+      stride: NonZeroUsize::new(width.checked_mul(4)?)?,
+    }))
+  }
+
+  fn damage_updates(
+    pixels: &[u8],
+    width: usize,
+    height: usize,
+    offset_x: u16,
+    offset_y: u16,
+    damage: Option<&[Rect]>,
   ) -> Vec<DisplayUpdate> {
-    let stride = width * 4;
+    let Some(damage) = damage else {
+      return Self::full_frame_update(pixels, width, height, offset_x, offset_y)
+        .into_iter()
+        .collect();
+    };
 
-    let full_frame_fallback = metadata.dirty_rects.len() == 1
-      && metadata.dirty_rects[0] == (0, 0, width as i32, height as i32);
-    let pointer_only_frame = metadata.move_rects.is_empty()
-      && metadata.pointer_shape.is_some()
-      && (metadata.dirty_rects.is_empty() || full_frame_fallback);
-
-    if pointer_only_frame {
-      return Vec::new();
+    if damage.is_empty() {
+      return vec![];
     }
 
-    let rects = metadata
-      .dirty_rects
-      .iter()
-      .copied()
-      .chain(metadata.move_rects.iter().map(|rect| rect.destination_rect));
+    let stride = width * 4;
+    let mut updates = Vec::with_capacity(damage.len());
 
-    let mut updates = vec![];
-    for (left, top, right, bottom) in rects {
-      let x = left as usize;
-      let y = top as usize;
-      let w = (right - left) as usize;
-      let h = (bottom - top) as usize;
+    for rect in damage {
+      let (Ok(x), Ok(y), Ok(w), Ok(h)) = (
+        u16::try_from(rect.x.max(0)),
+        u16::try_from(rect.y.max(0)),
+        u16::try_from(rect.width),
+        u16::try_from(rect.height),
+      ) else {
+        tracing::warn!(?rect, "damage rect out of RDP coordinate range skipping");
+        continue;
+      };
+
+      let (x, y, w, h) = (x as usize, y as usize, w as usize, h as usize);
 
       if x + w > width || y + h > height {
-        tracing::warn!(
-          left,
-          top,
-          right,
-          bottom,
-          "rect out of frame bounds, skipping"
-        );
+        tracing::warn!(x, y, w, h, "damage rect out of frame bounds, skipping");
         continue;
       }
 
@@ -208,82 +233,16 @@ impl DisplayHandler {
       };
 
       updates.push(DisplayUpdate::Bitmap(BitmapUpdate {
-        x: x as u16,
-        y: y as u16,
         width: nz_w,
         height: nz_h,
         stride: nz_stride,
+        data: cropped.into(),
         format: PixelFormat::BgrA32,
-        data: bytes::Bytes::from(cropped),
+        x: offset_x.saturating_add(x as u16),
+        y: offset_y.saturating_add(y as u16),
       }));
     }
 
     updates
-  }
-
-  fn append_pointer_updates(updates: &mut Vec<DisplayUpdate>, metadata: &FrameMetadata) {
-    if metadata.pointer_visible {
-      if let Some((x, y)) = metadata.pointer_position {
-        if let (Ok(x), Ok(y)) = (u16::try_from(x), u16::try_from(y)) {
-          updates.push(DisplayUpdate::PointerPosition(PointerPositionAttribute {
-            x,
-            y,
-          }));
-        } else {
-          tracing::warn!(x, y, "pointer position is outside RDP coordinate range");
-        }
-      }
-    } else {
-      updates.push(DisplayUpdate::HidePointer);
-    }
-
-    if let Some(pointer) = &metadata.pointer_shape {
-      match pointer {
-        PointerShape::Hidden => {
-          updates.push(DisplayUpdate::HidePointer);
-        }
-        PointerShape::Default => {
-          updates.push(DisplayUpdate::DefaultPointer);
-        }
-        PointerShape::Color(pointer) => {
-          updates.push(DisplayUpdate::ColorPointer(ColorPointer {
-            width: pointer.width,
-            height: pointer.height,
-            hot_x: pointer.hot_x,
-            hot_y: pointer.hot_y,
-            cache_index: pointer.cache_index,
-            and_mask: pointer.and_mask.clone(),
-            xor_mask: pointer.xor_mask.clone(),
-          }));
-        }
-        PointerShape::Rgba(pointer) => {
-          updates.push(DisplayUpdate::RGBAPointer(RGBAPointer {
-            width: pointer.width,
-            height: pointer.height,
-            hot_x: pointer.hot_x,
-            hot_y: pointer.hot_y,
-            data: pointer.data.clone(),
-            cache_index: pointer.cache_index,
-          }));
-        }
-      }
-    }
-  }
-
-  pub fn get_display_size() -> (u16, u16) {
-    let display = DisplayInfo::all().ok().and_then(|displays| {
-      let to_u16 =
-        |value: u32| -> Option<u16> { u16::try_from(value).ok().filter(|&value| value > 0) };
-
-      let display = displays
-        .iter()
-        .find(|display| display.is_primary)
-        .or_else(|| displays.first())
-        .and_then(|display| Some((to_u16(display.width)?, to_u16(display.height)?)));
-
-      display
-    });
-
-    display.unwrap_or((1920, 1080))
   }
 }
