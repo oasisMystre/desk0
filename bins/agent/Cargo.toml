@@ -11,21 +11,23 @@ terminal = []
 
 [dependencies]
 pdu.workspace = true
+audio = {workspace = true, features = ["convert"]}
 copypaste = { workspace = true, features = ["server"]}
-anyhow.workspace = true
-async-trait.workspace = true
-bytes.workspace = true
-clap.workspace = true
-
-futures.workspace = true
-
 
 uuid.workspace = true
+cpal.workspace = true
+clap.workspace = true
 serde.workspace = true
 tokio.workspace = true
+bytes.workspace = true
+anyhow.workspace = true
+futures.workspace = true
 tracing.workspace = true
+thiserror.workspace = true 
 serde_json.workspace = true
 tokio-util.workspace = true
+async-trait.workspace = true
+display-info.workspace = true
 tokio-rustls.workspace = true
 tracing-subscriber.workspace = true
 ironrdp = { workspace = true, features = ["acceptor", "server", "cliprdr", "svc", "rdpsnd", "displaycontrol"] }
@@ -39,11 +41,8 @@ rocksdb = "0.25.0"
 rust-i18n = "4.2.1"
 sys-locale = "0.3.2"
 portable-pty = "0.9.0"
-display-info = "0.5.9"
 tokio-tungstenite = "0.30.0"
 reqwest = { version = "0.13.4", features = ["json", "stream"] }
-thiserror = "2.0.21"
-cpal = "0.18.2"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows = { version = "0.62.2", features = [

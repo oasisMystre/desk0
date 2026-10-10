@@ -1,0 +1,12 @@
+[package]
+name = "audio"
+version = "0.1.0"
+edition = "2024"
+
+[features]
+convert = ["dep:pinray"]
+
+[dependencies]
+cpal.workspace = true
+pinray = { version = "0.2.6", optional = true }
+ironrdp = { workspace = true, features = ["rdpsnd"] }

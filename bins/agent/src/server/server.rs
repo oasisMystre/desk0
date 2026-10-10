@@ -144,7 +144,12 @@ impl AgentServer {
     media.discover()?;
     let audio = media.audios();
     source_sender.try_send(Source {
-      monitors: media.monitors(),
+      monitors: media
+        .monitors()
+        .iter()
+        .filter(|monitor| monitor.is_primary)
+        .cloned()
+        .collect(),
       audio: audio
         .iter()
         .find(|audio| audio.is_default)

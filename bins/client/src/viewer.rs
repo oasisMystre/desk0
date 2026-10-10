@@ -17,9 +17,8 @@ use ironrdp::{
 use pdu::{io::IoOutputEvent, terminal::TerminalOutputEvent};
 use tokio::sync::mpsc::{UnboundedSender, error::TrySendError};
 use tokio_util::sync::CancellationToken;
-use winit::dpi::PhysicalSize;
 
-use crate::static_channel::{IoStaticChannel, TerminalStaticChannel};
+use crate::static_channel::{IoStaticChannel, SoundRdpsndBackend, TerminalStaticChannel};
 
 #[derive(Debug, thiserror::Error)]
 pub enum Desk0ViewerError {
@@ -56,10 +55,15 @@ pub enum Desk0ViewerOutput {
   },
 }
 
+pub struct DesktopSize {
+  pub width: u16,
+  pub height: u16,
+}
+
 pub struct Desk0ViewerConfig<'a> {
   pub token: &'a str,
   pub endpoint: &'a str,
-  pub desktop_size: Option<PhysicalSize<u16>>,
+  pub desktop_size: Option<DesktopSize>,
 }
 
 pub struct Desk0Viewer {
@@ -70,6 +74,16 @@ pub struct Desk0Viewer {
   pub input: RdpInputSender,
   pub thread: Option<thread::JoinHandle<()>>,
   _cancellation_token: CancellationToken,
+}
+
+#[cfg(feature = "bin")]
+impl From<winit::dpi::PhysicalSize<u32>> for DesktopSize {
+  fn from(value: winit::dpi::PhysicalSize<u32>) -> Self {
+    Self {
+      width: value.width as u16,
+      height: value.height as u16,
+    }
+  }
 }
 
 impl Desk0ViewerOutput {
@@ -297,6 +311,7 @@ impl Desk0Viewer {
       .with_client_name(Self::client_name())
       .with_client_build(Self::client_build())
       .with_client_dir("C:\\Windows\\System32\\mstscax.dll")
+      .with_static_channel(move |_| Some(SoundRdpsndBackend::build_backend()))
       .with_static_channel({
         let clipboard_handler = clipboard_handler.clone();
         move |_| {

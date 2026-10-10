@@ -79,10 +79,7 @@ impl ViewerHandle {
       Desk0ViewerConfig {
         token: &self.token,
         endpoint: &self.endpoint,
-        desktop_size: Some(winit::dpi::PhysicalSize {
-          width: self.size.width,
-          height: self.size.height,
-        }),
+        desktop_size: Some(self.size.into()),
       },
       Desk0ViewerOutput::callback(),
     )

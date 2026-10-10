@@ -1,5 +1,6 @@
 use std::sync::{Arc, Mutex};
 
+use audio::audio::from_audio_frame_to_pcm16;
 use ironrdp::{
   rdpsnd::{
     pdu::AudioFormat,
@@ -13,10 +14,7 @@ use pinray::AudioFrame;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tokio_util::sync::CancellationToken;
 
-use crate::{
-  handlers::media::{AudioDeviceSourceId, MediaHandler},
-  utils::audio::from_audio_frame_to_wav,
-};
+use crate::handlers::media::{AudioDeviceSourceId, MediaHandler};
 
 #[derive(thiserror::Error, Debug)]
 pub enum AudioHandlerError {
@@ -124,7 +122,7 @@ impl RdpsndServerHandler for AudioHandlerStaticChannelFactory {
           None => break,
         };
 
-        let (pcm16, timestamp_ms) = from_audio_frame_to_wav(&frame);
+        let (pcm16, timestamp_ms) = from_audio_frame_to_pcm16(&frame);
         if pcm16.is_empty() {
           continue;
         }

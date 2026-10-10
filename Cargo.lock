@@ -590,6 +590,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1505bd5d3d116872e7271a6d4e16d81d0c8570876c8de68093a09ac269d8aac0"
 
 [[package]]
+name = "audio"
+version = "0.1.0"
+dependencies = [
+ "cpal",
+ "ironrdp",
+ "pinray",
+]
+
+[[package]]
 name = "autocfg"
 version = "1.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1439,9 +1448,9 @@ dependencies = [
 
 [[package]]
 name = "bytemuck_derive"
-version = "1.12.0"
+version = "1.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fc0e56a716f1e132ff6bf4bdac1c944a3fcdc1cae65f70a4a2a1ac3b401d2d1f"
+checksum = "6a1f896587b6f2c069c73d2f0913e2d590c3990285cd2f0b6aa02b786b4c679c"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1788,7 +1797,6 @@ dependencies = [
  "ironrdp-cliprdr-format",
  "tokio",
  "tracing",
- "tracing-subscriber",
 ]
 
 [[package]]
@@ -2346,6 +2354,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-trait",
+ "audio",
  "bytes",
  "clap",
  "copypaste",
@@ -2383,11 +2392,14 @@ name = "desk0-client"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "audio",
  "clap",
  "copypaste",
+ "cpal",
  "display-info",
  "ironrdp",
  "pdu",
+ "ringbuf",
  "semver",
  "shared",
  "smallvec",
@@ -2407,6 +2419,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "copypaste",
+ "cpal",
  "desk0-client",
  "flutter_rust_bridge",
  "irondash_texture",
@@ -2416,7 +2429,6 @@ dependencies = [
  "shared",
  "tokio",
  "tracing",
- "winit",
 ]
 
 [[package]]
@@ -6509,6 +6521,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "05c8b63e8d9609db387f0324918f81d68fe27748f084ef092fb35954d0539a85"
 
 [[package]]
+name = "portable-atomic-util"
+version = "0.2.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "10ab3eb7f3becc3a1cbc4f2c6f20267996cfc1a6467a873763411b136a122715"
+dependencies = [
+ "portable-atomic",
+]
+
+[[package]]
 name = "portable-pty"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7276,6 +7297,17 @@ dependencies = [
  "libc",
  "untrusted",
  "windows-sys 0.52.0",
+]
+
+[[package]]
+name = "ringbuf"
+version = "0.5.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b58b631e416dd7d84549d7e6a50f767e111f9b03e30d04f40072f6618f386aaf"
+dependencies = [
+ "crossbeam-utils",
+ "portable-atomic",
+ "portable-atomic-util",
 ]
 
 [[package]]

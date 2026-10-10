@@ -1,10 +1,11 @@
 use std::{fmt::Debug, sync::Arc};
 
+use audio::audio::cpal_supported_stream_config_range_to_audio_format;
 use cpal::traits::{DeviceTrait, HostTrait};
 use display_info::DisplayInfo;
 use ironrdp::{
   pdu::gcc::{Monitor, MonitorFlags},
-  rdpsnd::pdu::{AudioFormat, WaveFormat},
+  rdpsnd::pdu::AudioFormat,
 };
 use pinray::{
   AudioDeviceSource, AudioFrame, CaptureEvent, CaptureSession, CursorMode, PixelFormat, SourceId,
@@ -34,6 +35,7 @@ pub struct MonitorSource {
   pub y: u16,
   pub width: u16,
   pub height: u16,
+  #[allow(dead_code)]
   pub inner: Monitor,
   pub source: SourceId,
   pub is_primary: bool,
@@ -48,7 +50,6 @@ pub enum AudioDeviceSourceId {
 #[derive(Debug, Clone)]
 pub struct AudioSource {
   pub is_default: bool,
-  pub is_current: bool,
   pub formats: Vec<AudioFormat>,
   pub source: AudioDeviceSourceId,
 }
@@ -309,36 +310,12 @@ impl MediaHandler {
     let host = cpal::default_host();
     let default_audio_input = host.default_input_device();
 
-    let default_audio_input_id = default_audio_input
-      .as_ref()
-      .and_then(|device| device.id().ok().map(|id| id.id().to_string()));
-
     if let Some(device) = default_audio_input {
       if let Ok(supported_configs) = device.supported_input_configs() {
         for config in supported_configs {
-          let n_channels = config.channels();
-          let n_samples_per_sec = config.max_sample_rate();
-          let sample_format = config.sample_format();
-
-          let bits_per_sample = match sample_format {
-            cpal::SampleFormat::I16 => 16,
-            cpal::SampleFormat::F64 => 64,
-            cpal::SampleFormat::I32 | cpal::SampleFormat::F32 => 32,
-            _ => continue,
-          };
-
-          let n_block_align = n_channels * (bits_per_sample / 8);
-          let n_avg_bytes_per_sec = n_samples_per_sec * n_block_align as u32;
-
-          audio_formats.push(AudioFormat {
-            n_channels,
-            n_block_align,
-            bits_per_sample,
-            n_samples_per_sec,
-            n_avg_bytes_per_sec,
-            data: None,
-            format: WaveFormat::PCM,
-          });
+          if let Some(format) = cpal_supported_stream_config_range_to_audio_format(config) {
+            audio_formats.push(format);
+          }
         }
       }
     }
@@ -374,24 +351,16 @@ impl MediaHandler {
           });
         }
         pinray::CaptureSource::SystemAudio(source) => {
-          tracing::info!(id=?source.id.0, default_audio_input_id, "audio id",);
           audios.push(AudioSource {
             is_default: source.is_default,
             formats: audio_formats.clone(),
-            is_current: default_audio_input_id
-              .as_ref()
-              .is_some_and(|name| name == &source.id.0),
             source: AudioDeviceSourceId::SystemMix,
           });
         }
         pinray::CaptureSource::Microphone(source) => {
-          tracing::info!(id=?source.id.0, default_audio_input_id, "audio id",);
           audios.push(AudioSource {
             is_default: source.is_default,
             formats: audio_formats.clone(),
-            is_current: default_audio_input_id
-              .as_ref()
-              .is_some_and(|name| name == &source.id.0),
             source: AudioDeviceSourceId::MicroPhone(source),
           });
         }
@@ -430,8 +399,13 @@ impl MediaHandler {
       })
       .collect();
 
-    tracing::debug!(?audios, "audio lmao");
-    tracing::debug!(?monitors, "video lmao");
+    if audios.is_empty() {
+      audios.push(AudioSource {
+        is_default: true,
+        formats: audio_formats,
+        source: AudioDeviceSourceId::SystemMix,
+      });
+    }
 
     *self.audios.lock().unwrap() = audios;
     *self.monitors.lock().unwrap() = monitors;

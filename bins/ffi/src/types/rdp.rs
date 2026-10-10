@@ -89,6 +89,15 @@ pub struct SseMonitor {
   pub flags: u32,
 }
 
+impl Into<desk0_client::viewer::DesktopSize> for SseDesktopSize {
+  fn into(self) -> desk0_client::viewer::DesktopSize {
+    desk0_client::viewer::DesktopSize {
+      width: self.width,
+      height: self.height,
+    }
+  }
+}
+
 impl Into<ironrdp::input::MouseButton> for SseMouseButton {
   fn into(self) -> ironrdp::input::MouseButton {
     match self {
