@@ -204,11 +204,10 @@ pub fn init_redis_pool(max_size: usize) -> anyhow::Result<deadpool_redis::sentin
 #[cfg(not(feature = "sentinel"))]
 pub fn init_redis_pool(max_size: usize) -> anyhow::Result<deadpool_redis::Pool> {
   use anyhow::Context as _;
+
   let url = Env::RedisUrl.get()?;
-  
-  println!("Redis URL: {}", url);
-  
   let mut config = deadpool_redis::Config::from_url(url);
+
   config.pool = Some(deadpool_redis::PoolConfig::new(max_size));
   config
     .create_pool(Some(deadpool_redis::Runtime::Tokio1))
@@ -221,11 +220,7 @@ pub fn init_redis() -> anyhow::Result<deadpool_redis::redis::Client> {
   use anyhow::Context as _;
 
   let url = Env::RedisUrl.get()?;
-  
-  println!("Redis URL: {}", url);
-
-  let client = deadpool_redis::redis::Client::open(url)
-    .context("init redis client failed")?;
+  let client = deadpool_redis::redis::Client::open(url).context("init redis client failed")?;
 
   Ok(client)
 }

@@ -10,7 +10,8 @@ const worker = new Worker(
   "desk0",
   async (job) => {
     if (job.name === "build-agent") {
-      const result = generateAgentSchema.safeParse(job.data);
+      const result = generateAgentSchema.safeParse(JSON.parse(job.data));
+
       if (result.success) {
         const payload = result.data;
         const results = [];
@@ -27,7 +28,12 @@ const worker = new Worker(
           }
         }
 
-        return Promise.all(results);
+
+       return await Promise.all(results).catch((error) => {
+          console.error("Job failed", { error, job: job.id });
+          return Promise.reject(error);
+        });
+
       }
 
       return { error: formatError(result.error) };
