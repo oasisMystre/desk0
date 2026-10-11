@@ -100,7 +100,7 @@ export const bundleWindowAgentAsMsi = async (
       localBuildDir,
       "latest",
       os,
-      format("Desk0-Agent-%s.exe", os, arch),
+      format("Desk0-Agent-%s.exe", arch),
     );
 
     await Promise.all([
