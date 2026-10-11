@@ -66,6 +66,8 @@ pub async fn main() -> anyhow::Result<()> {
       "/devices/{device_id}",
       delete(routes::devices::delete_device),
     )
+    .route("/agents", post(routes::agent::build_agent))
+    .route("/agents", get(routes::agent::get_agents))
     .route("/attachments", get(routes::attachments::get_attachments))
     .route("/attachments", post(routes::attachments::create_attachment))
     .route(

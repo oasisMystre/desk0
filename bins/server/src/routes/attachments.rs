@@ -56,7 +56,7 @@ pub async fn get_attachments(
     .load(&mut connection)
     .await
     .map_err(|error| {
-      tracing::error!(?error, "database query error");
+      tracing::error!(?error, "failed to fetch attachments");
       StatusCode::INTERNAL_SERVER_ERROR
     })?;
 
@@ -123,7 +123,7 @@ pub async fn create_attachment(
     .execute(&mut connection)
     .await
     .map_err(|error| {
-      tracing::error!(?error, "database insert error");
+      tracing::error!(?error, "failed to insert attachment");
       StatusCode::INTERNAL_SERVER_ERROR
     })?;
 
@@ -160,7 +160,7 @@ pub async fn update_attachment(
   .map_err(|error| match error {
     diesel::result::Error::NotFound => StatusCode::NOT_FOUND,
     _ => {
-      tracing::error!(?error, "pg update error");
+      tracing::error!(?error, "failed to update attachment");
       StatusCode::INTERNAL_SERVER_ERROR
     }
   })?;
@@ -191,7 +191,7 @@ pub async fn delete_attachment(
   .map_err(|error| match error {
     diesel::result::Error::NotFound => StatusCode::NOT_FOUND,
     _ => {
-      tracing::error!(?error, "pg update error");
+      tracing::error!(?error, "failed to delete attachment");
       StatusCode::INTERNAL_SERVER_ERROR
     }
   })?;

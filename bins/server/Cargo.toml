@@ -40,3 +40,4 @@ aws-sdk-s3 = "1.144.0"
 futures-util = "0.3.34"
 axum =  { version = "0.8.9", features = ["ws"] }
 tower-http = { version="0.7.1", features=["trace"]}
+bullmq-official = "1.3.5"

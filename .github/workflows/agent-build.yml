@@ -1,0 +1,188 @@
+name: Build Desk0 Agent
+
+on:
+  workflow_call:
+    inputs:
+      upload-artifact:
+        type: boolean
+        default: true
+      upload-tag:
+        type: string
+        default: "nightly"
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  RUST_VERSION: "1.97.0"
+  LLVM_VERSION: "23.1.2"
+  TAG_NAME: "${{ inputs.upload-tag }}"
+
+jobs:
+  build-agent-windows:
+    name: Agent Windows (${{ matrix.job.target }}) (Unsigned)
+    runs-on: ${{ matrix.job.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        job:
+          - {
+              target: x86_64-pc-windows-msvc,
+              os: windows-2022,
+              arch: x86_64,
+            }
+          - {
+              target: aarch64-pc-windows-msvc,
+              os: windows-11-arm,
+              arch: aarch64,
+            }
+    steps:
+      - name: Export Github actions cache environment variables
+        uses: actions/github-script@v6
+        with:
+          script: |
+            core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL);
+            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN);
+
+      - name: Checkout source code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install LLVM and clang
+        uses: kyleMayes/install-llvm@v2.0.0
+        with:
+          version: ${{ env.LLVM_VERSION }}
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+          targets: ${{ matrix.job.target }}
+          components: "rustfmt"
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          prefix-key: agent-${{ matrix.job.os }}
+
+      - name: Build Agent Windows Shell (.exe) (Unsigned)
+        shell: pwsh
+        run: |
+          cargo build --release --target ${{ matrix.job.target }} --bin desk0-agent
+          New-Item -ItemType Directory -Force -Path dist
+          $exePath = "target/${{ matrix.job.target }}/release/desk0-agent.exe"
+          if (Test-Path $exePath) {
+            Copy-Item -Path $exePath -Destination "dist/desk0-agent-unsigned.exe"
+            Copy-Item -Path $exePath -Destination "desk0-agent-windows-${{ matrix.job.arch }}-unsigned.exe"
+            if (Test-Path "bins/agent/locales") {
+              Copy-Item -Path "bins/agent/locales" -Destination "dist/locales" -Recurse
+            }
+          } else {
+            Write-Error "desk0-agent.exe not found at $exePath"
+          }
+
+      - name: Upload Windows Agent Shell Artifact (Unsigned)
+        if: ${{ inputs.upload-artifact == true || inputs.upload-artifact == '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: desk0-agent-windows-${{ matrix.job.arch }}-unsigned
+          path: |
+            desk0-agent-windows-${{ matrix.job.arch }}-unsigned.exe
+            dist/
+
+  build-agent-macos:
+    name: Agent macOS (${{ matrix.job.target }}) (Unsigned)
+    runs-on: ${{ matrix.job.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        job:
+          - {
+              target: x86_64-apple-darwin,
+              os: macos-15-intel,
+              arch: x86_64,
+            }
+          - {
+              target: aarch64-apple-darwin,
+              os: macos-14,
+              arch: aarch64,
+            }
+
+    steps:
+      - name: Export Github actions cache environment variables
+        uses: actions/github-script@v6
+        with:
+          script: |
+            core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL);
+            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN);
+
+      - name: Checkout source code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install build runtime
+        run: |
+          brew install llvm create-dmg nasm
+          if command -v pkg-config &>/dev/null; then
+            echo "pkg-config is already installed"
+          else
+            brew install pkg-config
+          fi
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+          targets: ${{ matrix.job.target }}
+          components: "rustfmt"
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          prefix-key: agent-${{ matrix.job.os }}
+
+      - name: Build Agent macOS Shell (Unsigned)
+        run: |
+          cargo build --release --target ${{ matrix.job.target }} --bin desk0-agent
+
+      - name: Package macOS Agent Shell Artifacts (Unsigned)
+        run: |
+          BINARY_PATH="target/${{ matrix.job.target }}/release/desk0-agent"
+          if [ ! -f "$BINARY_PATH" ]; then
+            echo "Binary not found at $BINARY_PATH"
+            exit 1
+          fi
+          mkdir -p dist
+          cp "$BINARY_PATH" dist/desk0-agent-unsigned
+          cp "$BINARY_PATH" "desk0-agent-macos-${{ matrix.job.arch }}-unsigned"
+          if [ -d "bins/agent/locales" ]; then
+            cp -r "bins/agent/locales" dist/
+          fi
+
+          # Package unsigned DMG shell
+          mkdir -p dmg_root
+          cp "$BINARY_PATH" dmg_root/
+          if [ -d "bins/agent/locales" ]; then
+            cp -r "bins/agent/locales" dmg_root/
+          fi
+          DMG_NAME="desk0-agent-macos-${{ matrix.job.arch }}-unsigned.dmg"
+          create-dmg \
+            --volname "desk0-agent" \
+            --window-pos 200 120 \
+            --window-size 800 400 \
+            --icon-size 100 \
+            "$DMG_NAME" \
+            dmg_root/ || \
+          hdiutil create -volname "desk0-agent" -srcfolder dmg_root -ov -format UDZO "$DMG_NAME"
+
+      - name: Upload macOS Agent Shell Artifact (Unsigned)
+        if: ${{ inputs.upload-artifact == true || inputs.upload-artifact == '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: desk0-agent-macos-${{ matrix.job.arch }}-unsigned
+          path: |
+            desk0-agent-macos-${{ matrix.job.arch }}-unsigned
+            desk0-agent-macos-${{ matrix.job.arch }}-unsigned.dmg
+            dist/

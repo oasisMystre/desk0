@@ -5,3 +5,5 @@ data
 bins/ffi/src/frb_generated.rs
 .cache
 .env
+.env.*
+!.env.spec

@@ -1,0 +1,27 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "globalDependencies": [],
+  "tasks": {
+    "build": {
+      "dependsOn": ["^build"],
+      "inputs": ["$TURBO_DEFAULT$", ".env"],
+      "outputs": ["dist/**", "out/**", ".next/**"]
+    },
+    "migrate": {
+      "dependsOn": ["^migrate"],
+      "inputs": ["$TURBO_DEFAULT$", ".env"]
+    },
+    "check": {
+      "dependsOn": ["^check", "^lint"]
+    },
+    "clean": {
+      "dependsOn": ["^clean"]
+    },
+    "dev": {
+      "persistent": true,
+      "cache": false
+    },
+    "codegen": {},
+    "lint": {}
+  }
+}

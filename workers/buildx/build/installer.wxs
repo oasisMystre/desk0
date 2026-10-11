@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+    <Package
+        Name="Desk0 Agent"
+        Manufacturer="Desk0"
+        Version="1.0.0"
+        UpgradeCode="E5EB2774-4BE6-4B3F-8765-0D24AAAB0893"
+        Language="1033"
+        Scope="perMachine">
+        <MajorUpgrade
+            DowngradeErrorMessage="A newer version of Desk0 Agent is already installed." />
+        <MediaTemplate EmbedCab="yes" />
+        <Feature Id="MainFeature" Title="Desk0 Agent" Level="1">
+            <ComponentGroupRef Id="AgentComponents" />
+        </Feature>
+
+        <CustomAction
+            Id="InstallDesk0Service"
+            FileRef="AgentExe"
+            ExeCommand="--install"
+            Execute="deferred"
+            Impersonate="no"
+            Return="check" />
+
+        <CustomAction
+            Id="UninstallDesk0Service"
+            FileRef="AgentExe"
+            ExeCommand="--uninstall"
+            Execute="deferred"
+            Impersonate="no"
+            Return="check" />
+        <InstallExecuteSequence>
+            <Custom
+                Action="UninstallDesk0Service"
+                Before="RemoveFiles"
+                Condition="REMOVE=&quot;ALL&quot;" />
+            <Custom
+                Action="InstallDesk0Service"
+                After="InstallFiles"
+                Condition="NOT Installed" />
+        </InstallExecuteSequence>
+    </Package>
+    <Fragment>
+        <StandardDirectory Id="ProgramFiles64Folder">
+            <Directory Id="INSTALLFOLDER" Name="Desk0">
+                <Component Id="AgentExecutable" Guid="*">
+                    <File
+                        Id="AgentExe"
+                        Source="$(var.PublishDir)\desk0-agent.exe"
+                        KeyPath="yes" />
+                </Component>
+            </Directory>
+        </StandardDirectory>
+        <StandardDirectory Id="CommonAppDataFolder">
+            <Directory Id="CONFIGFOLDER" Name="Desk0">
+                <Component
+                    Id="AgentConfig"
+                    Guid="*"
+                    Permanent="yes"
+                    NeverOverwrite="yes">
+                    <File
+                        Id="ConfigToml"
+                        Source="$(var.PublishDir)\config.toml"
+                        KeyPath="yes" />
+                </Component>
+            </Directory>
+        </StandardDirectory>
+    </Fragment>
+    <Fragment>
+        <ComponentGroup Id="AgentComponents">
+            <ComponentRef Id="AgentExecutable" />
+            <ComponentRef Id="AgentConfig" />
+        </ComponentGroup>
+    </Fragment>
+</Wix>

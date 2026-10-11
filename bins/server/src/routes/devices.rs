@@ -56,7 +56,7 @@ pub async fn get_devices(
     .load(&mut connection)
     .await
     .map_err(|error| {
-      tracing::error!(?error, "database query error");
+      tracing::error!(?error, "failed to fetch devices");
       StatusCode::INTERNAL_SERVER_ERROR
     })?;
 
@@ -90,7 +90,7 @@ pub async fn create_device(
     .get_result::<Device>(&mut connection)
     .await
     .map_err(|error| {
-      tracing::error!(?error, "database insert error");
+      tracing::error!(?error, "failed to insert device");
       StatusCode::INTERNAL_SERVER_ERROR
     })?;
 
@@ -130,7 +130,7 @@ pub async fn update_device(
   .map_err(|error| match error {
     diesel::result::Error::NotFound => StatusCode::NOT_FOUND,
     _ => {
-      tracing::error!(?error, "database update error");
+      tracing::error!(?error, "failed to update device");
       StatusCode::INTERNAL_SERVER_ERROR
     }
   })?;
@@ -161,7 +161,7 @@ pub async fn delete_device(
   .map_err(|error| match error {
     diesel::result::Error::NotFound => StatusCode::NOT_FOUND,
     _ => {
-      tracing::error!(?error, "pg update error");
+      tracing::error!(?error, "failed to delete device");
       StatusCode::INTERNAL_SERVER_ERROR
     }
   })?;
@@ -191,7 +191,7 @@ pub async fn create_connection_token(
   claims.insert("device", device_id.to_string());
 
   let token = claims
-    .sign_with_key(&Arc::unwrap_or_clone(context.auth_key))
+    .sign_with_key(&Arc::unwrap_or_clone(context.auth_key.clone()))
     .map_err(|error| {
       tracing::error!(?error, "claim sign error");
       StatusCode::INTERNAL_SERVER_ERROR

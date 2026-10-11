@@ -35,7 +35,7 @@ pub async fn get_organizations(
     .load(&mut connection)
     .await
     .map_err(|error| {
-      tracing::error!(?error, "database query error");
+      tracing::error!(?error, "failed to fetch organization");
       StatusCode::INTERNAL_SERVER_ERROR
     })?;
 
@@ -64,7 +64,7 @@ pub async fn create_organization(
     .get_result::<Organization>(&mut connection)
     .await
     .map_err(|error| {
-      tracing::error!(?error, "database insert error");
+      tracing::error!(?error, "failed to insert organization");
       StatusCode::INTERNAL_SERVER_ERROR
     })?;
 
@@ -83,7 +83,7 @@ pub async fn create_connection_token(
   claims.insert("sub", user.org_id()?.to_string());
 
   let token = claims
-    .sign_with_key(&Arc::unwrap_or_clone(context.auth_key))
+    .sign_with_key(&Arc::unwrap_or_clone(context.auth_key.clone()))
     .map_err(|error| {
       tracing::error!(?error, "claim sign error");
       StatusCode::INTERNAL_SERVER_ERROR
