@@ -63,5 +63,16 @@ services:
       retries: 20
       start_period: 10s
 
+  workbench:
+    image: ghcr.io/pontusab/workbench-standalone:latest
+    networks:
+      - desk0
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      - REDIS_URL: "${REDIS_URL}"
+      - QUEUE_NAMES: "${QUEUE_NAMES:-desk0}"
+
 network:
   desk0:

@@ -88,8 +88,8 @@ export const bundleWindowAgentAsMsi = async (
 
   const runner = async () => {
     const buildDirCandidates = [
-      path.resolve("build"),
-      path.resolve(import.meta.dirname, format("../../../build", os, arch)),
+      path.resolve(process.cwd(), "build"),
+      path.resolve(import.meta.dirname, "../../../build"),
     ];
 
     const localBuildDir = buildDirCandidates.find((path) => existsSync(path));
@@ -98,7 +98,9 @@ export const bundleWindowAgentAsMsi = async (
     const templateWxs = path.join(localBuildDir, "installer.wxs");
     const exeSource = path.join(
       localBuildDir,
-      format("latest/%s/Desk0-Agent-%s.exe", os, arch),
+      "latest",
+      os,
+      format("Desk0-Agent-%s.exe", os, arch),
     );
 
     await Promise.all([
