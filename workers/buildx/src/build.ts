@@ -235,6 +235,7 @@ export const buildWindowAgent = async (
           ),
         );
       }
+      console.error(error);
       return Promise.reject(error);
     })
     .finally(() => rm(buildDir, { recursive: true, force: true }));
