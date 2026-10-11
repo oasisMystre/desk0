@@ -8,3 +8,4 @@ bins/ffi/src/frb_generated.rs
 .env.*
 !.env.spec
 .turbo
+out
