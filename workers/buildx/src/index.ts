@@ -28,20 +28,18 @@ const worker = new Worker(
           }
         }
 
-
-       return await Promise.all(results).catch((error) => {
+        return await Promise.all(results).catch((error) => {
           console.error("Job failed", { error, job: job.id });
           return Promise.reject(error);
         });
-
       }
 
       return { error: formatError(result.error) };
     }
   },
-  { connection: createRedis({maxRetriesPerRequest: null }) },
+  { connection: createRedis({ maxRetriesPerRequest: null }) },
 );
 
 worker.on("completed", ({ returnvalue }) => {
   console.log(returnvalue);
-})
+});

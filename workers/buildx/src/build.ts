@@ -38,6 +38,7 @@ export const buildMsi = (
     if (publishDir) args.push("-d", format("PublishDir=%s", publishDir));
 
     args.push("-o", output, "-v");
+    args.push("-acceptEula wix7");
 
     const child = spawn("wix", args, {
       cwd,
