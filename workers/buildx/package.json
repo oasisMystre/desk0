@@ -1,6 +1,12 @@
 {
   "name": "@desk0/buildx",
   "version": "0.0.0",
+  "scripts": {
+    "dev": "bun ./src/index.ts",
+    "check": "tsc --noEmit",
+    "clean": "rimraf dist .turbo",
+    "build": "tsup src/index.ts --minify --treeshake"
+  },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1149.0",
     "@aws-sdk/lib-storage": "^3.1149.0",
@@ -11,7 +17,6 @@
     "drizzle-orm": "^1.0.0-rc.4",
     "fs": "^0.0.1-security",
     "ioredis": "^6.0.0",
-    "lodash.zip": "^4.2.0",
     "pg": "^8.23.1",
     "zod": "^4.6.5"
   },
