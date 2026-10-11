@@ -8,4 +8,4 @@ export const redis = createRedis();
 export const db = createDB(getEnv("DATABASE_URL"));
 
 export const s3 = new S3Client();
-export const s3Bucket = getEnv<string>("R2_BUCKET");
+export const s3Bucket = getEnv<string>("S3_BUCKET");

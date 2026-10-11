@@ -11,7 +11,11 @@ try {
 
 type RefineFn<T> = <K>(value: K) => T | boolean;
 type Env =
-  | "R2_BUCKET"
+  | "S3_BUCKET"
+  | "S3_ENDPOINT"
+  | "S3_PUBLIC_BASE_URL"
+  | "S3_ACCESS_KEY"
+  | "S3_ACCESS_KEY_ID"
   | "DATABASE_URL"
   | "REDIS_URL"
   | "REDIS_USERNAME"

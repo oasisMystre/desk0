@@ -1,63 +1,41 @@
-import { format } from "util";
+import { Worker } from "bullmq";
+import { formatError } from "zod";
 
-import type { Job } from "./types";
-import { db, redis, s3, s3Bucket } from "./instances";
+import { createRedis } from "./redis";
 import { buildWindowAgent } from "./build";
+import { generateAgentSchema } from "./types";
+import { db, s3, s3Bucket } from "./instances";
 
-const GROUP_NAME = "node_workers";
-const STREAM_NAME = "job_queue_stream";
-const CONSUMER_NAME = format("worker_%s", process.pid);
+const worker = new Worker(
+  "desk0",
+  async (job) => {
+    if (job.name === "build-agent") {
+      const result = generateAgentSchema.safeParse(job.data);
+      if (result.success) {
+        const payload = result.data;
+        const results = [];
 
-/// improve this to retry failed jobs
-async function main() {
-  while (true) {
-    const runner = async () => {
-      const results = await redis.xreadgroup(
-        "GROUP",
-        GROUP_NAME,
-        CONSUMER_NAME,
-        "COUNT",
-        1,
-        "BLOCK",
-        5000,
-        "STREAMS",
-        STREAM_NAME,
-        ">",
-      );
-
-      if (results) {
-        const [, messages] = results[0]!;
-
-        const acks: string[] = [];
-        for (const message of messages) {
-          const jobId = message[0]!;
-          const jobData = message[1]!;
-
-          const payloadIndex = jobData.indexOf("payload") + 1;
-          const job: Job = JSON.parse(jobData[payloadIndex]!);
-
-          switch (job.type) {
-            case "build-agent": {
-              const payload = job.payload;
-              await buildWindowAgent( db, s3, s3Bucket, {...payload, os: ["windows"]})
-                .then(() => acks.push(jobId))
-                .catch((error) => {
-                  console.error("Job runner failed:", { jobId, error });
-                });
-              break;
-            }
+        for (const os of payload.os) {
+          switch (os) {
+            case "windows":
+              results.push(
+                buildWindowAgent(db, s3, s3Bucket, {
+                  ...payload,
+                  os: ["windows"],
+                }),
+              );
           }
         }
 
-        await redis.xack(STREAM_NAME, GROUP_NAME, ...acks);
+        return Promise.all(results);
       }
-    };
 
-    await runner().catch((error) => {
-      console.error("Error processing job:", error);
-      return new Promise((resolve) => setTimeout(resolve, 1000));
-    });
-  }
-}
+      return { error: formatError(result.error) };
+    }
+  },
+  { connection: createRedis({maxRetriesPerRequest: null }) },
+);
 
-main();
+worker.on("completed", ({ returnvalue }) => {
+  console.log(returnvalue);
+})

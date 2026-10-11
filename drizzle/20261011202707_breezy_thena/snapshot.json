@@ -2,18 +2,10 @@
   "version": "8",
   "dialect": "postgres",
   "id": "6c404cba-75d8-4465-87da-f466cf71617a",
-  "prevIds": [
-    "00000000-0000-0000-0000-000000000000"
-  ],
+  "prevIds": ["00000000-0000-0000-0000-000000000000"],
   "ddl": [
     {
-      "values": [
-        "windows",
-        "macos",
-        "linux",
-        "android",
-        "ios"
-      ],
+      "values": ["windows", "macos", "linux", "android", "ios"],
       "name": "os",
       "entityType": "enums",
       "schema": "public"
@@ -532,14 +524,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "agent"
-      ],
+      "columns": ["agent"],
       "schemaTo": "public",
       "tableTo": "agents",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "agent_assets_agent_agents_id_fkey",
@@ -549,14 +537,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "attachment"
-      ],
+      "columns": ["attachment"],
       "schemaTo": "public",
       "tableTo": "attachments",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "agent_assets_attachment_attachments_id_fkey",
@@ -566,14 +550,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "organization"
-      ],
+      "columns": ["organization"],
       "schemaTo": "public",
       "tableTo": "organizations",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "agents_organization_organizations_id_fkey",
@@ -583,14 +563,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "organization"
-      ],
+      "columns": ["organization"],
       "schemaTo": "public",
       "tableTo": "organizations",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "devices_organization_organizations_id_fkey",
@@ -600,14 +576,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "organization"
-      ],
+      "columns": ["organization"],
       "schemaTo": "public",
       "tableTo": "organizations",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "attachments_organization_organizations_id_fkey",
@@ -617,14 +589,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "user"
-      ],
+      "columns": ["user"],
       "schemaTo": "public",
       "tableTo": "users",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "organizations_user_users_id_fkey",
@@ -633,12 +601,7 @@
       "table": "organizations"
     },
     {
-      "columns": [
-        "agent",
-        "os",
-        "arch",
-        "version"
-      ],
+      "columns": ["agent", "os", "arch", "version"],
       "nameExplicit": false,
       "name": "agent_assets_pkey",
       "entityType": "pks",
@@ -646,9 +609,7 @@
       "table": "agent_assets"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "users_pkey",
       "schema": "public",
@@ -656,9 +617,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "agents_pkey",
       "schema": "public",
@@ -666,9 +625,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "devices_pkey",
       "schema": "public",
@@ -676,9 +633,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "attachments_pkey",
       "schema": "public",
@@ -686,9 +641,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "organizations_pkey",
       "schema": "public",
@@ -697,10 +650,7 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "organization",
-        "version"
-      ],
+      "columns": ["organization", "version"],
       "nullsNotDistinct": true,
       "name": "agents_organization_version_unique",
       "entityType": "uniques",
@@ -709,10 +659,7 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "user",
-        "name"
-      ],
+      "columns": ["user", "name"],
       "nullsNotDistinct": true,
       "name": "organizations_user_name_unique",
       "entityType": "uniques",
@@ -721,9 +668,7 @@
     },
     {
       "nameExplicit": true,
-      "columns": [
-        "attachment"
-      ],
+      "columns": ["attachment"],
       "nullsNotDistinct": false,
       "name": "unique_attachment",
       "schema": "public",
