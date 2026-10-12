@@ -54,7 +54,11 @@ pub async fn run_service() -> anyhow::Result<()> {
   })?;
 
   let exe = std::env::current_exe()?;
-  let mut child = Command::new(exe).arg("--agent").spawn()?;
+  let mut child = Command::new(exe)
+    ..stdin(std::process::Stdio::null())
+      .stdout(std::process::Stdio::null())
+      .stderr(std::process::Stdio::null())
+      .spawn()?;
 
   tokio::select! {
       _ = shutdown_rx.recv() => {
