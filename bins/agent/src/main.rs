@@ -129,16 +129,8 @@ pub fn main() {
         let api = Api::from_config(ApiConfig {
           base_url: &config.api_url,
         });
-        let db_path = AgentConfig::get_db_data_dir();
 
-        if let Err(error) = std::fs::create_dir_all(&db_path) {
-          tracing::warn!("Failed to pre-create database directory: {error}");
-        }
-
-        let db = rocksdb::DB::open_default(db_path)?;
-
-        let identity =
-          crate::server::identity::Identity::upsert(&api, &db, config.organization).await?;
+        let identity = crate::server::identity::Identity::upsert(&api, config.organization).await?;
         let tunnel = crate::server::tunnel::AgentTunnel::new(config.tunnel_url, identity, api);
         tunnel.run(run_cancellation_token).await?;
       }
@@ -170,4 +162,6 @@ pub fn main() {
       }
     }
   });
+
+  tracing::info!("Desk0 exited");
 }

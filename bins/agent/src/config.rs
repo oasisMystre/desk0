@@ -56,8 +56,4 @@ impl AgentConfig {
 
     base_dir
   }
-
-  pub fn get_db_data_dir() -> PathBuf {
-    Self::get_data_dir().join("data")
-  }
 }

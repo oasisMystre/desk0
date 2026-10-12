@@ -2,7 +2,6 @@ use std::sync::Arc;
 
 use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
 
 use crate::{
   api::api_impl::{Api, ApiClient},
@@ -51,7 +50,7 @@ impl From<Identity> for CreateDevice {
       hostname: value.hostname(),
       username: value.username(),
       version: Some(value.version()),
-      organization: value.org_id.parse::<Uuid>().unwrap(),
+      organization: value.org_id,
     }
   }
 }
@@ -64,7 +63,7 @@ impl From<Identity> for UpdateDevice {
       hostname: value.hostname(),
       username: value.username(),
       version: Some(value.version()),
-      organization: value.org_id.parse::<Uuid>().unwrap(),
+      organization: value.org_id,
     }
   }
 }
@@ -133,7 +132,7 @@ impl DeviceApi {
     Ok(response)
   }
 
-  pub async fn get_token(&self, device_id: &str) -> anyhow::Result<String> {
+  pub async fn get_token(&self, device_id: &uuid::Uuid) -> anyhow::Result<String> {
     let mut request = self
       .client
       .client

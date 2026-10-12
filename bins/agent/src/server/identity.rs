@@ -1,51 +1,48 @@
+use std::path::PathBuf;
+
 use anyhow::Context;
+use serde::{Deserialize, Serialize};
 
-use crate::api::Api;
+use crate::{api::Api, config::AgentConfig};
 
-#[derive(Clone)]
+#[derive(Clone, Deserialize, Serialize)]
 pub struct Identity {
-  pub org_id: String,
-  pub device_id: String,
+  pub org_id: uuid::Uuid,
+  pub device_id: uuid::Uuid,
 }
 
 impl Identity {
-  pub async fn upsert(api: &Api, db: &rocksdb::DB, org_id: uuid::Uuid) -> anyhow::Result<Self> {
-    if let Some(identity) = Self::get(db) {
+  fn state_path() -> PathBuf {
+    AgentConfig::get_data_dir().join("identity.json")
+  }
+
+  pub async fn upsert(api: &Api, org_id: uuid::Uuid) -> anyhow::Result<Self> {
+    if let Some(identity) = Self::get() {
       Ok(identity)
     } else {
       let mut identity = Self {
-        org_id: org_id.to_string(),
-        device_id: uuid::Uuid::new_v4().to_string(),
+        org_id: org_id,
+        device_id: uuid::Uuid::new_v4(),
       };
+
       let device = api
         .device
         .create_device(&identity.clone().into())
         .await
         .context("failed to create device")?;
-      let device_id = device.id.to_string();
-      identity.device_id = device_id.clone();
-      db.put("org_id", org_id)?;
-      db.put("device_id", device_id)?;
+
+      identity.device_id = device.id;
+
+      let json_string = serde_json::to_string_pretty(&identity)?;
+      std::fs::write(Self::state_path(), json_string).context("Failed to save identity state")?;
 
       Ok(identity)
     }
   }
 
-  pub fn get(db: &rocksdb::DB) -> Option<Self> {
-    let org_id = db
-      .get("org_id")
-      .ok()
-      .and_then(|result| result.and_then(|value| String::from_utf8(value).ok()))?;
-
-    let device_id = db
-      .get("device_id")
-      .ok()
-      .and_then(|result| result.and_then(|value| String::from_utf8(value).ok()))?;
-
-    Some(Self {
-      org_id,
-      device_id: device_id.clone(),
-    })
+  pub fn get() -> Option<Self> {
+    let content = std::fs::read_to_string(Self::state_path()).ok()?;
+    serde_json::from_str(&content).ok()
   }
 
   pub fn hostname(&self) -> Option<String> {
