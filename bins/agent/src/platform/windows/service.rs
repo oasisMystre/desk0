@@ -54,7 +54,12 @@ pub async fn run_service() -> anyhow::Result<()> {
   })?;
 
   let exe = std::env::current_exe()?;
-  let mut child = Command::new(exe)
+  let exe_dir = exe
+    .parent()
+    .unwrap_or_else(|| std::path::Path::new(r"C:\Program Files\Desk0"));
+
+  let mut child = Command::new(&exe)
+    .current_dir(exe_dir)
     .stdin(std::process::Stdio::null())
     .stdout(std::process::Stdio::null())
     .stderr(std::process::Stdio::null())

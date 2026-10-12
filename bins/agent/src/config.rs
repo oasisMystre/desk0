@@ -18,23 +18,8 @@ impl AgentConfig {
   pub fn load_config() -> anyhow::Result<Self> {
     use anyhow::Context;
     use std::fs;
-    use std::path::PathBuf;
 
-    #[cfg(target_os = "windows")]
-    let config_path = {
-      let program_data =
-        std::env::var("ProgramData").unwrap_or_else(|_| r"C:\ProgramData".to_string());
-      PathBuf::from(program_data)
-        .join("Desk0")
-        .join("config.json")
-    };
-
-    #[cfg(target_os = "macos")]
-    let config_path = PathBuf::from("/Library/Application Support/Desk0/config.json");
-
-    #[cfg(target_os = "linux")]
-    let config_path = PathBuf::from("/etc/desk0/config.json");
-
+    let config_path = Self::get_data_dir().join("config.json");
     let config_content = fs::read_to_string(&config_path)
       .with_context(|| format!("Failed to read config file at {:?}", config_path))?;
 
@@ -48,7 +33,7 @@ impl AgentConfig {
   pub fn load_config() -> anyhow::Result<Self> {
     Ok(Self {
       version: 0,
-      api_url: "http:///172.20.10.4:8080".into(),
+      api_url: "http://172.20.10.4:8080".into(),
       tunnel_url: "ws://172.20.10.4:8080".into(),
       agent: "11111111-1111-1111-1111-111111111111".parse()?,
       organization: "11111111-1111-1111-1111-111111111111".parse()?,
@@ -69,6 +54,10 @@ impl AgentConfig {
     #[cfg(target_os = "linux")]
     let base_dir = PathBuf::from("/var/lib/desk0");
 
-    base_dir.join("data")
+    base_dir
+  }
+
+  pub fn get_db_data_dir() -> PathBuf {
+    Self::get_data_dir().join("data")
   }
 }

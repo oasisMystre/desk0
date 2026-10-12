@@ -129,7 +129,7 @@ pub fn main() {
         let api = Api::from_config(ApiConfig {
           base_url: &config.api_url,
         });
-        let db_path = AgentConfig::get_data_dir();
+        let db_path = AgentConfig::get_db_data_dir();
 
         if let Err(error) = std::fs::create_dir_all(&db_path) {
           tracing::warn!("Failed to pre-create database directory: {error}");
