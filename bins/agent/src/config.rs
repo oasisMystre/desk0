@@ -35,8 +35,8 @@ impl AgentConfig {
       version: 0,
       api_url: "http://172.20.10.4:8080".into(),
       tunnel_url: "ws://172.20.10.4:8080".into(),
-      agent: "11111111-1111-1111-1111-111111111111".parse()?,
-      organization: "11111111-1111-1111-1111-111111111111".parse()?,
+      agent: "586ee9b3-f178-4905-9ba1-2e26aa9cd7b0".parse()?,
+      organization: "04038828-4240-4d08-9d3f-5b906b04dd97".parse()?,
     })
   }
 
