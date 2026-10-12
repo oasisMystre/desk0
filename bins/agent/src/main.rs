@@ -54,7 +54,6 @@ struct Args {
 const SUPPORTED_LOCALES: [&str; 1] = ["en-US"];
 
 pub fn main() {
-    println!("running app");
   let _ = init_tracing();
 
   rust_i18n::i18n!("locale", fallback = ["en-US"]);
@@ -163,6 +162,4 @@ pub fn main() {
       }
     }
   });
-
-  println!("Desk0 exited");
 }

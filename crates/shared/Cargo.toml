@@ -5,6 +5,7 @@ edition = "2024"
 
 [features]
 otel = []
+file-logs = ["dep:tracing-appender", "dep:dirs"]
 redis = ["dep:deadpool-redis"]
 postgres = ["dep:diesel-async"]
 sentinel = ["redis","deadpool-redis/sentinel"]
@@ -29,10 +30,12 @@ strum.workspace = true
 tracing-log = "0.2.0"
 tracing-error = "0.2.1"
 tracing-throttle = "0.4.3"
+dirs = { version = "7.0.0", optional = true }
 tracing-opentelemetry = { version = "0.32.0", optional = true }
 tracing-subscriber = { version = "0.3.23", features = ["env-filter", "fmt"] }
 
 opentelemetry = { version = "0.31.0", optional = true }
+tracing-appender =  { version = "0.2.5", optional = true }
 opentelemetry-appender-tracing = { version = "0.31.1", optional = true }
 opentelemetry_sdk = { version = "0.31.0", features = ["trace", "metrics", "logs"], optional = true }
 opentelemetry-otlp = { version = "0.31.1", features = ["metrics", "grpc-tonic"], optional = true }

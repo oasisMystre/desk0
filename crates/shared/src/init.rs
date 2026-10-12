@@ -136,19 +136,51 @@ pub fn init_tracing(
   {
     tracing_log::LogTracer::init()?;
 
+    #[cfg(feature = "file-logs")]
+    let data_dir = if cfg!(target_os = "windows") {
+      std::env::var_os("ProgramData")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| std::path::PathBuf::from(r"C:\ProgramData"))
+        .join("Desk0")
+    } else if cfg!(target_os = "macos") {
+      std::path::PathBuf::from("/Library/Application Support/Desk0")
+    } else if cfg!(target_os = "linux") {
+      std::path::PathBuf::from("/var/lib/desk0")
+    } else {
+      dirs::data_local_dir()
+        .unwrap_or_else(|| std::path::PathBuf::from("."))
+        .join("Desk0")
+    };
+
+    #[cfg(feature = "file-logs")]
+    let log_dir = data_dir.join("logs");
+    #[cfg(feature = "file-logs")]
+    std::fs::create_dir_all(&log_dir)?;
+    #[cfg(feature = "file-logs")]
+    let file = tracing_appender::rolling::never(&log_dir, "agent.log");
+    #[cfg(feature = "file-logs")]
+    let (writer, guard) = tracing_appender::non_blocking(file);
+
     let filter_otel = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
 
     let fmt_layer = tracing_subscriber::fmt::layer()
       .with_thread_names(true)
       .with_file(true)
-      .with_line_number(true)
-      .with_filter(filter_otel);
+      .with_line_number(true);
+
+    #[cfg(feature = "file-logs")]
+    let fmt_layer = fmt_layer.with_ansi(false).with_writer(writer);
+
+    let fmt_layer = fmt_layer.with_filter(filter_otel);
 
     let subscriber = tracing_subscriber::registry()
       .with(fmt_layer)
       .with(rate_limit);
 
     subscriber.with(ErrorLayer::default()).try_init().ok();
+
+    #[cfg(feature = "file-logs")]
+    std::mem::forget(guard);
 
     Ok(())
   }
