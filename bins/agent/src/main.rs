@@ -34,6 +34,10 @@ struct Args {
   #[arg(long)]
   uninstall: bool,
 
+  /// Run without GUI error dialogs Used by the background service
+  #[arg(long)]
+  headless: bool,
+
   /// Run standalone direct RDP listener instead of connecting outbound to Desk0 Server
   #[arg(long)]
   listen: bool,
@@ -50,7 +54,7 @@ struct Args {
 const SUPPORTED_LOCALES: [&str; 1] = ["en-US"];
 
 pub fn main() {
-  init_tracing();
+  let _ = init_tracing();
 
   rust_i18n::i18n!("locale", fallback = ["en-US"]);
 
@@ -68,21 +72,21 @@ pub fn main() {
   {
     if args.install {
       if let Err(error) = crate::platform::windows::service::install() {
-        eprintln!("Service install error: {error:?}");
+        tracing::error!(?error, "Service install error");
       }
       return;
     }
 
     if args.uninstall {
       if let Err(error) = crate::platform::windows::service::uninstall() {
-        eprintln!("Service uninstall error: {error:?}");
+        tracing::error!(?error, "Service uninstall error");
       }
       return;
     }
 
     if args.service {
       if let Err(error) = crate::platform::windows::service::start() {
-        eprintln!("Service start error: {error:?}");
+        tracing::error!(?error, "Service start error");
       }
       return;
     }
@@ -90,7 +94,7 @@ pub fn main() {
 
   #[cfg(not(target_os = "windows"))]
   if args.service || args.install || args.uninstall {
-    eprintln!("Service installation mode is currently supported on Windows.");
+    tracing::error!("Service installation mode is currently supported on Windows.");
     return;
   }
 
@@ -115,7 +119,7 @@ pub fn main() {
         use crate::server::traits::Server;
 
         let addr = format!("{}:{}", args.bind_addr, args.port);
-        println!("Starting Desk0 RDP Agent standalone on RDP://{}", addr);
+        tracing::info!("Starting Desk0 RDP Agent standalone on RDP://{}", addr);
         let server = crate::server::server::AgentServer::new(addr.parse()?);
         server.run(run_cancellation_token).await?;
       } else {
@@ -125,7 +129,13 @@ pub fn main() {
         let api = Api::from_config(ApiConfig {
           base_url: &config.api_url,
         });
-        let db = rocksdb::DB::open_default("data")?;
+        let db_path = AgentConfig::get_data_dir();
+
+        if let Err(error) = std::fs::create_dir_all(&db_path) {
+          tracing::warn!("Failed to pre-create database directory: {error}");
+        }
+
+        let db = rocksdb::DB::open_default(db_path)?;
 
         let identity =
           crate::server::identity::Identity::upsert(&api, &db, config.organization).await?;
@@ -138,22 +148,24 @@ pub fn main() {
     tokio::pin!(run);
     tokio::select! {
       _ = tokio::signal::ctrl_c() => {
-        println!("Received shutdown signal. Stopping Desk0 Agent...");
+        tracing::debug!("Received shutdown signal. Stopping Desk0 Agent.");
         cancellation_token.cancel();
 
         if let Err(error) = (&mut run).await {
-            eprintln!("Desk0 agent shutdown error: {error:#}");
+            tracing::error!(?error, "Desk0 agent shutdown error");
         }
       }
       result = &mut run => {
         if let Err(error) = result {
-          let _ = MessageDialog::new()
-              .set_title(t!("error_title"))
-              .set_description(format!("{}\n\n{}", t!("error_description"), error.to_string()))
-              .set_level(MessageLevel::Error)
-              .set_buttons(MessageButtons::Ok).show();
+         if !args.headless {
+             let _ = MessageDialog::new()
+                 .set_title(t!("error_title"))
+                 .set_description(format!("{}\n\n{}", t!("error_description"), error.to_string()))
+                 .set_level(MessageLevel::Error)
+                 .set_buttons(MessageButtons::Ok).show();
+         }
 
-            eprintln!("Desk0 agent error: {error:#?}");
+            tracing::error!(?error, "Desk0 agent error");
         }
       }
     }

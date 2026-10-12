@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use serde::Deserialize;
 
 #[derive(Deserialize)]
@@ -51,5 +53,22 @@ impl AgentConfig {
       agent: "11111111-1111-1111-1111-111111111111".parse()?,
       organization: "11111111-1111-1111-1111-111111111111".parse()?,
     })
+  }
+
+  pub fn get_data_dir() -> PathBuf {
+    #[cfg(target_os = "windows")]
+    let base_dir = {
+      let program_data =
+        std::env::var("ProgramData").unwrap_or_else(|_| r"C:\ProgramData".to_string());
+      PathBuf::from(program_data).join("Desk0")
+    };
+
+    #[cfg(target_os = "macos")]
+    let base_dir = PathBuf::from("/Library/Application Support/Desk0");
+
+    #[cfg(target_os = "linux")]
+    let base_dir = PathBuf::from("/var/lib/desk0");
+
+    base_dir.join("data")
   }
 }
