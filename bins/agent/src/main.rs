@@ -1,4 +1,4 @@
-#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+// #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 use clap::Parser;
 use rfd::{MessageButtons, MessageDialog, MessageLevel};
 use rust_i18n::t;
@@ -54,7 +54,11 @@ struct Args {
 const SUPPORTED_LOCALES: [&str; 1] = ["en-US"];
 
 pub fn main() {
-  let _ = init_tracing();
+  if let Err(error) = init_tracing() {
+    eprintln!("Failed to initialize tracing: {error:#}");
+  }
+
+  tracing::info!("Starting Desk0 Agent");
 
   rust_i18n::i18n!("locale", fallback = ["en-US"]);
 
