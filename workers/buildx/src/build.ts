@@ -20,11 +20,12 @@ export const buildMsi = (
   output: string,
   cwd: string,
   arch: MsiArchitecture,
+  version: number,
   publishDir?: string,
 ) => {
   return new Promise<void>((resolve, reject) => {
     const errorLogs: string[] = [];
-    const args = ["build", source, "-arch", arch];
+    const args = ["build", source, "-arch", arch, "-d", format('Version=%d.0.0', version)];
     if (publishDir) args.push("-d", format("PublishDir=%s", publishDir));
 
     args.push("-o", output, "-v");
@@ -110,7 +111,7 @@ export const bundleWindowAgentAsMsi = async (
       ),
     ]);
 
-    await buildMsi(installerWxs, output, archBuildDir, arch, distDir);
+    await buildMsi(installerWxs, output, archBuildDir, arch, payload.version, distDir);
   };
 
   await runner();

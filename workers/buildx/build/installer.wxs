@@ -1,10 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
+<?ifndef Version?>
+    <?define Version="1.0.0"?>
+<?endif?>
+
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
     <Package
         Name="Desk0 Agent"
         Manufacturer="Desk0"
-        Version="1.0.0"
+        Version="$(var.Version)"
         UpgradeCode="E5EB2774-4BE6-4B3F-8765-0D24AAAB0893"
         Language="1033"
         Scope="perMachine">
@@ -14,7 +18,6 @@
         <Feature Id="MainFeature" Title="Desk0 Agent" Level="1">
             <ComponentGroupRef Id="AgentComponents" />
         </Feature>
-
         <CustomAction
             Id="InstallDesk0Service"
             FileRef="AgentExe"
@@ -22,18 +25,17 @@
             Execute="deferred"
             Impersonate="no"
             Return="check" />
-
         <CustomAction
             Id="UninstallDesk0Service"
             FileRef="AgentExe"
             ExeCommand="--uninstall"
             Execute="deferred"
             Impersonate="no"
-            Return="check" />
+            Return="ignore" />
         <InstallExecuteSequence>
             <Custom
                 Action="UninstallDesk0Service"
-                Before="RemoveFiles"
+                Before="StopServices"
                 Condition="REMOVE=&quot;ALL&quot;" />
             <Custom
                 Action="InstallDesk0Service"
