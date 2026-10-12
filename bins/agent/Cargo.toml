@@ -11,9 +11,9 @@ terminal = []
 
 [dependencies]
 pdu.workspace = true
-shared = { workspace = true, features = ["otel"] }
 audio = {workspace = true, features = ["convert"] }
 copypaste = { workspace = true, features = ["server"] }
+shared = { workspace = true, features = ["otel", "file-logs"] }
 
 uuid.workspace = true
 cpal.workspace = true
