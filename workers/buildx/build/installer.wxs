@@ -58,10 +58,11 @@
                     Id="AgentConfig"
                     Guid="*"
                     Permanent="yes"
-                    NeverOverwrite="yes">
+                    NeverOverwrite="no">
+                    <RemoveFile Id="RemoveOldConfigJson" Name="config.json" On="install"/>
                     <File
-                        Id="ConfigToml"
-                        Source="$(var.PublishDir)\config.toml"
+                        Id="ConfigJson"
+                        Source="$(var.PublishDir)\config.json"
                         KeyPath="yes" />
                 </Component>
             </Directory>

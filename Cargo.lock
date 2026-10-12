@@ -2494,6 +2494,7 @@ dependencies = [
  "rustls 0.23.45",
  "serde",
  "serde_json",
+ "shared",
  "sys-locale",
  "thiserror 2.0.21",
  "tokio",

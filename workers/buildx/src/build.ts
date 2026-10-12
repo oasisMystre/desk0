@@ -1,4 +1,5 @@
 import path from "path";
+import assert from "assert";
 import { tmpdir } from "os";
 import { format } from "util";
 import { randomUUID } from "crypto";
@@ -9,21 +10,10 @@ import { DeleteObjectCommand, type S3Client } from "@aws-sdk/client-s3";
 import { copyFile, mkdir, mkdtemp, rm, stat, writeFile } from "fs/promises";
 import { agentAssets, attachments, type Database } from "@workspace/datasource";
 
-import type { GenerateAgentPayload } from "./types";
 import { getEnv } from "./env";
-import assert from "assert";
+import type { GenerateAgentPayload } from "./types";
 
 export type MsiArchitecture = "x64" | "arm64";
-
-const config = `
-version = %d
-agent = %s
-organization = %s
-`;
-
-const tomlString = (value: string): string => {
-  return JSON.stringify(value);
-};
 
 export const buildMsi = (
   source: string,
@@ -108,13 +98,14 @@ export const bundleWindowAgentAsMsi = async (
       copyFile(templateWxs, installerWxs),
       copyFile(exeSource, path.join(distDir, "desk0-agent.exe")),
       writeFile(
-        path.join(distDir, "config.toml"),
-        format(
-          config,
-          payload.version,
-          tomlString(payload.agent),
-          tomlString(payload.organization),
-        ),
+        path.join(distDir, "config.json"),
+        JSON.stringify({
+          agent: payload.agent,
+          organization: payload.organization,
+          api_url: getEnv("DESK0_API_URL"),
+          version: getEnv("DESK0_VERSION"),
+          tunnel_url: getEnv("DESK0_TUNNEL_URL"),
+        }),
         "utf-8",
       ),
     ]);

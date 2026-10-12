@@ -2,11 +2,16 @@
 use clap::Parser;
 use rfd::{MessageButtons, MessageDialog, MessageLevel};
 use rust_i18n::t;
+use shared::init::init_tracing;
 use tokio_util::sync::CancellationToken;
 
-use crate::api::{Api, ApiConfig};
+use crate::{
+  api::{Api, ApiConfig},
+  config::AgentConfig,
+};
 
 mod api;
+mod config;
 mod handlers;
 mod platform;
 mod server;
@@ -29,18 +34,6 @@ struct Args {
   #[arg(long)]
   uninstall: bool,
 
-  /// Central Desk0 server address to connect outbound reverse proxy tunnel to
-  #[arg(long, default_value = "ws://172.20.10.4:8080")]
-  server_addr: String,
-
-  #[arg(long, default_value = "http:///172.20.10.4:8080")]
-  api_addr: String,
-
-  /// Organization ID / fingerprint override
-  #[arg(long, default_value = "11111111-1111-1111-1111-111111111111")]
-  // #[arg(long, default_value = "5c6514f7-6225-4fe5-a22f-46c5d335ebec")]
-  org_id: String,
-
   /// Run standalone direct RDP listener instead of connecting outbound to Desk0 Server
   #[arg(long)]
   listen: bool,
@@ -57,17 +50,7 @@ struct Args {
 const SUPPORTED_LOCALES: [&str; 1] = ["en-US"];
 
 pub fn main() {
-  tracing_subscriber::fmt()
-    .with_env_filter(
-      tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| {
-        tracing_subscriber::EnvFilter::new("info,desk0_agent=debug,copypaste=debug")
-      }),
-    )
-    .with_target(true)
-    .with_thread_names(true)
-    .with_file(true)
-    .with_line_number(true)
-    .init();
+  init_tracing();
 
   rust_i18n::i18n!("locale", fallback = ["en-US"]);
 
@@ -138,13 +121,15 @@ pub fn main() {
       } else {
         use crate::server::traits::Tunnel;
 
+        let config = AgentConfig::load_config()?;
         let api = Api::from_config(ApiConfig {
-          base_url: &args.api_addr,
+          base_url: &config.api_url,
         });
         let db = rocksdb::DB::open_default("data")?;
 
-        let identity = crate::server::identity::Identity::upsert(&api, &db, args.org_id).await?;
-        let tunnel = crate::server::tunnel::AgentTunnel::new(args.server_addr, identity, api);
+        let identity =
+          crate::server::identity::Identity::upsert(&api, &db, config.organization).await?;
+        let tunnel = crate::server::tunnel::AgentTunnel::new(config.tunnel_url, identity, api);
         tunnel.run(run_cancellation_token).await?;
       }
       Ok::<_, anyhow::Error>(())
@@ -164,7 +149,7 @@ pub fn main() {
         if let Err(error) = result {
           let _ = MessageDialog::new()
               .set_title(t!("error_title"))
-              .set_description(t!("error_description"))
+              .set_description(format!("{}\n\n{}", t!("error_description"), error.to_string()))
               .set_level(MessageLevel::Error)
               .set_buttons(MessageButtons::Ok).show();
 
