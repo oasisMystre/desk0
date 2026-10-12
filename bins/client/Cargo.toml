@@ -15,7 +15,7 @@ default = ["bin"]
 # internal crates 
 pdu.workspace = true
 audio.workspace = true
-shared = { workspace = true, features=["otel", "file-logs"] }
+shared = { workspace = true, features=["otel"] }
 copypaste = { workspace = true, features=["client"] }
 
 cpal.workspace = true
