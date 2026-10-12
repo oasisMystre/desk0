@@ -129,25 +129,24 @@ impl AgentTunnel {
 #[async_trait::async_trait]
 impl Tunnel for AgentTunnel {
   async fn run(&self, cancellation_token: CancellationToken) -> anyhow::Result<()> {
-    let run = async { self.connect(cancellation_token.clone()).await };
-    tokio::pin!(run);
-
     loop {
-      tokio::select! {
-          _ = cancellation_token.cancelled() => {
-              if let Err(error) = (&mut run).await {
-                  tracing::error!(?error, "shutting down tunnel failed");
-              }
-              break;
-          }
-          result =  &mut run => {
-              match result {
-                Ok(()) => tracing::info!("Agent WebSocket closed; reconnecting in 5 seconds..."),
-                Err(error) => tracing::error!(?error, "Agent WebSocket connection failed"),
-              }
+      let result = tokio::select! {
+        _ = cancellation_token.cancelled() => break,
+        result =  self.connect(cancellation_token.clone()) => result,
+      };
 
-              tokio::time::sleep(Duration::from_secs(5)).await;
-          }
+      if cancellation_token.is_cancelled() {
+        break;
+      }
+
+      match result {
+        Ok(()) => tracing::info!("Agent WebSocket closed; reconnecting in 5 seconds..."),
+        Err(error) => tracing::error!(?error, "Agent WebSocket connection failed"),
+      }
+
+      tokio::select! {
+          _ = cancellation_token.cancelled() => break,
+          _ = tokio::time::sleep(Duration::from_secs(5)) => {}
       }
     }
 
