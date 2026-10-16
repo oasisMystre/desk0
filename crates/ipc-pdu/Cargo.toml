@@ -11,4 +11,7 @@ anyhow.workspace = true
 
 rkyv.workspace = true
 pinray.workspace = true 
-ironrdp = { workspace = true, features = ["pdu", "svc"] }
+ironrdp = { workspace = true, features = ["pdu", "svc", "rdpsnd", "server"] }
+
+[dev-dependencies]
+tokio = { workspace = true }

@@ -4215,6 +4215,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "interprocess",
+ "ipc-pdu",
  "rkyv",
  "shared_memory",
  "tokio",
@@ -4231,6 +4232,7 @@ dependencies = [
  "ironrdp",
  "pinray",
  "rkyv",
+ "tokio",
 ]
 
 [[package]]

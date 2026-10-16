@@ -45,6 +45,20 @@ pub enum IpcUnpackedAudioEvent {
   AudioSource(Vec<IpcAudioSource>),
 }
 
+impl From<AudioFormat> for IpcAudioFormat {
+  fn from(value: AudioFormat) -> IpcAudioFormat {
+    IpcAudioFormat {
+      data: value.data,
+      format: 1,
+      n_channels: value.n_channels,
+      n_block_align: value.n_block_align,
+      bits_per_sample: value.bits_per_sample,
+      n_samples_per_sec: value.n_samples_per_sec,
+      n_avg_bytes_per_sec: value.n_avg_bytes_per_sec,
+    }
+  }
+}
+
 impl Into<AudioFormat> for IpcAudioFormat {
   fn into(self) -> AudioFormat {
     AudioFormat {

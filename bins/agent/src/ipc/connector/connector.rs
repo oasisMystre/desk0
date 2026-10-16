@@ -5,7 +5,10 @@ use enigo::Settings;
 use ipc::{Ipc, IpcConfig, IpcSharedBuffer, IpcSharedMemory};
 use ipc_pdu::{
   inbound::{IpcAudioEvent, IpcDisplayEvent, IpcInboundEvent},
-  outbound::IpcOutboundEvent,
+  outbound::{
+    IpcAudioSource, IpcDesktopSize, IpcDisplayInfo, IpcOutboundEvent, IpcPackedAudioEvent,
+    IpcPackedDisplayEvent,
+  },
 };
 use tokio::{
   sync::mpsc::{channel, unbounded_channel},
@@ -50,21 +53,7 @@ impl IpcInboundEventHandler {
     ));
 
     media.discover()?;
-
     let audio = media.audios();
-    source_sender.try_send(Source {
-      monitors: media
-        .monitors()
-        .iter()
-        .filter(|monitor| monitor.is_primary)
-        .cloned()
-        .collect(),
-      audio: audio
-        .iter()
-        .find(|audio| audio.is_default)
-        .or_else(|| audio.first())
-        .cloned(),
-    })?;
 
     let shared_memory = Arc::new(IpcSharedMemory::<IpcInboundEvent, IpcOutboundEvent>::new(
       &AgentConfig::get_ipc_share_memory_path(),
@@ -87,6 +76,62 @@ impl IpcInboundEventHandler {
     input_handler.start(input_event_receiver)?;
     audio_handler.capture(audio_frame_receiver);
     display_handler.capture(video_frame_receiver);
+
+    source_sender.try_send(Source {
+      monitors: media
+        .monitors()
+        .iter()
+        .filter(|monitor| monitor.is_primary)
+        .cloned()
+        .collect(),
+      audio: audio
+        .iter()
+        .find(|audio| audio.is_default)
+        .or_else(|| audio.first())
+        .cloned(),
+    })?;
+
+    let monitors = media.monitors();
+    let width = monitors
+      .iter()
+      .map(|monitor| monitor.x as u32 + monitor.width as u32)
+      .max()
+      .unwrap_or(1282);
+
+    let height = monitors
+      .iter()
+      .map(|monitor| monitor.y as u32 + monitor.height as u32)
+      .max()
+      .unwrap_or(720);
+
+    shared_memory
+      .send(IpcOutboundEvent::Display(
+        IpcPackedDisplayEvent::DisplayInfo(IpcDisplayInfo {
+          monitors: monitors.len() as u32,
+          size: IpcDesktopSize {
+            width: width.clamp(1, u16::MAX as u32) as u16,
+            height: height.clamp(1, u16::MAX as u32) as u16,
+          },
+        }),
+      ))
+      .await?;
+
+    shared_memory
+      .send(IpcOutboundEvent::Audio(IpcPackedAudioEvent::AudioSource(
+        media
+          .audios()
+          .into_iter()
+          .map(|audio| IpcAudioSource {
+            is_default: audio.is_default,
+            formats: audio
+              .formats
+              .into_iter()
+              .map(|format| format.into())
+              .collect(),
+          })
+          .collect(),
+      )))
+      .await?;
 
     tasks.spawn({
       let cancellation_token = cancellation_token.clone();

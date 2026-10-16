@@ -10,7 +10,7 @@ pub struct IpcConfig {
 
 impl IpcConfig {
   const DEFAULT_MAX_SLOT: usize = 8;
-  const DEFAULT_SLOT_SIZE: usize = 10 * 1024 * 1024;
+  const DEFAULT_SLOT_SIZE: usize = 32 * 1024 * 1024;
   const DEFAULT_MAX_MESSAGE_SIZE: usize = 1024 * 1024;
 
   pub fn slots_per_direction(&self) -> usize {

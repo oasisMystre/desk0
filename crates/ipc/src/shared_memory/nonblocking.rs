@@ -124,13 +124,10 @@ where
       "encoded message exceeds maximum message size"
     );
 
-    self
-      .sender
-      .send(IpcMessage {
-        bytes,
-        reservation: None,
-      })
-      .await?;
+    self.sender.try_send(IpcMessage {
+      bytes,
+      reservation: None,
+    })?;
 
     Ok(())
   }
@@ -204,13 +201,10 @@ where
     );
 
     reservation.queue();
-    self
-      .sender
-      .send(IpcMessage {
-        bytes,
-        reservation: Some(reservation),
-      })
-      .await?;
+    self.sender.try_send(IpcMessage {
+      bytes,
+      reservation: Some(reservation),
+    })?;
 
     Ok(())
   }

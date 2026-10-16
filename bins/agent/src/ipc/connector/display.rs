@@ -29,7 +29,6 @@ impl IpcDisplayHandler {
   pub fn capture(&mut self, mut video_frame_receiver: UnboundedReceiver<WrapVideoFrame>) {
     let ipc = self.ipc.clone();
     let cancellation_token = self.cancellation_token.clone();
-
     let handle = tokio::spawn(async move {
       'capture: loop {
         let frame = tokio::select! {
@@ -71,7 +70,7 @@ impl IpcDisplayHandler {
           buffers.push(damages_bytes.as_slice());
         }
 
-        if ipc
+        if let Err(error) = ipc
           .send_with_shared_buffers(
             IpcOutboundEvent::Display(IpcPackedDisplayEvent::BitmapUpdate(IpcPackedBitmapUpdate {
               x: frame.monitor.x,
@@ -86,9 +85,8 @@ impl IpcDisplayHandler {
             &buffers,
           )
           .await
-          .is_err()
         {
-          break;
+          tracing::error!(?error, "sending bitmap updates failed");
         }
       }
     });

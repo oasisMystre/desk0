@@ -1,3 +1,5 @@
+use std::fmt::Debug;
+
 use rkyv::{
   Archive, Deserialize, Serialize,
   api::high::{HighSerializer, HighValidator},
@@ -16,7 +18,7 @@ pub struct IpcSharedBuffer {
   pub sequence: u64,
 }
 
-#[derive(Archive, Serialize, Deserialize)]
+#[derive(Debug, Archive, Serialize, Deserialize)]
 pub struct IpcSharedBufferAck {
   pub slot: u32,
   pub sequence: u64,
@@ -25,7 +27,7 @@ pub struct IpcSharedBufferAck {
 #[derive(Debug, Clone, Archive, Serialize, Deserialize)]
 pub struct IpcSharedBufferField(pub u8);
 
-#[derive(Default, Archive, Serialize, Deserialize)]
+#[derive(Debug, Default, Archive, Serialize, Deserialize)]
 pub struct IpcPackMessage<T> {
   pub data: T,
   pub buffers: Option<Vec<IpcSharedBuffer>>,
@@ -37,7 +39,7 @@ pub struct IpcRawPackMessage<T> {
   pub buffers: Option<Vec<Vec<u8>>>,
 }
 
-#[derive(Archive, Serialize, Deserialize)]
+#[derive(Debug)]
 pub enum IpcFrame<T> {
   Ack(Vec<IpcSharedBufferAck>),
   Message(IpcPackMessage<T>),
@@ -45,12 +47,14 @@ pub enum IpcFrame<T> {
 
 pub trait RkyvEncode
 where
+  Self: Debug,
   Self: Archive + Send + Sync + Sized + 'static,
   Self: for<'a> Serialize<HighSerializer<AlignedVec, ArenaHandle<'a>, rkyv::rancor::Error>>,
 {
 }
 impl<T> RkyvEncode for T
 where
+  T: Debug,
   T: Archive + Send + Sync + Sized + 'static,
   T: for<'a> Serialize<HighSerializer<AlignedVec, ArenaHandle<'a>, rkyv::rancor::Error>>,
 {
@@ -58,6 +62,7 @@ where
 
 pub trait RkyvDecode
 where
+  Self: Debug,
   Self: Archive + Send + Sync + Sized + 'static,
   Self::Archived: for<'a> CheckBytes<HighValidator<'a, rkyv::rancor::Error>>
     + Deserialize<Self, Strategy<rkyv::de::Pool, rkyv::rancor::Error>>,
@@ -66,10 +71,18 @@ where
 
 impl<T> RkyvDecode for T
 where
+  T: Debug,
   T: Archive + Send + Sync + Sized + 'static,
   T::Archived: for<'a> CheckBytes<HighValidator<'a, rkyv::rancor::Error>>
     + Deserialize<T, Strategy<rkyv::de::Pool, rkyv::rancor::Error>>,
 {
+}
+
+impl<T> IpcFrame<T> {
+  const ACK: u8 = 0;
+  const MESSAGE: u8 = 1;
+
+  pub const HEADER_SIZE: usize = 5;
 }
 
 impl<T> IpcFrame<T>
@@ -77,10 +90,18 @@ where
   T: RkyvEncode,
 {
   pub fn encode(&self) -> anyhow::Result<Vec<u8>> {
-    let bytes = rkyv::to_bytes::<rkyv::rancor::Error>(self)?;
-    let len = u32::try_from(bytes.len())?;
+    let (discriminator, bytes) = match self {
+      IpcFrame::Ack(acks) => (Self::ACK, rkyv::to_bytes::<rkyv::rancor::Error>(acks)?),
+      IpcFrame::Message(message) => (
+        Self::MESSAGE,
+        rkyv::to_bytes::<rkyv::rancor::Error>(message)?,
+      ),
+    };
 
-    let mut output = Vec::with_capacity(4 + bytes.len());
+    let len = u32::try_from(bytes.len())?;
+    let mut output = Vec::with_capacity(1 + 4 + bytes.len());
+
+    output.extend_from_slice(&discriminator.to_le_bytes());
     output.extend_from_slice(&len.to_le_bytes());
     output.extend_from_slice(&bytes);
 
@@ -95,13 +116,12 @@ where
     + Deserialize<T, Strategy<rkyv::de::Pool, rkyv::rancor::Error>>,
 {
   pub async fn decode<R: AsyncRead + Unpin>(
-    read: &mut R,
+    reader: &mut R,
     buffer: &mut Vec<u8>,
     max: usize,
   ) -> anyhow::Result<Self> {
-    let mut header = [0u8; 4];
-    read.read_exact(&mut header).await?;
-    let len = u32::from_le_bytes(header) as usize;
+    let discriminator = reader.read_u8().await?;
+    let len = reader.read_u32_le().await? as usize;
 
     anyhow::ensure!(
       len > 0 && len <= max,
@@ -109,10 +129,19 @@ where
     );
 
     buffer.resize(len, 0);
-    read.read_exact(buffer.as_mut_slice()).await?;
+    reader.read_exact(buffer.as_mut_slice()).await?;
 
-    Ok(rkyv::from_bytes::<Self, rkyv::rancor::Error>(
-      buffer.as_slice(),
-    )?)
+    let value = match discriminator {
+      Self::ACK => Self::Ack(rkyv::from_bytes::<
+        Vec<IpcSharedBufferAck>,
+        rkyv::rancor::Error,
+      >(buffer.as_slice())?),
+      Self::MESSAGE => Self::Message(rkyv::from_bytes::<IpcPackMessage<T>, rkyv::rancor::Error>(
+        buffer.as_slice(),
+      )?),
+      _ => anyhow::bail!("invalid frame discriminatore"),
+    };
+
+    Ok(value)
   }
 }

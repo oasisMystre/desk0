@@ -178,7 +178,8 @@ where
 
       async move {
         loop {
-          match IpcFrame::<T>::decode(&mut reader, &mut buffer, max_message_size).await {
+          let message = IpcFrame::<T>::decode(&mut reader, &mut buffer, max_message_size).await;
+          match message {
             Ok(IpcFrame::Ack(acks)) => {
               for ack in acks {
                 if !pool.ack(ack.slot, ack.sequence) {
