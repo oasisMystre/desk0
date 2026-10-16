@@ -12,10 +12,17 @@ use crate::{
 
 mod api;
 mod config;
-mod handlers;
+
+mod media;
 mod platform;
 mod server;
 mod static_channels;
+
+#[cfg(feature = "ipc")]
+mod ipc;
+
+#[cfg(not(feature = "ipc"))]
+mod handlers;
 
 rust_i18n::i18n!("locales");
 
@@ -37,6 +44,11 @@ struct Args {
   /// Run without GUI error dialogs Used by the background service
   #[arg(long)]
   headless: bool,
+
+  /// Run without GUI error dialogs Used by the background service
+  #[arg(long)]
+  #[cfg(feature = "ipc")]
+  ipc: bool,
 
   /// Run standalone direct RDP listener instead of connecting outbound to Desk0 Server
   #[arg(long)]
@@ -109,13 +121,22 @@ pub fn main() {
 
   local.block_on(&rt, async {
     let cancellation_token = CancellationToken::new();
-
     let run_cancellation_token = cancellation_token.clone();
 
     let run = async {
       rustls::crypto::ring::default_provider()
         .install_default()
         .unwrap();
+
+      #[cfg(feature = "ipc")]
+      if args.ipc {
+        tracing::info!("starting Desk0 IPC inbound event handler");
+        let mut ipc = ipc::IpcInboundEventHandler::new(run_cancellation_token);
+        ipc.start().await?;
+        tracing::info!("stopping ipc inbound event handler");
+
+        return Ok::<_, anyhow::Error>(());
+      }
 
       if args.listen {
         use crate::server::traits::Server;
@@ -126,6 +147,8 @@ pub fn main() {
         server.run(run_cancellation_token).await?;
       } else {
         use crate::server::traits::Tunnel;
+
+        tracing::info!("Starting Desk0 RDP Tunnel");
 
         let config = AgentConfig::load_config()?;
         let api = Api::from_config(ApiConfig {

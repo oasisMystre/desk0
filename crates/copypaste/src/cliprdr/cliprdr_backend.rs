@@ -1,7 +1,5 @@
 use std::fmt::Debug;
 
-use clipboard_rs::{RustImageData, common::RustImage};
-use image::ImageFormat;
 use ironrdp::{
   cliprdr::{
     backend::{ClipboardMessage, CliprdrBackend},
@@ -33,7 +31,7 @@ pub struct CliprdrHandlerBackend {
 }
 
 impl Debug for CliprdrHandlerBackend {
-  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+  fn fmt<'a>(&self, f: &mut std::fmt::Formatter<'a>) -> std::fmt::Result {
     f.debug_struct("CliprdrHandlerBackend")
       .field("temp_dir", &self.temp_dir)
       .field("capabilites", &self.capabilities)
@@ -158,7 +156,7 @@ impl CliprdrBackend for CliprdrHandlerBackend {
     self.handler.set_status(ClipboardStatus::Copy);
   }
 
-  fn on_format_data_response(&mut self, response: FormatDataResponse<'_>) {
+  fn on_format_data_response<'a>(&mut self, response: FormatDataResponse<'a>) {
     self.handler.set_status(ClipboardStatus::Paste);
 
     if let Ok(text) = response.to_string() {
@@ -187,26 +185,42 @@ impl CliprdrBackend for CliprdrHandlerBackend {
     if let Ok(data) = std::str::from_utf8(data) {
       if data.starts_with("{\\rtf1") {
         if let Err(error) = self.handler.set_rich_text(data.to_string()) {
-          tracing::error!(?error, "Failed to paste rich text");
+          tracing::error!(?error, "Failed to paste richtext");
         }
 
         return;
       }
     }
 
+    #[cfg(not(feature = "ipc"))]
+    use clipboard_rs::common::RustImage;
+
     if let Ok(data) = dibv5_to_png(data) {
-      if let Ok(image) = image::load_from_memory_with_format(&data, ImageFormat::Png) {
-        let rust_image = RustImageData::from_dynamic_image(image);
-        if let Err(error) = self.handler.set_image(rust_image) {
+      #[cfg(feature = "ipc")]
+      if let Err(error) = self.handler.set_image(data) {
+        tracing::error!(?error, "Failed to paste image");
+      }
+
+      #[cfg(not(feature = "ipc"))]
+      if let Ok(image) = image::load_from_memory_with_format(&data, image::ImageFormat::Png) {
+        let image = clipboard_rs::RustImageData::from_dynamic_image(image);
+        if let Err(error) = self.handler.set_image(image) {
           tracing::error!(?error, "Failed to paste image");
         }
       }
+
       return;
     }
 
     if let Ok(data) = dib_to_png(data) {
-      if let Ok(image) = image::load_from_memory_with_format(&data, ImageFormat::Png) {
-        let rust_image = RustImageData::from_dynamic_image(image);
+      #[cfg(feature = "ipc")]
+      if let Err(error) = self.handler.set_image(data) {
+        tracing::error!(?error, "Failed to paste image");
+      }
+
+      #[cfg(not(feature = "ipc"))]
+      if let Ok(image) = image::load_from_memory_with_format(&data, image::ImageFormat::Png) {
+        let rust_image = clipboard_rs::RustImageData::from_dynamic_image(image);
         if let Err(error) = self.handler.set_image(rust_image) {
           tracing::error!(?error, "Failed to paste image");
         }

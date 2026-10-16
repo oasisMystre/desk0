@@ -1,0 +1,14 @@
+[package]
+name = "ipc-pdu"
+version = "0.1.0"
+edition = "2024"
+
+[features]
+
+[dependencies]
+ipc.workspace = true
+anyhow.workspace = true
+
+rkyv.workspace = true
+pinray.workspace = true 
+ironrdp = { workspace = true, features = ["pdu", "svc"] }

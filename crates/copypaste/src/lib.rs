@@ -4,3 +4,6 @@ pub mod cliprdr;
 pub use cliprdr::clipboard_watcher::ClipboardStatus;
 #[cfg(any(feature = "client", feature = "server"))]
 pub use cliprdr::cliprdr_handler::CliprdrHandler;
+
+#[cfg(feature = "ipc")]
+pub use cliprdr::ipc;

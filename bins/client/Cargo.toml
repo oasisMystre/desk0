@@ -32,7 +32,7 @@ url = "2"
 whoami = "2.1.3"
 semver = "1.0.28"
 
+ringbuf = "0.5.3"
 winit = { version="0.30.13", optional = true }
 smallvec = { version="1.15", optional = true }
 softbuffer = { version="0.4.8", optional = true }
-ringbuf = "0.5.3"

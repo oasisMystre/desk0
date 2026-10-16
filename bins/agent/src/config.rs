@@ -40,6 +40,12 @@ impl AgentConfig {
     })
   }
 
+  #[cfg(debug_assertions)]
+  pub fn get_data_dir() -> PathBuf {
+    std::env::current_dir().unwrap()
+  }
+
+  #[cfg(not(debug_assertions))]
   pub fn get_data_dir() -> PathBuf {
     #[cfg(target_os = "windows")]
     let base_dir = {
@@ -55,5 +61,25 @@ impl AgentConfig {
     let base_dir = PathBuf::from("/var/lib/desk0");
 
     base_dir
+  }
+
+  pub fn get_ipc_share_memory_path() -> String {
+    // let path = Self::get_data_dir()
+    //   .join("desk0")
+    //   .to_string_lossy()
+    //   .into_owned();
+
+    "desk0".to_owned()
+  }
+
+  pub fn get_ipc_path<'a>() -> anyhow::Result<ipc::Name<'a>> {
+    use ipc::{GenericFilePath, ToFsName};
+
+    let path = Self::get_data_dir()
+      .join("desk0.sock")
+      .to_string_lossy()
+      .into_owned();
+
+    Ok(path.to_fs_name::<GenericFilePath>()?)
   }
 }

@@ -7,13 +7,18 @@ edition = "2024"
 io = []
 audio = []
 video = []
+default = ["ipc"]
+ipc = ["copypaste/ipc"]
 terminal = []
+file-logs = ["shared/file-logs"]
 
 [dependencies]
 pdu.workspace = true
+ipc.workspace = true
+ipc-pdu.workspace = true
+shared = { workspace = true, features = ["otel"] }
 audio = {workspace = true, features = ["convert"] }
 copypaste = { workspace = true, features = ["server"] }
-shared = { workspace = true, features = ["otel", "file-logs"] }
 
 uuid.workspace = true
 cpal.workspace = true

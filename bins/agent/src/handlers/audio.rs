@@ -14,7 +14,7 @@ use pinray::AudioFrame;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tokio_util::sync::CancellationToken;
 
-use crate::handlers::media::{AudioDeviceSourceId, MediaHandler};
+use crate::media::{AudioDeviceSourceId, MediaHandler};
 
 #[derive(thiserror::Error, Debug)]
 pub enum AudioHandlerError {
@@ -111,7 +111,7 @@ impl RdpsndServerHandler for AudioHandlerStaticChannelFactory {
     let cancellation_token = CancellationToken::new();
     self.cancellation_token = Some(cancellation_token.clone());
 
-    std::thread::spawn(move || {
+    let thread = std::thread::spawn(move || {
       loop {
         if cancellation_token.is_cancelled() {
           break;
@@ -135,6 +135,8 @@ impl RdpsndServerHandler for AudioHandlerStaticChannelFactory {
         }
       }
     });
+
+    self.handle = Some(thread);
 
     Ok(())
   }

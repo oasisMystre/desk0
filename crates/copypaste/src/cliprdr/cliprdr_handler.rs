@@ -5,7 +5,6 @@ use std::{
   sync::{Arc, Mutex},
 };
 
-use clipboard_rs::{Clipboard, common::RustImageData};
 #[cfg(not(feature = "server"))]
 use ironrdp::client::rdp::RdpInputSender;
 use ironrdp::cliprdr::{
@@ -42,6 +41,9 @@ pub struct CliprdrHandler {
   watcher: ClipboardWatcherHandler,
   download_state: Arc<Mutex<DownloadState>>,
   callback: Option<Arc<dyn Fn(ClipboardEvent) + Send + Sync>>,
+
+  #[cfg(feature = "ipc")]
+  ipc: Arc<ipc_pdu::Listener>,
 }
 
 impl CliprdrBackendFactory for CliprdrHandler {
@@ -86,6 +88,52 @@ impl CliprdrHandler {
 }
 
 impl CliprdrHandler {
+  #[cfg(feature = "ipc")]
+  pub fn new_inner(
+    ipc: Arc<ipc_pdu::Listener>,
+    receiver: tokio::sync::mpsc::UnboundedReceiver<ipc_pdu::outbound::IpcUnpackedClipboardEvent>,
+    callback: Option<Arc<dyn Fn(ClipboardEvent) + Send + Sync + 'static>>,
+  ) -> Self {
+    let sender: Arc<Mutex<Sender>> = Arc::new(Mutex::new(None));
+    let callback_sender = Arc::clone(&sender);
+
+    let watcher = ClipboardWatcherHandler::new(ipc.clone(), receiver, move |state| {
+      let sender = callback_sender.lock().unwrap().clone();
+      send_format_list(&state, &sender);
+    });
+
+    Self {
+      ipc,
+      sender,
+      watcher,
+      callback,
+      download_state: Arc::new(Mutex::new(DownloadState::default())),
+    }
+  }
+
+  #[cfg(feature = "ipc")]
+  pub fn new(
+    inbound: Arc<ipc_pdu::Listener>,
+    receiver: tokio::sync::mpsc::UnboundedReceiver<ipc_pdu::outbound::IpcUnpackedClipboardEvent>,
+  ) -> Self {
+    Self::new_inner(inbound, receiver, None)
+  }
+
+  #[cfg(feature = "ipc")]
+  pub fn with_callback<T>(
+    inbound: Arc<
+      ipc::IpcSharedMemory<ipc_pdu::outbound::IpcOutboundEvent, ipc_pdu::inbound::IpcInboundEvent>,
+    >,
+    receiver: tokio::sync::mpsc::UnboundedReceiver<ipc_pdu::outbound::IpcUnpackedClipboardEvent>,
+    callback: T,
+  ) -> Self
+  where
+    T: Fn(ClipboardEvent) + Send + Sync + 'static,
+  {
+    Self::new_inner(inbound, receiver, Some(Arc::new(callback)))
+  }
+
+  #[cfg(not(feature = "ipc"))]
   pub fn new_inner(callback: Option<Arc<dyn Fn(ClipboardEvent) + Send + Sync + 'static>>) -> Self {
     let sender: Arc<Mutex<Sender>> = Arc::new(Mutex::new(None));
     let callback_sender = Arc::clone(&sender);
@@ -103,10 +151,12 @@ impl CliprdrHandler {
     }
   }
 
+  #[cfg(not(feature = "ipc"))]
   pub fn new() -> Self {
     Self::new_inner(None)
   }
 
+  #[cfg(not(feature = "ipc"))]
   pub fn with_callback<T>(callback: T) -> Self
   where
     T: Fn(ClipboardEvent) + Send + Sync + 'static,
@@ -347,13 +397,13 @@ impl CliprdrHandler {
       match event {
         DownloadEvent::DownloadComplete(files) => {
           self.set_status(ClipboardStatus::Paste);
-          if let Err(error) = self.watcher.clipboard.set_files(
+          if let Err(error) = self.set_files(
             files
               .iter()
               .map(|path| path.to_string_lossy().to_string())
               .collect(),
           ) {
-            tracing::error!(?error, "failed to publish downloaded files to clipboard");
+            tracing::error!(?error, "failed to set downloaded files to clipboard");
             self.set_status(ClipboardStatus::Ready);
           }
           self.clear();
@@ -435,45 +485,132 @@ fn send_format_list(state: &ClipboardState, sender: &Sender) {
   }
 }
 
-#[macro_export]
-macro_rules! clipboard_setter {
-    (
-        $(#[$meta:meta])*
-        $name:ident($($arg:ident : $ty:ty),*) => $method:ident($($expr:expr),*) => $event:expr
-    ) => {
-        $(#[$meta])*
-        pub fn $name(&self, $($arg: $ty),*) -> clipboard_rs::Result<()> {
-            self.watcher.clipboard.$method($($expr),*)?;
-            if let Some(callback) = &self.callback {
-                callback($event);
-            }
-            Ok(())
-        }
-    };
+#[cfg(feature = "ipc")]
+impl CliprdrHandler {
+  pub fn set_text(&self, data: String) -> clipboard_rs::Result<()> {
+    self
+      .ipc
+      .blocking_send(ipc_pdu::inbound::IpcInboundEvent::Clipboard(
+        ipc_pdu::inbound::IpcPackedClipboardEvent::Text(data),
+      ))?;
+
+    if let Some(callback) = &self.callback {
+      callback(ClipboardEvent::Text);
+    }
+
+    Ok(())
+  }
+
+  pub fn set_html(&self, data: String) -> clipboard_rs::Result<()> {
+    self
+      .ipc
+      .blocking_send(ipc_pdu::inbound::IpcInboundEvent::Clipboard(
+        ipc_pdu::inbound::IpcPackedClipboardEvent::Html(data),
+      ))?;
+
+    if let Some(callback) = &self.callback {
+      callback(ClipboardEvent::Html);
+    }
+
+    Ok(())
+  }
+
+  pub fn set_rich_text(&self, data: String) -> clipboard_rs::Result<()> {
+    self
+      .ipc
+      .blocking_send(ipc_pdu::inbound::IpcInboundEvent::Clipboard(
+        ipc_pdu::inbound::IpcPackedClipboardEvent::RichText(data),
+      ))?;
+
+    if let Some(callback) = &self.callback {
+      callback(ClipboardEvent::RichText);
+    }
+
+    Ok(())
+  }
+
+  pub fn set_image(&self, data: Vec<u8>) -> clipboard_rs::Result<()> {
+    self.ipc.blocking_send_with_shared_buffers(
+      ipc_pdu::inbound::IpcInboundEvent::Clipboard(
+        ipc_pdu::inbound::IpcPackedClipboardEvent::Image(ipc::IpcSharedBufferField(0)),
+      ),
+      &[data],
+    )?;
+
+    if let Some(callback) = &self.callback {
+      callback(ClipboardEvent::Image);
+    }
+
+    Ok(())
+  }
+
+  pub fn set_files(&self, files: Vec<String>) -> clipboard_rs::Result<()> {
+    self
+      .ipc
+      .blocking_send(ipc_pdu::inbound::IpcInboundEvent::Clipboard(
+        ipc_pdu::inbound::IpcPackedClipboardEvent::Files(files),
+      ))?;
+
+    if let Some(callback) = &self.callback {
+      callback(ClipboardEvent::Image);
+    }
+
+    Ok(())
+  }
 }
 
+#[cfg(not(feature = "ipc"))]
+use clipboard_rs::Clipboard;
+
+#[cfg(not(feature = "ipc"))]
 impl CliprdrHandler {
-  clipboard_setter!(
-      set_text(data: String)
-      => set_text(data.to_string())
-      => ClipboardEvent::Text
-  );
+  pub fn set_text(&self, data: String) -> clipboard_rs::Result<()> {
+    self.watcher.clipboard.set_text(data)?;
 
-  clipboard_setter!(
-      set_html(data: String)
-      => set_html(data.to_string())
-      => ClipboardEvent::Html
-  );
+    if let Some(callback) = &self.callback {
+      callback(ClipboardEvent::Text);
+    }
 
-  clipboard_setter!(
-      set_rich_text(data: String)
-      => set_rich_text(data.to_string())
-      => ClipboardEvent::RichText
-  );
+    Ok(())
+  }
 
-  clipboard_setter!(
-      set_image(data: RustImageData)
-      => set_image(data)
-      => ClipboardEvent::Image
-  );
+  pub fn set_html(&self, data: String) -> clipboard_rs::Result<()> {
+    self.watcher.clipboard.set_html(data)?;
+
+    if let Some(callback) = &self.callback {
+      callback(ClipboardEvent::Html);
+    }
+
+    Ok(())
+  }
+
+  pub fn set_rich_text(&self, data: String) -> clipboard_rs::Result<()> {
+    self.watcher.clipboard.set_rich_text(data)?;
+
+    if let Some(callback) = &self.callback {
+      callback(ClipboardEvent::RichText);
+    }
+
+    Ok(())
+  }
+
+  pub fn set_image(&self, data: clipboard_rs::RustImageData) -> clipboard_rs::Result<()> {
+    self.watcher.clipboard.set_image(data)?;
+
+    if let Some(callback) = &self.callback {
+      callback(ClipboardEvent::Image);
+    }
+
+    Ok(())
+  }
+
+  pub fn set_files(&self, files: Vec<String>) -> clipboard_rs::Result<()> {
+    self.watcher.clipboard.set_files(files)?;
+
+    if let Some(callback) = &self.callback {
+      callback(ClipboardEvent::Image);
+    }
+
+    Ok(())
+  }
 }

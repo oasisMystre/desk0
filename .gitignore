@@ -9,3 +9,5 @@ bins/ffi/src/frb_generated.rs
 !.env.spec
 .turbo
 out
+*.sock
+identity.json

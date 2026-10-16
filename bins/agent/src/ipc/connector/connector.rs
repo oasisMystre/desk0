@@ -1,0 +1,209 @@
+use std::{collections::VecDeque, sync::Arc};
+
+use copypaste::ipc::clipboard_watcher::IpcClipboardWatcher;
+use enigo::Settings;
+use ipc::{Ipc, IpcConfig, IpcSharedBuffer, IpcSharedMemory};
+use ipc_pdu::{
+  inbound::{IpcAudioEvent, IpcDisplayEvent, IpcInboundEvent},
+  outbound::IpcOutboundEvent,
+};
+use tokio::{
+  sync::mpsc::{channel, unbounded_channel},
+  task::JoinSet,
+};
+
+use tokio_util::sync::CancellationToken;
+
+use crate::{
+  config::AgentConfig,
+  ipc::connector::{audio::IpcAudioHandler, display::IpcDisplayHandler, input::IpcInputHandler},
+  media::{MediaHandler, Source},
+};
+
+pub struct IpcInboundEventHandler {
+  cancellation_token: CancellationToken,
+}
+
+impl IpcInboundEventHandler {
+  pub fn new(cancellation_token: CancellationToken) -> Self {
+    Self { cancellation_token }
+  }
+
+  pub async fn start(&mut self) -> anyhow::Result<()> {
+    let mut tasks = JoinSet::new();
+    let cancellation_token = self.cancellation_token.clone();
+
+    let (sender, mut receiver) = channel(100);
+    let (source_sender, source_receiver) = channel(1);
+
+    let (clipboard_sender, clipboard_receiver) = unbounded_channel();
+    let (input_event_sender, input_event_receiver) = unbounded_channel();
+    let (audio_frame_sender, audio_frame_receiver) = unbounded_channel();
+    let (video_frame_sender, video_frame_receiver) = unbounded_channel();
+
+    let media = Arc::new(MediaHandler::new(
+      Some(60),
+      pinray::CursorMode::Hidden,
+      pinray::PixelFormat::Bgra8888,
+      video_frame_sender,
+      Some(audio_frame_sender),
+    ));
+
+    media.discover()?;
+
+    let audio = media.audios();
+    source_sender.try_send(Source {
+      monitors: media
+        .monitors()
+        .iter()
+        .filter(|monitor| monitor.is_primary)
+        .cloned()
+        .collect(),
+      audio: audio
+        .iter()
+        .find(|audio| audio.is_default)
+        .or_else(|| audio.first())
+        .cloned(),
+    })?;
+
+    let shared_memory = Arc::new(IpcSharedMemory::<IpcInboundEvent, IpcOutboundEvent>::new(
+      &AgentConfig::get_ipc_share_memory_path(),
+      false,
+      IpcConfig::default(),
+    )?);
+    let mut ipc = Ipc::new(shared_memory.clone());
+    ipc
+      .as_connector(AgentConfig::get_ipc_path()?, sender)
+      .await?;
+
+    let mut input_handler = IpcInputHandler::new(Settings::default(), cancellation_token.clone());
+    let mut clipboard_handler = IpcClipboardWatcher::new(shared_memory.clone(), clipboard_receiver);
+    let mut audio_handler =
+      IpcAudioHandler::new(shared_memory.clone(), cancellation_token.child_token());
+    let mut display_handler =
+      IpcDisplayHandler::new(shared_memory.clone(), cancellation_token.child_token());
+
+    clipboard_handler.start();
+    input_handler.start(input_event_receiver)?;
+    audio_handler.capture(audio_frame_receiver);
+    display_handler.capture(video_frame_receiver);
+
+    tasks.spawn({
+      let cancellation_token = cancellation_token.clone();
+
+      async move {
+        loop {
+          let message = tokio::select! {
+              _ = cancellation_token.cancelled() => break,
+              message = receiver.recv() => message,
+          };
+
+          let Some(message) = message else {
+            break;
+          };
+
+          if cancellation_token.is_cancelled() {
+            break;
+          }
+
+          match message.data {
+            IpcInboundEvent::Input(event) => {
+              if let Err(error) = input_event_sender.send(event) {
+                tracing::error!(?error, "input channel closed");
+              }
+            }
+            IpcInboundEvent::Audio(event) => match event {
+              IpcAudioEvent::Stop => {
+                audio_handler.stop().await;
+              }
+              IpcAudioEvent::Start => {}
+            },
+            IpcInboundEvent::Display(event) => match event {
+              IpcDisplayEvent::Stop => {
+                display_handler.stop().await;
+              }
+            },
+            IpcInboundEvent::Clipboard(event) => {
+              if let Some(buffers) = message.buffers {
+                let buffers: VecDeque<IpcSharedBuffer> = buffers.into();
+                match event.unpack(buffers) {
+                  Ok(event) => {
+                    if let Err(error) = clipboard_sender.send(event) {
+                      tracing::error!(?error, "clipboard channel closed");
+                    }
+                  }
+                  Err(error) => {
+                    tracing::error!(?error, "unpacking clipboard event failed")
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    });
+
+    tasks.spawn({
+      let cancellation_token = cancellation_token.clone();
+
+      async move {
+        match media.capture(source_receiver, cancellation_token).await {
+          Ok(mut tasks) => {
+            while let Some(result) = tasks.join_next().await {
+              if let Err(error) = result {
+                if !error.is_cancelled() {
+                  tracing::error!(?error, "media task failed during shutdown");
+                }
+              }
+            }
+          }
+          Err(error) => {
+            tracing::error!(?error, "media capture task error");
+          }
+        }
+      }
+    });
+
+    loop {
+      tokio::select! {
+        _ = cancellation_token.cancelled() => break,
+        result = tasks.join_next() => {
+            match result {
+                Some(Ok(())) => {
+                    tracing::warn!("a supervised IPC/media task exited");
+                },
+                Some(Err(error)) if error.is_cancelled() =>{
+                    tracing::debug!("a supervised task was cancelled");
+                },
+                Some(Err(error))  => {
+                    tracing::error!(?error, "a supervised task failed");
+                },
+                None => {
+                    tracing::warn!("all supervised tasks exited");
+                },
+            }
+
+            break;
+        }
+      }
+    }
+
+    cancellation_token.cancel();
+
+    if let Err(error) = ipc.stop().await {
+      tracing::error!(?error, "stopping ipc task failed");
+    }
+
+    tasks.abort_all();
+
+    while let Some(result) = tasks.join_next().await {
+      if let Err(error) = result {
+        if !error.is_cancelled() {
+          tracing::error!(?error, "task failed during shutdown");
+        }
+      }
+    }
+
+    Ok(())
+  }
+}

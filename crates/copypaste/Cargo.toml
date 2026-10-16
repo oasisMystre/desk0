@@ -4,14 +4,19 @@ version = "0.1.0"
 edition = "2024"
 
 [features]
+ipc = []
 server = ["ironrdp/server"]
 client = ["ironrdp/client", "ironrdp/client-clipboard"]
 
 [dependencies]
-image = "0.25.10"
-clipboard-rs = "0.3.5"
+ipc.workspace = true
+ipc-pdu.workspace = true
 anyhow.workspace = true
 tokio.workspace = true
 tracing.workspace = true
+tokio-util.workspace = true
 ironrdp = { workspace = true, features = ["cliprdr"] }
+
+image = "0.25.10"
+clipboard-rs = "0.3.5"
 ironrdp-cliprdr-format = "0.2.0"
