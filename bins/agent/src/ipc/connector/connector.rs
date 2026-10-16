@@ -172,6 +172,8 @@ impl IpcInboundEventHandler {
             break;
           }
 
+          tracing::info!(data=?message.data, "info=");
+
           match message.data {
             IpcInboundEvent::Input(event) => {
               if let Err(error) = input_event_sender.send(event) {

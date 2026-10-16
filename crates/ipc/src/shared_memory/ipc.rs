@@ -122,7 +122,6 @@ where
   ) -> anyhow::Result<()> {
     let shared_memory = Arc::clone(&self.shared_memory);
     let cancellation_token = self.cancellation_token.clone();
-
     let connector = tokio::select! {
         _ = cancellation_token.cancelled() => return Ok(()),
         result = async {
@@ -132,24 +131,42 @@ where
         } => result?
     };
 
+    let (reader, writer) = connector.split();
+
+    let mut tasks = JoinSet::new();
+    shared_memory.producer(reader, outbound.clone(), &mut tasks);
+
+    let mut receiver = shared_memory
+      .receiver
+      .lock()
+      .await
+      .take()
+      .ok_or_else(|| anyhow::anyhow!("a task already has ownership of shared_memory"))?;
+
     self.handle = Some(tokio::spawn(async move {
-      let (reader, writer) = connector.split();
+      tasks.spawn({
+        let shared_memory = Arc::clone(&shared_memory);
+        let cancellation_token = cancellation_token.child_token();
 
-      let mut tasks = JoinSet::new();
-      shared_memory.producer(reader, outbound.clone(), &mut tasks);
+        async move {
+          if let Err(error) = Self::run(writer, &mut receiver, cancellation_token).await {
+            tracing::error!(?error, "run task filed")
+          }
 
-      let mut receiver = shared_memory
-        .receiver
-        .lock()
-        .await
-        .take()
-        .ok_or_else(|| anyhow::anyhow!("a task already has ownership of shared_memory"))?;
+          *shared_memory.receiver.lock().await = Some(receiver);
+        }
+      });
 
-      let result = Self::run(writer, &mut receiver, cancellation_token.child_token()).await;
+      if let Some(result) = tasks.join_next().await {
+        cancellation_token.cancel();
+        match result {
+          Ok(()) => tracing::debug!("IPC task exited"),
+          Err(error) if error.is_cancelled() => {}
+          Err(error) => tracing::error!(?error, "IPC task failed"),
+        }
 
-      *shared_memory.receiver.lock().await = Some(receiver);
-
-      result?;
+        while tasks.join_next().await.is_some() {}
+      }
 
       Ok::<_, anyhow::Error>(())
     }));
