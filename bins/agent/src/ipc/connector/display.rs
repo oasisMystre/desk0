@@ -46,7 +46,7 @@ impl IpcDisplayHandler {
 
         let mut damages: Option<Vec<IpcDamageRect>> = frame.inner.damage.as_deref().map(|rects| {
           rects
-            .into_iter()
+            .iter()
             .map(|rect| IpcDamageRect {
               x: rect.x,
               y: rect.y,

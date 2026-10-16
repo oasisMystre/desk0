@@ -126,11 +126,9 @@ where
     let connector = tokio::select! {
         _ = cancellation_token.cancelled() => return Ok(()),
         result = async {
-            let connector = interprocess::local_socket::ConnectOptions::new()
+          interprocess::local_socket::ConnectOptions::new()
                 .name(path)
-                .connect_tokio().await;
-
-            connector
+                .connect_tokio().await
         } => result?
     };
 
@@ -159,7 +157,7 @@ where
     Ok(())
   }
 
-  async fn run<'a>(
+  async fn run(
     mut writer: SendHalf,
     receiver: &mut Receiver<IpcMessage>,
     cancellation_token: CancellationToken,

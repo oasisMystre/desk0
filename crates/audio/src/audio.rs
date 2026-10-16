@@ -14,7 +14,7 @@ fn append_pcm16(output: &mut Vec<u8>, sample: f32) {
   } else {
     0.0
   };
-  
+
   let pcm16 = (sample * 32767.0) as i16;
   output.extend_from_slice(&pcm16.to_le_bytes());
 }
@@ -57,10 +57,7 @@ pub fn from_audio_frame_to_pcm16(frame: &pinray::AudioFrame) -> (Vec<u8>, u32) {
         output.reserve(count * 2);
 
         for index in 0..count {
-          append_pcm16(
-            &mut output,
-            sample_to_f32(&data, frame.sample_format, index),
-          );
+          append_pcm16(&mut output, sample_to_f32(data, frame.sample_format, index));
         }
       }
     }
@@ -112,7 +109,7 @@ pub fn cpal_supported_stream_config_range_to_audio_format(
   let n_block_align = n_channels * (bits_per_sample / 8);
   let n_avg_bytes_per_sec = n_samples_per_sec * n_block_align as u32;
 
-  return Some(AudioFormat {
+  Some(AudioFormat {
     n_channels,
     n_block_align,
     bits_per_sample,
@@ -120,5 +117,5 @@ pub fn cpal_supported_stream_config_range_to_audio_format(
     n_avg_bytes_per_sec,
     data: None,
     format: WaveFormat::PCM,
-  });
+  })
 }

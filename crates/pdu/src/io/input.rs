@@ -24,7 +24,7 @@ impl<'de> Decode<'de> for IoInputEvent {
         let uri_len: usize = cast_length!("uri_len", src.read_u16())?;
         let uri = src.read_slice(uri_len);
         let path_len: usize = cast_length!("path_len", src.read_u16())?;
-        let path = src.read_slice(path_len as usize);
+        let path = src.read_slice(path_len);
 
         Self::Download {
           id,

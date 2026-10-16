@@ -93,9 +93,9 @@ impl DisplayHandler {
           }
           IpcUnpackedDisplayEvent::BitmapUpdate(update) => {
             let source = update.source.clone();
+            let result = {
+              let ipc = Arc::clone(&ipc);
 
-            match {
-              let ipc = ipc.clone();
               async move {
                 let pixels = ipc.copy_from_shared_buffer(&update.pixels).await?;
                 let damages: Option<Vec<Rect>> = match update.damage {
@@ -114,7 +114,9 @@ impl DisplayHandler {
                 Ok::<_, anyhow::Error>((pixels, damages))
               }
               .await
-            } {
+            };
+
+            match result {
               Ok((pixels, damage)) => {
                 let width = update.width as usize;
                 let height = update.height as usize;
@@ -178,7 +180,12 @@ impl DisplayHandler {
   #[allow(dead_code)]
   pub async fn stop(&mut self) -> anyhow::Result<()> {
     self.cancellation_token.cancel();
-    if let Some(handle) = self.handle.lock().unwrap().take() {
+    let handle = {
+      let mut lock = self.handle.lock().unwrap();
+      lock.take()
+    };
+
+    if let Some(handle) = handle {
       handle.abort();
       handle.await?;
     }

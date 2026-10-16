@@ -31,9 +31,9 @@ pub enum TerminalInputEvent {
   },
 }
 
-impl Into<u8> for Mode {
-  fn into(self) -> u8 {
-    match self {
+impl From<Mode> for u8 {
+  fn from(value: Mode) -> Self {
+    match value {
       Mode::Sync => 0,
       Mode::Async => 1,
     }
@@ -139,7 +139,7 @@ impl Encode for TerminalInputEvent {
       Self::Data { id, data, mode } => {
         dst.write_u8(Self::DATA);
         dst.write_u32(*id);
-        dst.write_u8(mode.clone().into());
+        dst.write_u8((*mode).into());
         dst.write_u16(cast_length!("data_len", data.len(), in: dst)?);
         dst.write_slice(data);
       }

@@ -73,13 +73,25 @@ impl AgentConfig {
   }
 
   pub fn get_ipc_path<'a>() -> anyhow::Result<ipc::Name<'a>> {
-    use ipc::{GenericFilePath, ToFsName};
+    #[cfg(unix)]
+    {
+      use ipc::{GenericFilePath, ToFsName};
 
-    let path = Self::get_data_dir()
-      .join("desk0.sock")
-      .to_string_lossy()
-      .into_owned();
+      let path = Self::get_data_dir()
+        .join("desk0.sock")
+        .to_string_lossy()
+        .into_owned();
 
-    Ok(path.to_fs_name::<GenericFilePath>()?)
+      Ok(path.to_fs_name::<GenericFilePath>()?)
+    }
+
+    #[cfg(windows)]
+    {
+      use ipc::{GenericNamespaced, ToNsName};
+
+      let name = r"\\.\pipe\desk0".to_owned();
+
+      Ok(name.to_ns_name::<GenericNamespaced>()?)
+    }
   }
 }

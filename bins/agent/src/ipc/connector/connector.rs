@@ -180,7 +180,7 @@ impl IpcInboundEventHandler {
             }
             IpcInboundEvent::Audio(event) => match event {
               IpcAudioEvent::Start(index) => {
-                if index <= audios.len() - 1 {
+                if index < audios.len() {
                   let audio = audios.get(index);
                   let Some(audio) = audio else { continue };
                   let monitor = {
@@ -207,7 +207,7 @@ impl IpcInboundEventHandler {
             },
             IpcInboundEvent::Display(event) => match event {
               IpcDisplayEvent::Start(index) => {
-                if index <= monitors.len() - 1 {
+                if index < monitors.len() {
                   let monitor = monitors.get(index);
                   let Some(monitor) = monitor else { continue };
                   let audio = {

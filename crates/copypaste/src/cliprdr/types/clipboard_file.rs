@@ -83,7 +83,7 @@ impl ClipboardState {
           attributes |= ClipboardFileAttributes::NORMAL;
         }
 
-        return fd.with_attributes(attributes);
+        fd.with_attributes(attributes)
       })
       .collect();
 

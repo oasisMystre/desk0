@@ -99,7 +99,7 @@ impl CliprdrHandler {
 
     let watcher = ClipboardWatcherHandler::new(ipc.clone(), receiver, move |state| {
       let sender = callback_sender.lock().unwrap().clone();
-      send_format_list(&state, &sender);
+      send_format_list(state, &sender);
     });
 
     Self {
@@ -177,12 +177,8 @@ impl CliprdrHandler {
   }
 
   pub(crate) fn send_format_list(&self) {
-    let state = {
-      let state = self.watcher.state.lock().unwrap();
-      state
-    };
-
     let sender = self.sender.lock().unwrap();
+    let state = self.watcher.state.lock().unwrap();
 
     send_format_list(&state, &sender);
   }
@@ -456,7 +452,7 @@ fn send_format_list(state: &ClipboardState, sender: &Sender) {
     match state.file_descriptors() {
       Ok(files) => {
         if let Err(error) = send(
-          &sender,
+          sender,
           Event::Clipboard(ClipboardMessage::SendInitiateFileCopy(files)),
         ) {
           tracing::error!(?error, "Failed to send initiate file copy event");

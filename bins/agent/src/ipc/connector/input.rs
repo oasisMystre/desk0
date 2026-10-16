@@ -91,7 +91,7 @@ impl IpcInput {
         }
       }
       IpcMouseEvent::RelMove { x, y } => {
-        if let Err(error) = self.enigo.move_mouse(x as i32, y as i32, Coordinate::Rel) {
+        if let Err(error) = self.enigo.move_mouse(x, y, Coordinate::Rel) {
           tracing::error!(?error, x, y, "failed to move mouse");
         }
       }
@@ -157,8 +157,8 @@ impl IpcInputHandler {
         }
 
         match event {
-          IpcInputEvent::Mouse(event) => input.mouse(event.into()),
-          IpcInputEvent::Keyboard(event) => input.keyboard(event.into()),
+          IpcInputEvent::Mouse(event) => input.mouse(event),
+          IpcInputEvent::Keyboard(event) => input.keyboard(event),
           IpcInputEvent::Stop => cancellation_token.cancel(),
         }
       }

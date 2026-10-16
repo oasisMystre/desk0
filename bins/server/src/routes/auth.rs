@@ -26,7 +26,7 @@ pub struct MaybeGuestUser {
 
 impl AuthenticatedUser {
   pub fn org_id(&self) -> anyhow::Result<uuid::Uuid, StatusCode> {
-    self.org_id.ok_or_else(|| StatusCode::UNAUTHORIZED)
+    self.org_id.ok_or(StatusCode::UNAUTHORIZED)
   }
 }
 

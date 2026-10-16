@@ -35,7 +35,7 @@ impl AgentHandler {
 
     self
       .hub
-      .register(&upstream, HubConnectionState::Connecting)
+      .register(upstream, HubConnectionState::Connecting)
       .await?;
 
     if !self.wait_for_rdp(&mut socket, inbound).await? {
@@ -86,7 +86,7 @@ impl AgentHandler {
                   Some(Ok(Message::Binary(bytes))) => {
                       if let Err(error) = self
                           .hub
-                          .send(&upstream, Message::Binary(bytes))
+                          .send(upstream, Message::Binary(bytes))
                           .await
                       {
                           tracing::error!(?error, "agent upstream send failed");

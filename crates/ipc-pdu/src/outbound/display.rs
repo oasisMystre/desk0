@@ -61,22 +61,22 @@ pub enum IpcUnpackedDisplayEvent {
   BitmapUpdate(IpcUnpackedBitmapUpdate),
 }
 
-impl Into<DesktopSize> for IpcDesktopSize {
-  fn into(self) -> DesktopSize {
-    DesktopSize {
-      width: self.width,
-      height: self.height,
+impl From<IpcDesktopSize> for DesktopSize {
+  fn from(value: IpcDesktopSize) -> Self {
+    Self {
+      width: value.width,
+      height: value.height,
     }
   }
 }
 
-impl Into<pinray::Rect> for IpcDamageRect {
-  fn into(self) -> pinray::Rect {
-    pinray::Rect {
-      x: self.x,
-      y: self.y,
-      width: self.width,
-      height: self.height,
+impl From<IpcDamageRect> for pinray::Rect {
+  fn from(value: IpcDamageRect) -> Self {
+    Self {
+      x: value.x,
+      y: value.y,
+      width: value.width,
+      height: value.height,
     }
   }
 }

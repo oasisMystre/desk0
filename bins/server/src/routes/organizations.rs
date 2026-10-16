@@ -89,5 +89,5 @@ pub async fn create_connection_token(
       StatusCode::INTERNAL_SERVER_ERROR
     })?;
 
-  return Ok(Json(CreateConnectionTokenResponse { token }));
+  Ok(Json(CreateConnectionTokenResponse { token }))
 }

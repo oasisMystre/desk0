@@ -205,7 +205,7 @@ impl DownloadState {
         continue;
       } else {
         if let Some(parent) = path.parent() {
-          if let Err(error) = std::fs::create_dir_all(&parent) {
+          if let Err(error) = std::fs::create_dir_all(parent) {
             tracing::error!(?error, "Failed to create directory");
           }
         }
@@ -231,6 +231,6 @@ impl DownloadState {
   }
 
   pub fn is_idle(&self) -> bool {
-    return self.current.is_none() && self.queue.is_empty();
+    self.current.is_none() && self.queue.is_empty()
   }
 }

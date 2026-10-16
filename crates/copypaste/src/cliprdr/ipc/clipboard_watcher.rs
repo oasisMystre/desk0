@@ -163,11 +163,10 @@ impl IpcClipboardWatcher {
 
   pub async fn stop(&mut self) {
     self.inbound_handle.shutdown.cancel();
-    self
-      .outbound_handle
-      .shutdown
-      .take()
-      .map(|shutdown| shutdown.stop());
+
+    if let Some(shutdown) = self.outbound_handle.shutdown.take() {
+      shutdown.stop();
+    }
 
     if let Some(thread) = self.inbound_handle.thread.take() {
       if let Err(error) = thread.await {
@@ -239,11 +238,9 @@ impl ClipboardHandler for IpcClipboardWatcherHandler {
 impl Drop for IpcClipboardWatcher {
   fn drop(&mut self) {
     self.inbound_handle.shutdown.cancel();
-    self
-      .outbound_handle
-      .shutdown
-      .take()
-      .map(|shutdown| shutdown.stop());
+    if let Some(shutdown) = self.outbound_handle.shutdown.take() {
+      shutdown.stop();
+    }
 
     if let Some(thread) = self.inbound_handle.thread.take() {
       thread.abort();

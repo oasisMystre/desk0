@@ -72,8 +72,8 @@ impl RdpHandler {
       .negotiate_rdcleanpath(&mut socket, request, upstream, &mut inbound_receiver)
       .await
     {
-      self.hub.unsubscribe(&inbound).await;
-      self.hub.unregister(&upstream).await?;
+      self.hub.unsubscribe(inbound).await;
+      self.hub.unregister(upstream).await?;
       anyhow::bail!("RDCleanPath negotiation failed {error}");
     }
 
@@ -105,7 +105,7 @@ impl RdpHandler {
         result = socket.next() => match result {
           None => break,
           Some(Ok(Message::Binary(bytes))) => {
-            if let Err(error) =  self.hub.send(&upstream, Message::Binary(bytes)).await {
+            if let Err(error) =  self.hub.send(upstream, Message::Binary(bytes)).await {
                 tracing::error!(?error, "rdp upstream send failed");
             }
           }
@@ -148,7 +148,7 @@ impl RdpHandler {
 
     if let Err(error) = self
       .hub
-      .send(&upstream, Message::Ping(RESET_RDP_SESSION.into()))
+      .send(upstream, Message::Ping(RESET_RDP_SESSION.into()))
       .await
     {
       tracing::warn!(?error, "resetting agent RDP session failed");

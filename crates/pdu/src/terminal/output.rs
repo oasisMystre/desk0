@@ -34,21 +34,21 @@ pub enum TerminalOutputEvent {
   },
 }
 
-impl Into<TerminalError> for i32 {
-  fn into(self) -> TerminalError {
-    match self {
-      1 => TerminalError::SpawnFailed,
-      2 => TerminalError::ReadFailed,
-      3 => TerminalError::WriteFailed,
-      4 => TerminalError::ResizeFailed,
-      value => TerminalError::IoFailed(value),
+impl From<i32> for TerminalError {
+  fn from(value: i32) -> Self {
+    match value {
+      1 => Self::SpawnFailed,
+      2 => Self::ReadFailed,
+      3 => Self::WriteFailed,
+      4 => Self::ResizeFailed,
+      value => Self::IoFailed(value),
     }
   }
 }
 
-impl Into<i32> for TerminalError {
-  fn into(self) -> i32 {
-    match self {
+impl From<TerminalError> for i32 {
+  fn from(value: TerminalError) -> Self {
+    match value {
       TerminalError::SpawnFailed => 1,
       TerminalError::ReadFailed => 2,
       TerminalError::WriteFailed => 3,

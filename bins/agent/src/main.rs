@@ -177,7 +177,7 @@ pub fn main() {
          if !args.headless {
              let _ = MessageDialog::new()
                  .set_title(t!("error_title"))
-                 .set_description(format!("{}\n\n{}", t!("error_description"), error.to_string()))
+                 .set_description(format!("{}\n\n{:?}", t!("error_description"), error))
                  .set_level(MessageLevel::Error)
                  .set_buttons(MessageButtons::Ok).show();
          }

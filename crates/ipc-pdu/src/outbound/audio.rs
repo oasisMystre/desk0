@@ -59,16 +59,16 @@ impl From<AudioFormat> for IpcAudioFormat {
   }
 }
 
-impl Into<AudioFormat> for IpcAudioFormat {
-  fn into(self) -> AudioFormat {
-    AudioFormat {
-      data: self.data,
+impl From<IpcAudioFormat> for AudioFormat {
+  fn from(value: IpcAudioFormat) -> Self {
+    Self {
+      data: value.data,
       format: WaveFormat::PCM,
-      n_channels: self.n_channels,
-      n_block_align: self.n_block_align,
-      bits_per_sample: self.bits_per_sample,
-      n_samples_per_sec: self.n_samples_per_sec,
-      n_avg_bytes_per_sec: self.n_avg_bytes_per_sec,
+      n_channels: value.n_channels,
+      n_block_align: value.n_block_align,
+      bits_per_sample: value.bits_per_sample,
+      n_samples_per_sec: value.n_samples_per_sec,
+      n_avg_bytes_per_sec: value.n_avg_bytes_per_sec,
     }
   }
 }

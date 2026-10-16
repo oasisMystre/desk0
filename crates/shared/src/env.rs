@@ -4,14 +4,14 @@ pub trait FromEnv: ToString + std::fmt::Display {
   fn get(&self) -> anyhow::Result<String> {
     use anyhow::Context;
 
-    let default = format!("APP_{}", self.to_string());
+    let default = format!("APP_{}", self);
     std::env::var(default)
       .or_else(|_| std::env::var(self.to_string()))
       .with_context(|| format!("{} environment variable not found", self))
   }
 
   fn get_optional(&self) -> Option<String> {
-    let default = format!("APP_{}", self.to_string());
+    let default = format!("APP_{}", self);
     std::env::var(default)
       .or_else(|_| std::env::var(self.to_string()))
       .ok()

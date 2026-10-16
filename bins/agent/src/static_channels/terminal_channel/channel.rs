@@ -267,7 +267,7 @@ impl SvcProcessor for TerminalStaticChannel {
           terminal.abort();
         }
 
-        return Ok(vec![]);
+        Ok(vec![])
       }
 
       TerminalInputEvent::Data { id, mode, data } => {

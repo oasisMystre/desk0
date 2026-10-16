@@ -139,7 +139,7 @@ impl ServerEventSender for AudioHandler {
 
 impl RdpsndServerHandler for AudioHandlerStaticChannelFactory {
   fn get_formats(&self) -> &[AudioFormat] {
-    &self.handler.sources.formats()
+    self.handler.sources.formats()
   }
 
   fn choose_format<'a>(&mut self, common: &'a [NegotiatedFormat]) -> Option<&'a NegotiatedFormat> {

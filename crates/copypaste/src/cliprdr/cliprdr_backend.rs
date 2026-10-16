@@ -225,7 +225,6 @@ impl CliprdrBackend for CliprdrHandlerBackend {
           tracing::error!(?error, "Failed to paste image");
         }
       }
-      return;
     }
   }
 

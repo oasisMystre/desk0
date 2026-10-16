@@ -21,7 +21,7 @@ impl Identity {
       Ok(identity)
     } else {
       let mut identity = Self {
-        org_id: org_id,
+        org_id,
         device_id: uuid::Uuid::new_v4(),
       };
 

@@ -66,7 +66,7 @@ where
 {
   pub fn new(name: &str, create: bool, config: IpcConfig) -> anyhow::Result<Self> {
     assert!(
-      config.max_slot >= 2 && config.max_slot % 2 == 0,
+      config.max_slot >= 2 && config.max_slot.is_multiple_of(2),
       "invalid max slot must be multiple of 2"
     );
 
