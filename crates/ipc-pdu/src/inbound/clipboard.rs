@@ -1,10 +1,10 @@
 use std::collections::VecDeque;
 
-use rkyv::{Archive, Deserialize, Serialize};
 use ipc::{IpcSharedBuffer, IpcSharedBufferField};
+use rkyv::{Archive, Deserialize, Serialize};
 
 #[derive(Debug, Clone, Archive, Serialize, Deserialize)]
-pub enum IpcPackedClipboardEvent {
+pub enum IpcPackedClipboardData {
   Text(String),
   Html(String),
   RichText(String),
@@ -13,7 +13,7 @@ pub enum IpcPackedClipboardEvent {
 }
 
 #[derive(Debug, Clone, Archive, Serialize, Deserialize)]
-pub enum IpcUnpackedClipboardEvent {
+pub enum IpcUnpackedClipboardData {
   Text(String),
   Html(String),
   RichText(String),
@@ -21,21 +21,28 @@ pub enum IpcUnpackedClipboardEvent {
   Files(Vec<String>),
 }
 
-impl IpcPackedClipboardEvent {
+#[derive(Debug, Clone, Archive, Serialize, Deserialize)]
+pub enum IpcClipboardEvent {
+  Start,
+  Stop,
+  Data(IpcPackedClipboardData),
+}
+
+impl IpcPackedClipboardData {
   pub fn unpack(
     self,
-    mut buffers: VecDeque<IpcSharedBuffer>,
-  ) -> anyhow::Result<IpcUnpackedClipboardEvent> {
+     buffers: &mut VecDeque<IpcSharedBuffer>,
+  ) -> anyhow::Result<IpcUnpackedClipboardData> {
     Ok(match self {
-      IpcPackedClipboardEvent::Text(value) => IpcUnpackedClipboardEvent::Text(value),
-      IpcPackedClipboardEvent::Html(value) => IpcUnpackedClipboardEvent::Html(value),
-      IpcPackedClipboardEvent::Files(files) => IpcUnpackedClipboardEvent::Files(files),
-      IpcPackedClipboardEvent::RichText(value) => IpcUnpackedClipboardEvent::RichText(value),
-      IpcPackedClipboardEvent::Image(IpcSharedBufferField(index)) => {
+      IpcPackedClipboardData::Text(value) => IpcUnpackedClipboardData::Text(value),
+      IpcPackedClipboardData::Html(value) => IpcUnpackedClipboardData::Html(value),
+      IpcPackedClipboardData::Files(files) => IpcUnpackedClipboardData::Files(files),
+      IpcPackedClipboardData::RichText(value) => IpcUnpackedClipboardData::RichText(value),
+      IpcPackedClipboardData::Image(IpcSharedBufferField(index)) => {
         let buffer = buffers
           .pop_front()
           .ok_or_else(|| anyhow::anyhow!("expect image buffer in position {index}"))?;
-        IpcUnpackedClipboardEvent::Image(buffer)
+        IpcUnpackedClipboardData::Image(buffer)
       }
     })
   }

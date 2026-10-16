@@ -78,11 +78,20 @@ where
 {
 }
 
+impl From<IpcSharedBuffer> for IpcSharedBufferAck {
+  fn from(value: IpcSharedBuffer) -> Self {
+    Self {
+      slot: value.slot,
+      sequence: value.sequence,
+    }
+  }
+}
+
+pub const IPC_FRAME_HEADER_SIZE: usize = 5;
+
 impl<T> IpcFrame<T> {
   const ACK: u8 = 0;
   const MESSAGE: u8 = 1;
-
-  pub const HEADER_SIZE: usize = 5;
 }
 
 impl<T> IpcFrame<T>

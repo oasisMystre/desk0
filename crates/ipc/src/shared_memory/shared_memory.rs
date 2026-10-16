@@ -154,7 +154,7 @@ where
       let tick = (timeout / 4).clamp(Duration::from_millis(10), Duration::from_secs(1));
 
       let reclaimer = tasks.spawn({
-        let pool = self.pool.clone();
+        let pool = Arc::clone(&self.pool);
 
         async move {
           let mut interval = tokio::time::interval(tick);
@@ -172,7 +172,7 @@ where
     }
 
     tasks.spawn({
-      let pool = self.pool.clone();
+      let pool = Arc::clone(&self.pool);
       let max_message_size = self.config.max_message_size;
       let mut buffer = Vec::with_capacity(max_message_size);
 

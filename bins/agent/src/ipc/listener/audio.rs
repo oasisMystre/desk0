@@ -2,6 +2,7 @@ use std::sync::{Arc, Condvar, Mutex, OnceLock};
 
 use ipc_pdu::{
   Listener,
+  inbound::{IpcAudioEvent, IpcInboundEvent},
   outbound::{IpcAudioSource, IpcUnpackedAudioWave},
 };
 use ironrdp::{
@@ -18,6 +19,8 @@ use tokio_util::sync::CancellationToken;
 
 #[derive(thiserror::Error, Debug)]
 pub enum AudioHandlerError {
+  #[error("audio failed to send start event {0}")]
+  StartError(anyhow::Error),
   #[error("audio backend already initialized")]
   AlreadyInitialized,
   #[error("audio backend is not initialized")]
@@ -156,6 +159,12 @@ impl RdpsndServerHandler for AudioHandlerStaticChannelFactory {
   }
 
   fn start(&mut self, _f: &NegotiatedFormat) -> Result<(), Box<dyn RdpsndError>> {
+    self
+      .handler
+      .ipc
+      .blocking_send(IpcInboundEvent::Audio(IpcAudioEvent::Start(0)))
+      .map_err(|error| Box::new(AudioHandlerError::StartError(error)) as Box<dyn RdpsndError>)?;
+
     let mut receiver = self
       .handler
       .inbound

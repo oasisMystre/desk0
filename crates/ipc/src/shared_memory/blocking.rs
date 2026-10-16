@@ -1,4 +1,4 @@
-use std::sync::atomic::Ordering;
+use std::sync::{Arc, atomic::Ordering};
 
 use super::{
   pool::{SlotState, UsedSlot},
@@ -69,7 +69,7 @@ where
       return Ok(Reservation {
         armed: true,
         items: vec![],
-        pool: self.pool.clone(),
+        pool: Arc::clone(&self.pool),
       });
     }
 
@@ -85,7 +85,7 @@ where
 
     let mut reservation = Reservation {
       armed: true,
-      pool: self.pool.clone(),
+      pool: Arc::clone(&self.pool),
       items: Vec::with_capacity(count),
     };
 

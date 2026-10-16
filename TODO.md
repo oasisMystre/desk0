@@ -8,3 +8,5 @@ Audio has inconsistent default selection, make selection current audio device no
 For now simple section of device audio works but breaks for user with multiple audio source like a microphone
 
 Behavior not checked wether the current audio device get audio stream still when using a external audio device or not 
+
+1. Shared memory is not retrying ack keep in a retry queue if ack failed to send over network 

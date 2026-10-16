@@ -6,7 +6,7 @@ use clipboard_rs::{
 };
 use ipc::IpcSharedBufferField;
 use ipc_pdu::{
-  inbound::IpcUnpackedClipboardEvent,
+  inbound::IpcUnpackedClipboardData,
   outbound::{IpcOutboundEvent, IpcPackedClipboardEvent, IpcPackedClipboardSnapshot},
 };
 use ironrdp_cliprdr_format::{bitmap::png_to_cf_dibv5, html::plain_html_to_cf_html};
@@ -22,7 +22,7 @@ pub struct IpcClipboardWatcher {
   clipboard: Arc<ClipboardContext>,
 
   ipc: Arc<ipc_pdu::Connector>,
-  inbound: Option<UnboundedReceiver<IpcUnpackedClipboardEvent>>,
+  inbound: Option<UnboundedReceiver<IpcUnpackedClipboardData>>,
   inbound_handle: IpcClipboardHandle<CancellationToken, JoinHandle<()>>,
   outbound_handle: IpcClipboardHandle<Option<WatcherShutdown>, std::thread::JoinHandle<()>>,
 }
@@ -36,7 +36,7 @@ pub struct IpcClipboardWatcherHandler {
 impl IpcClipboardWatcher {
   pub fn new(
     ipc: Arc<ipc_pdu::Connector>,
-    inbound: UnboundedReceiver<IpcUnpackedClipboardEvent>,
+    inbound: UnboundedReceiver<IpcUnpackedClipboardData>,
   ) -> Self {
     let clipboard = ClipboardContext::new().expect("creating clipboard instance failed");
 
@@ -109,22 +109,22 @@ impl IpcClipboardWatcher {
           };
 
           match event {
-            IpcUnpackedClipboardEvent::Text(data) => {
+            IpcUnpackedClipboardData::Text(data) => {
               if let Err(error) = clipboard.set_text(data) {
                 tracing::error!(?error, "Failed paste text");
               };
             }
-            IpcUnpackedClipboardEvent::RichText(data) => {
+            IpcUnpackedClipboardData::RichText(data) => {
               if let Err(error) = clipboard.set_rich_text(data) {
                 tracing::error!(?error, "Failed to paste richtext");
               };
             }
-            IpcUnpackedClipboardEvent::Html(data) => {
+            IpcUnpackedClipboardData::Html(data) => {
               if let Err(error) = clipboard.set_html(data) {
                 tracing::error!(?error, "Failed to paste html");
               };
             }
-            IpcUnpackedClipboardEvent::Image(data) => {
+            IpcUnpackedClipboardData::Image(data) => {
               match ipc.blocking_copy_from_shared_buffer(data) {
                 Ok(data) => {
                   match image::load_from_memory_with_format(&data, image::ImageFormat::Png) {
@@ -148,7 +148,7 @@ impl IpcClipboardWatcher {
                 }
               }
             }
-            IpcUnpackedClipboardEvent::Files(files) => {
+            IpcUnpackedClipboardData::Files(files) => {
               if let Err(error) = clipboard.set_files(files) {
                 tracing::error!(?error, "Failed to paste files");
               };
@@ -159,6 +159,29 @@ impl IpcClipboardWatcher {
     });
 
     self.inbound_handle.thread = Some(thread);
+  }
+
+  pub async fn stop(&mut self) {
+    self.inbound_handle.shutdown.cancel();
+    self
+      .outbound_handle
+      .shutdown
+      .take()
+      .map(|shutdown| shutdown.stop());
+
+    if let Some(thread) = self.inbound_handle.thread.take() {
+      if let Err(error) = thread.await {
+        if !error.is_cancelled() {
+          tracing::error!(?error, "stopping outbound task failed");
+        }
+      }
+    }
+
+    if let Some(thread) = self.outbound_handle.thread.take() {
+      if let Err(error) = thread.join() {
+        tracing::error!(?error, "stopping outbound task failed");
+      };
+    }
   }
 }
 

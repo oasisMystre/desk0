@@ -1,11 +1,12 @@
-use std::sync::atomic::Ordering;
+use std::sync::{Arc, atomic::Ordering};
 
 use super::{
   pool::{SlotState, UsedSlot},
   reservation::Reservation,
 };
 use crate::{
-  IpcFrame, IpcPackMessage, IpcSharedBuffer, IpcSharedBufferAck, RkyvDecode, RkyvEncode,
+  IPC_FRAME_HEADER_SIZE, IpcFrame, IpcPackMessage, IpcSharedBuffer, IpcSharedBufferAck, RkyvDecode,
+  RkyvEncode,
   shared_memory::{IpcSharedMemory, shared_memory::IpcMessage},
 };
 
@@ -70,16 +71,28 @@ where
       return Ok(Reservation {
         armed: true,
         items: vec![],
-        pool: self.pool.clone(),
+        pool: Arc::clone(&self.pool),
       });
     }
 
     let countu32 = u32::try_from(count)?;
+    let (used, free) = {
+      let state = self.pool.state.lock().unwrap();
+      (state.used.len(), state.free.len())
+    };
+
+    tracing::info!(
+      slots = count,
+      permits = self.pool.permits.available_permits(),
+      used = used,
+      free = free,
+      "trying to acquire"
+    );
     self.pool.permits.acquire_many(countu32).await?.forget();
 
     let mut reservation = Reservation {
       armed: true,
-      pool: self.pool.clone(),
+      pool: Arc::clone(&self.pool),
       items: Vec::with_capacity(count),
     };
 
@@ -120,14 +133,17 @@ where
 
     let bytes = frame.encode()?;
     anyhow::ensure!(
-      bytes.len().saturating_sub(4) <= self.config.max_message_size,
+      bytes.len().saturating_sub(IPC_FRAME_HEADER_SIZE) <= self.config.max_message_size,
       "encoded message exceeds maximum message size"
     );
 
-    self.sender.try_send(IpcMessage {
-      bytes,
-      reservation: None,
-    })?;
+    self
+      .sender
+      .send(IpcMessage {
+        bytes,
+        reservation: None,
+      })
+      .await?;
 
     Ok(())
   }
@@ -192,8 +208,9 @@ where
 
     let payload_len = bytes
       .len()
-      .checked_sub(4)
+      .checked_sub(IPC_FRAME_HEADER_SIZE)
       .ok_or_else(|| anyhow::anyhow!("encoded IPC frame is missing its length prefix"))?;
+
     anyhow::ensure!(
       payload_len <= self.config.max_message_size,
       "encoded message is {payload_len} bytes, max is {}",
@@ -201,10 +218,13 @@ where
     );
 
     reservation.queue();
-    self.sender.try_send(IpcMessage {
-      bytes,
-      reservation: Some(reservation),
-    })?;
+    self
+      .sender
+      .send(IpcMessage {
+        bytes,
+        reservation: Some(reservation),
+      })
+      .await?;
 
     Ok(())
   }

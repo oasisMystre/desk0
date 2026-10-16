@@ -224,6 +224,19 @@ impl RdpServerDisplay for DisplayHandler {
         )
       })?;
 
+    self
+      .ipc
+      .send(ipc_pdu::inbound::IpcInboundEvent::Display(
+        ipc_pdu::inbound::IpcDisplayEvent::Start(0),
+      ))
+      .await
+      .map_err(|error| {
+        ServerError::custom(
+          "sending display start event to ipc",
+          std::io::Error::other(error),
+        )
+      })?;
+
     Ok(Box::new(DisplayUpdates { receiver }))
   }
 }

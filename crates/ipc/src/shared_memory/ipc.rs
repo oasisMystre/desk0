@@ -55,7 +55,7 @@ where
     path: Name<'a>,
     outbound: Sender<IpcPackMessage<T>>,
   ) -> anyhow::Result<()> {
-    let shared_memory = self.shared_memory.clone();
+    let shared_memory = Arc::clone(&self.shared_memory);
     let cancellation_token = self.cancellation_token.clone();
     let listener = interprocess::local_socket::ListenerOptions::new()
       .name(path)
@@ -85,7 +85,7 @@ where
           .ok_or_else(|| anyhow::anyhow!("a task already has ownership of shared_memory"))?;
 
         tasks.spawn({
-          let shared_memory = shared_memory.clone();
+          let shared_memory = Arc::clone(&shared_memory);
           let cancellation_token = cancellation_token.child_token();
 
           async move {
@@ -120,7 +120,7 @@ where
     path: Name<'a>,
     outbound: Sender<IpcPackMessage<T>>,
   ) -> anyhow::Result<()> {
-    let shared_memory = self.shared_memory.clone();
+    let shared_memory = Arc::clone(&self.shared_memory);
     let cancellation_token = self.cancellation_token.clone();
 
     let connector = tokio::select! {
@@ -178,18 +178,19 @@ where
         break;
       }
 
-      if let Some(reservation) = data.reservation.as_mut() {
-        reservation.quarantine();
-      }
-
-      if let Err(error) = async {
+      let result = async {
         writer.write_all(&data.bytes).await?;
         writer.flush().await?;
 
         Ok::<_, anyhow::Error>(())
       }
-      .await
-      {
+      .await;
+
+      if let Err(error) = result {
+        if let Some(reservation) = data.reservation.as_mut() {
+          reservation.quarantine();
+        }
+
         tracing::error!(?error, "IPC write failed");
         break;
       }

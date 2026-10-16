@@ -45,7 +45,7 @@ pub struct AudioSource {
 
 pub struct Source {
   pub audio: Option<AudioSource>,
-  pub monitors: Vec<MonitorSource>,
+  pub monitor: Option<MonitorSource>,
 }
 
 pub struct WrapVideoFrame {
@@ -146,7 +146,7 @@ impl MediaHandler {
         }
       };
 
-      for monitor in source.monitors {
+      if let Some(monitor) = source.monitor {
         let video_sender = self.video_sender.clone();
         let audio_sender = self.audio_sender.clone();
         let session_cancellation_token = session_cancellation_token.clone();
@@ -269,6 +269,7 @@ impl MediaHandler {
     self.monitors.lock().unwrap().clone()
   }
 
+  #[cfg(not(feature = "ipc"))]
   pub fn monitor_count(&self) -> usize {
     self.monitors().len()
   }
@@ -277,6 +278,7 @@ impl MediaHandler {
     self.audios.lock().unwrap().clone()
   }
 
+  #[cfg(not(feature = "ipc"))]
   pub fn audio_formats(&self) -> Vec<ironrdp::rdpsnd::pdu::AudioFormat> {
     self
       .audios

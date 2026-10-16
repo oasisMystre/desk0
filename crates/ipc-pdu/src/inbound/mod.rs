@@ -6,7 +6,7 @@ mod display;
 mod input;
 
 pub use audio::IpcAudioEvent;
-pub use clipboard::{IpcPackedClipboardEvent, IpcUnpackedClipboardEvent};
+pub use clipboard::{IpcClipboardEvent, IpcPackedClipboardData, IpcUnpackedClipboardData};
 pub use display::IpcDisplayEvent;
 pub use input::{IpcKeyboardEvent, IpcMouseButton, IpcMouseEvent};
 
@@ -22,5 +22,5 @@ pub enum IpcInboundEvent {
   Input(IpcInputEvent),
   Audio(IpcAudioEvent),
   Display(IpcDisplayEvent),
-  Clipboard(IpcPackedClipboardEvent),
+  Clipboard(IpcClipboardEvent),
 }

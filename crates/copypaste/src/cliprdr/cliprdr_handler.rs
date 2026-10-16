@@ -323,6 +323,18 @@ impl CliprdrHandler {
 
   pub(crate) fn set_status(&self, status: ClipboardStatus) {
     self.watcher.set_status(status);
+
+    #[cfg(feature = "ipc")]
+    if matches!(status, ClipboardStatus::Ready) {
+      if let Err(error) = self
+        .ipc
+        .blocking_send(ipc_pdu::inbound::IpcInboundEvent::Clipboard(
+          ipc_pdu::inbound::IpcClipboardEvent::Stop,
+        ))
+      {
+        tracing::error!(?error, "sending clipboard ready status to ipc failed");
+      }
+    }
   }
 
   pub fn get_status(&self) -> ClipboardStatus {
@@ -491,7 +503,9 @@ impl CliprdrHandler {
     self
       .ipc
       .blocking_send(ipc_pdu::inbound::IpcInboundEvent::Clipboard(
-        ipc_pdu::inbound::IpcPackedClipboardEvent::Text(data),
+        ipc_pdu::inbound::IpcClipboardEvent::Data(ipc_pdu::inbound::IpcPackedClipboardData::Text(
+          data,
+        )),
       ))?;
 
     if let Some(callback) = &self.callback {
@@ -505,7 +519,9 @@ impl CliprdrHandler {
     self
       .ipc
       .blocking_send(ipc_pdu::inbound::IpcInboundEvent::Clipboard(
-        ipc_pdu::inbound::IpcPackedClipboardEvent::Html(data),
+        ipc_pdu::inbound::IpcClipboardEvent::Data(ipc_pdu::inbound::IpcPackedClipboardData::Html(
+          data,
+        )),
       ))?;
 
     if let Some(callback) = &self.callback {
@@ -519,7 +535,9 @@ impl CliprdrHandler {
     self
       .ipc
       .blocking_send(ipc_pdu::inbound::IpcInboundEvent::Clipboard(
-        ipc_pdu::inbound::IpcPackedClipboardEvent::RichText(data),
+        ipc_pdu::inbound::IpcClipboardEvent::Data(
+          ipc_pdu::inbound::IpcPackedClipboardData::RichText(data),
+        ),
       ))?;
 
     if let Some(callback) = &self.callback {
@@ -531,9 +549,9 @@ impl CliprdrHandler {
 
   pub fn set_image(&self, data: Vec<u8>) -> clipboard_rs::Result<()> {
     self.ipc.blocking_send_with_shared_buffers(
-      ipc_pdu::inbound::IpcInboundEvent::Clipboard(
-        ipc_pdu::inbound::IpcPackedClipboardEvent::Image(ipc::IpcSharedBufferField(0)),
-      ),
+      ipc_pdu::inbound::IpcInboundEvent::Clipboard(ipc_pdu::inbound::IpcClipboardEvent::Data(
+        ipc_pdu::inbound::IpcPackedClipboardData::Image(ipc::IpcSharedBufferField(0)),
+      )),
       &[data],
     )?;
 
@@ -548,7 +566,9 @@ impl CliprdrHandler {
     self
       .ipc
       .blocking_send(ipc_pdu::inbound::IpcInboundEvent::Clipboard(
-        ipc_pdu::inbound::IpcPackedClipboardEvent::Files(files),
+        ipc_pdu::inbound::IpcClipboardEvent::Data(ipc_pdu::inbound::IpcPackedClipboardData::Files(
+          files,
+        )),
       ))?;
 
     if let Some(callback) = &self.callback {
