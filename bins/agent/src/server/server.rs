@@ -323,6 +323,7 @@ impl AgentServer {
 
       async move {
         loop {
+          tracing::info!("receiving ipc message");
           let result = tokio::select! {
               _ = cancellation_token.cancelled() => {break;}
               result = receiver.recv() => result
