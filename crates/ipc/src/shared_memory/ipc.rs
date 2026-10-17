@@ -68,8 +68,6 @@ where
             result = listener.accept() => Some(result),
         };
 
-        tracing::info!("new ipc connection accepted");
-
         let Some(result) = accepted else { break };
         let stream = result?;
 
@@ -145,7 +143,9 @@ where
       .take()
       .ok_or_else(|| anyhow::anyhow!("a task already has ownership of shared_memory"))?;
 
+    
     self.handle = Some(tokio::spawn(async move {
+
       tasks.spawn({
         let shared_memory = Arc::clone(&shared_memory);
         let cancellation_token = cancellation_token.child_token();

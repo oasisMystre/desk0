@@ -286,16 +286,15 @@ impl AgentServer {
       .as_listener(AgentConfig::get_ipc_path()?, sender)
       .await?;
 
-    tracing::info!("ipc listener started");
-
+    let input_handler = InputHandler::new(shared_memory.clone())?;
+    let audio_handler = AudioHandler::new(shared_memory.clone(), audio_frame_receiver);
     let display_handler = DisplayHandler::new(
       shared_memory.clone(),
       display_update_receiver,
       cancellation_token.child_token(),
     );
 
-    let input_handler = InputHandler::new(shared_memory.clone())?;
-    let audio_handler = AudioHandler::new(shared_memory.clone(), audio_frame_receiver);
+    display_handler.start();
 
     let addr = config
       .addr
@@ -316,11 +315,9 @@ impl AgentServer {
       .with_static_channel_factory(Box::new(TerminalStaticChannelFactory));
 
     let mut server = server.build();
-
-    display_handler.start();
-
     let mut tasks = JoinSet::new();
 
+    tracing::info!("spawning ipc receiver");
     tasks.spawn_local({
       let audio_handler = audio_handler.clone();
       let cancellation_token = cancellation_token.clone();
