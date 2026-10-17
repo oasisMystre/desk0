@@ -323,7 +323,6 @@ impl AgentServer {
 
       async move {
         loop {
-          tracing::info!("receiving ipc message");
           let result = tokio::select! {
               _ = cancellation_token.cancelled() => {break;}
               result = receiver.recv() => result
@@ -338,10 +337,7 @@ impl AgentServer {
             break;
           }
 
-          let Some(buffers) = event.buffers else {
-            continue;
-          };
-
+          let buffers = event.buffers.unwrap_or_default();
           let mut buffers: VecDeque<IpcSharedBuffer> = buffers.into();
 
           match event.data {
