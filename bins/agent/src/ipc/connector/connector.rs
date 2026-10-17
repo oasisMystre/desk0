@@ -229,7 +229,7 @@ impl IpcInboundEventHandler {
                   }
 
                   {
-                    let source = media_source.lock().await;
+                    let mut source = media_source.lock().await;
                     source.set_monitor(monitor.clone());
                   }
                 }
