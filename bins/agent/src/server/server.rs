@@ -344,6 +344,8 @@ impl AgentServer {
 
           let mut buffers: VecDeque<IpcSharedBuffer> = buffers.into();
 
+          tracing::info(data=?event.data. "fraame data");
+
           match event.data {
             IpcOutboundEvent::Audio(event) => {
               match event.unpack(&mut buffers) {

@@ -74,7 +74,7 @@ impl DisplayHandler {
       return;
     };
 
-    let handle = tokio::task::spawn_local(async move {
+    let handle = tokio::task::spawn(async move {
       let mut needs_full_frame: HashSet<String> = HashSet::new();
 
       'capture: loop {
