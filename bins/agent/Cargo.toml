@@ -7,9 +7,9 @@ edition = "2024"
 io = []
 audio = []
 video = []
-default = ["ipc"]
-ipc = ["copypaste/ipc"]
+default = []
 terminal = []
+ipc = ["copypaste/ipc"]
 file-logs = ["shared/file-logs"]
 
 [dependencies]
