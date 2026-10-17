@@ -39,7 +39,6 @@ pub struct IpcSharedMemory<T, U> {
   pub(super) sequence: AtomicU64,
   pub(super) config: IpcConfig,
 
-  pub(super) name: String,
   pub(super) sender: Sender<IpcMessage>,
   pub(crate) receiver: Arc<Mutex<Option<Receiver<IpcMessage>>>>,
 
@@ -52,7 +51,6 @@ impl<T, U> Debug for IpcSharedMemory<T, U> {
       .field("role", &self.role)
       .field("sequence", &self.sequence)
       .field("config", &self.config)
-      .field("name", &self.name)
       .finish()
   }
 }
@@ -107,7 +105,6 @@ where
     let (sender, receiver) = channel::<IpcMessage>(100);
 
     Ok(Self {
-      name: name.to_string(),
       pool: Arc::new(Pool::new(
         role.send_slots(config.slots_per_direction() as u32),
       )),
