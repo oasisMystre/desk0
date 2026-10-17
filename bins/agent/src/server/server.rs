@@ -317,7 +317,6 @@ impl AgentServer {
     let mut server = server.build();
     let mut tasks = JoinSet::new();
 
-    tracing::info!("spawning ipc receiver");
     tasks.spawn_local({
       let audio_handler = audio_handler.clone();
       let cancellation_token = cancellation_token.clone();
@@ -407,8 +406,6 @@ impl AgentServer {
         }
       }
     });
-
-    tracing::info!("running looppppp");
 
     loop {
       tokio::select! {
