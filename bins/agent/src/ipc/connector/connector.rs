@@ -209,11 +209,9 @@ impl IpcInboundEventHandler {
             },
             IpcInboundEvent::Display(event) => match event {
               IpcDisplayEvent::Start(index) => {
-                  tracing::info!(index, "starting display");
                 if index < monitors.len() {
                   let monitor = monitors.get(index);
                   let Some(monitor) = monitor else {
-                    tracing::warn!(?index, "invalid monitor index");
                     continue;
                   };
                   let audio = {
@@ -231,10 +229,14 @@ impl IpcInboundEventHandler {
                     tracing::error!(?error, "setting monitor failed");
                   }
 
+                  tracing::warn!(?index, "monitor index");
+
                   {
                     let mut source = media_source.lock().await;
                     source.set_monitor(monitor.clone());
                   }
+
+                  tracing::warn!(?index, "monitor index");
                 }
               }
               IpcDisplayEvent::Stop => {

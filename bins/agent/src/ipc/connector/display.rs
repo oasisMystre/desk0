@@ -70,6 +70,8 @@ impl IpcDisplayHandler {
           buffers.push(damages_bytes.as_slice());
         }
 
+        tracing::warn!("sending frames...");
+        
         if let Err(error) = ipc
           .send_with_shared_buffers(
             IpcOutboundEvent::Display(IpcPackedDisplayEvent::BitmapUpdate(IpcPackedBitmapUpdate {
