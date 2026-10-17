@@ -11,9 +11,9 @@ on:
         default: "nightly"
   workflow_dispatch:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
-    branches: [ main ]
+    branches: [main]
 
 env:
   RUST_VERSION: "1.97.0"
@@ -38,14 +38,14 @@ jobs:
               os: windows-2022,
               arch: x86_64,
               flutter-arch: x64,
-              build-args: "--vram",
+              bridge-artifact-name: "bridge-artifact-windows-x64",
             }
           - {
               target: aarch64-pc-windows-msvc,
               os: windows-11-arm,
               arch: aarch64,
               flutter-arch: arm64,
-              build-args: "",
+              bridge-artifact-name: "bridge-artifact-windows-arm64",
             }
     steps:
       - name: Export Github actions cache environment variables
@@ -63,7 +63,7 @@ jobs:
       - name: Restore bridge files
         uses: actions/download-artifact@v4
         with:
-          name: "bridge-artifact"
+          name: ${{ matric.job.bridge-actifact-name }}
           path: ./
 
       - name: Install LLVM and clang
@@ -130,14 +130,14 @@ jobs:
           - {
               target: x86_64-apple-darwin,
               os: macos-15-intel,
-              extra-build-args: "",
               arch: x86_64,
+              bridge-artifact-name: "bridge-artifact-macos-x64",
             }
           - {
               target: aarch64-apple-darwin,
               os: macos-14,
-              extra-build-args: "--screencapturekit",
               arch: aarch64,
+              bridge-artifact-name: "bridge-artifact-macos-arm64",
             }
 
     steps:
@@ -184,7 +184,7 @@ jobs:
       - name: Restore bridge files
         uses: actions/download-artifact@v4
         with:
-          name: "bridge-artifact"
+          name: ${{ matric.job.bridge-actifact-name }}
           path: ./
 
       - name: Install Flutter dependencies

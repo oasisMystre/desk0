@@ -16,10 +16,28 @@ jobs:
       matrix:
         job:
           - {
-              target: x86_64-unknown-linux-gnu,
-              os: ubuntu-22.04,
+              target: x86_64-pc-windows-msvc,
+              os: windows-2022,
               flutter-version: "3.47.2",
-              artifact-name: "bridge-artifact",
+              artifact-name: "bridge-artifact-windows-x64",
+            }
+          - {
+              target: aarch64-pc-windows-msvc,
+              os: windows-2022,
+              flutter-version: "3.47.2",
+              artifact-name: "bridge-artifact-windows-arm64",
+            }
+          - {
+              target: x86_64-apple-darwin,
+              os: macos-15-intel,
+              flutter-version: "3.47.2",
+              artifact-name: "bridge-artifact-macos-x64",
+            }
+          - {
+              target: aarch64-apple-darwin,
+              os: macos-14,
+              flutter-version: "3.47.2",
+              artifact-name: "bridge-artifact-macos-arm64",
             }
     steps:
       - name: Checkout source code
