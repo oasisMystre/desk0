@@ -172,8 +172,6 @@ impl IpcInboundEventHandler {
             break;
           }
 
-          tracing::info!(data=?message.data, "info=");
-
           match message.data {
             IpcInboundEvent::Input(event) => {
               if let Err(error) = input_event_sender.send(event) {
@@ -211,7 +209,10 @@ impl IpcInboundEventHandler {
               IpcDisplayEvent::Start(index) => {
                 if index < monitors.len() {
                   let monitor = monitors.get(index);
-                  let Some(monitor) = monitor else { continue };
+                  let Some(monitor) = monitor else {
+                    tracing::warn!(?index, "invalid monitor index");
+                    continue;
+                  };
                   let audio = {
                     let source = media_source.lock().await;
                     source.audio.clone()
@@ -227,7 +228,10 @@ impl IpcInboundEventHandler {
                     tracing::error!(?error, "setting monitor failed");
                   }
 
-                  media_source.lock().await.set_monitor(monitor.clone());
+                  {
+                    let source = media_source.lock().await;
+                    source.set_monitor(monitor.clone());
+                  }
                 }
               }
               IpcDisplayEvent::Stop => {

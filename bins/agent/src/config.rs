@@ -63,6 +63,7 @@ impl AgentConfig {
     base_dir
   }
 
+  #[cfg(feature = "ipc")]
   pub fn get_ipc_share_memory_path() -> String {
     let path = Self::get_data_dir()
       .join("desk0")
@@ -72,6 +73,7 @@ impl AgentConfig {
     path
   }
 
+  #[cfg(feature = "ipc")]
   pub fn get_ipc_path<'a>() -> anyhow::Result<ipc::Name<'a>> {
     #[cfg(unix)]
     {
