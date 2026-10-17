@@ -209,8 +209,15 @@ impl IpcInboundEventHandler {
             },
             IpcInboundEvent::Display(event) => match event {
               IpcDisplayEvent::Start(index) => {
+                tracing::info!(
+                  ?index,
+                  len = monitors.len,
+                  "upadating monitor monitor index"
+                );
                 if index < monitors.len() {
                   let monitor = monitors.get(index);
+                  tracing::info!(?monitor, "upadating monitor monitor index");
+
                   let Some(monitor) = monitor else {
                     continue;
                   };
@@ -230,14 +237,14 @@ impl IpcInboundEventHandler {
                     tracing::error!(?error, "setting monitor failed");
                   }
 
-                  tracing::warn!(?index, "monitor index");
+                  tracing::info!(?index, "monitor index");
 
                   {
                     let mut source = media_source.lock().await;
                     source.set_monitor(monitor.clone());
                   }
 
-                  tracing::warn!(?index, "monitor index");
+                  tracing::info!(?index, "monitor index");
                 }
               }
               IpcDisplayEvent::Stop => {
