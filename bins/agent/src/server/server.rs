@@ -286,6 +286,8 @@ impl AgentServer {
       .as_listener(AgentConfig::get_ipc_path()?, sender)
       .await?;
 
+    tracing::info!("ipc listener started");
+
     let display_handler = DisplayHandler::new(
       shared_memory.clone(),
       display_update_receiver,
@@ -344,7 +346,7 @@ impl AgentServer {
 
           let mut buffers: VecDeque<IpcSharedBuffer> = buffers.into();
 
-          tracing::info!(data=?event.data, "fraame data");
+          tracing::info!(data=?event.data, "frame data");
 
           match event.data {
             IpcOutboundEvent::Audio(event) => {

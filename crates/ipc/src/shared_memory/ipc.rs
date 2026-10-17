@@ -68,6 +68,8 @@ where
             result = listener.accept() => Some(result),
         };
 
+        tracing::info!("new ipc connection accepted");
+
         let Some(result) = accepted else { break };
         let stream = result?;
 
