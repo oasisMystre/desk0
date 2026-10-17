@@ -83,3 +83,4 @@ jobs:
           name: ${{ matrix.job.artifact-name }}
           path: |
             ./viewer/lib/ffi
+            ./bins/ffi/src/frb_generated.rs
