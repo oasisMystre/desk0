@@ -151,6 +151,8 @@ impl IpcInboundEventHandler {
       })
       .await?;
 
+    drop(media_source);
+
     tasks.spawn({
       let audios = media.audios();
       let monitors = media.monitors();
@@ -209,11 +211,6 @@ impl IpcInboundEventHandler {
             },
             IpcInboundEvent::Display(event) => match event {
               IpcDisplayEvent::Start(index) => {
-                tracing::info!(
-                  ?index,
-                  len = monitors.len(),
-                  "upadating monitor monitor index"
-                );
                 if index < monitors.len() {
                   let monitor = monitors.get(index);
                   tracing::info!(?monitor, "upadating monitor monitor index");
