@@ -172,6 +172,8 @@ impl IpcInboundEventHandler {
             break;
           }
 
+          tracing::info!(data=?message.data, "data");
+
           match message.data {
             IpcInboundEvent::Input(event) => {
               if let Err(error) = input_event_sender.send(event) {
@@ -207,6 +209,7 @@ impl IpcInboundEventHandler {
             },
             IpcInboundEvent::Display(event) => match event {
               IpcDisplayEvent::Start(index) => {
+                  tracing::info!(index, "starting display");
                 if index < monitors.len() {
                   let monitor = monitors.get(index);
                   let Some(monitor) = monitor else {
