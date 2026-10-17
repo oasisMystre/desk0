@@ -179,6 +179,7 @@ where
       async move {
         loop {
           let message = IpcFrame::<T>::decode(&mut reader, &mut buffer, max_message_size).await;
+          tracing::info!("frame...");
           match message {
             Ok(IpcFrame::Ack(acks)) => {
               for ack in acks {
