@@ -317,7 +317,7 @@ impl AgentServer {
     let mut server = server.build();
     let mut tasks = JoinSet::new();
 
-    tasks.spawn_local({
+    tasks.spawn({
       let audio_handler = audio_handler.clone();
       let cancellation_token = cancellation_token.clone();
 
@@ -389,7 +389,7 @@ impl AgentServer {
       }
     });
 
-    tasks.spawn_local(async move {
+    tasks.spawn(async move {
       let future = if config.tunnel {
         server
           .run_connection_with(stream, TransportTls::AlreadyDone)
