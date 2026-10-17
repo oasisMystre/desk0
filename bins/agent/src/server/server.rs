@@ -408,6 +408,8 @@ impl AgentServer {
       }
     });
 
+    tracing::info("running looppppp");
+
     loop {
       tokio::select! {
         _ = cancellation_token.cancelled() => break,
