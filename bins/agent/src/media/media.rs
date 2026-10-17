@@ -1,4 +1,4 @@
-use std::{fmt::Debug, sync::Arc};
+use std::{fmt::Debug, sync::Arc, time::Duration};
 
 use audio::audio::cpal_supported_stream_config_range_to_audio_format;
 use cpal::traits::{DeviceTrait, HostTrait};
@@ -232,7 +232,7 @@ impl MediaHandler {
         break 'capture Ok(());
       }
 
-      match session.next_event(None) {
+      match session.next_event(Some(Duration::from_millis(100))) {
         Ok(pinray::CaptureEvent::Video(frame)) => {
           video_sender.send(WrapVideoFrame {
             first_frame,
@@ -252,9 +252,13 @@ impl MediaHandler {
           first_frame = true;
         }
         Ok(pinray::CaptureEvent::End) => break 'capture Ok(()),
-        Err(error) => {
-          break 'capture Err(error.into());
-        }
+        Err(error) => match error {
+          pinray::PinrayError::Timeout(duration) => {
+            tracing::info!(?duration, "pinray times out");
+            continue;
+          }
+          _ => break 'capture Err(error.into()),
+        },
       }
     };
 
