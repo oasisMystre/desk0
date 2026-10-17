@@ -328,11 +328,10 @@ impl AgentServer {
               result = receiver.recv() => result
           };
 
-          tracing::info!(data=?event.data, "frame data");
-
           let Some(event) = result else {
             break;
           };
+          tracing::info!(data=?event.data, "frame data");
 
           if cancellation_token.is_cancelled() {
             break;
