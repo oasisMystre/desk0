@@ -328,6 +328,8 @@ impl AgentServer {
               result = receiver.recv() => result
           };
 
+          tracing::info!(data=?event.data, "frame data");
+
           let Some(event) = result else {
             break;
           };
@@ -341,8 +343,6 @@ impl AgentServer {
           };
 
           let mut buffers: VecDeque<IpcSharedBuffer> = buffers.into();
-
-          tracing::info!(data=?event.data, "frame data");
 
           match event.data {
             IpcOutboundEvent::Audio(event) => {
@@ -386,6 +386,8 @@ impl AgentServer {
             }
           }
         }
+
+        tracing::info!("weird");
       }
     });
 

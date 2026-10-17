@@ -179,7 +179,6 @@ where
       async move {
         loop {
           let message = IpcFrame::<T>::decode(&mut reader, &mut buffer, max_message_size).await;
-          tracing::info!(?message, "frame");
           match message {
             Ok(IpcFrame::Ack(acks)) => {
               for ack in acks {
@@ -193,7 +192,11 @@ where
               }
             }
             Ok(IpcFrame::Message(message)) => {
+              tracing::info!(?message, "message");
+
               if sender.send(message).await.is_err() {
+                tracing::info!("sender broken");
+
                 break;
               }
             }
