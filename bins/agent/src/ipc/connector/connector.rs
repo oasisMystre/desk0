@@ -211,7 +211,7 @@ impl IpcInboundEventHandler {
               IpcDisplayEvent::Start(index) => {
                 tracing::info!(
                   ?index,
-                  len = monitors.len,
+                  len = monitors.len(),
                   "upadating monitor monitor index"
                 );
                 if index < monitors.len() {
