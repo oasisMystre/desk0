@@ -38,14 +38,12 @@ jobs:
               os: windows-2022,
               arch: x86_64,
               flutter-arch: x64,
-              build-args: "--vram",
             }
           - {
               target: aarch64-pc-windows-msvc,
               os: windows-11-arm,
               arch: aarch64,
               flutter-arch: arm64,
-              build-args: "",
             }
     steps:
       - name: Export Github actions cache environment variables

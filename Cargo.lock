@@ -6603,9 +6603,9 @@ checksum = "8b870d8c151b6f2fb93e84a13146138f05d02ed11c7e7c54f8826aaaf7c9f184"
 
 [[package]]
 name = "pinray"
-version = "0.2.6"
+version = "0.2.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "88c46fdf40a6640d4982412feec32f195925e13436b8d244b02d905ea0f0659a"
+checksum = "dd6aa7c63c2bcb0c5b2002286a7a02b9c411ca1ff09740eab31ac35b8e53e247"
 dependencies = [
  "pinray-core",
  "pinray-platform-linux",
@@ -6615,9 +6615,9 @@ dependencies = [
 
 [[package]]
 name = "pinray-core"
-version = "0.2.6"
+version = "0.2.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a6471942c6a972c4820b703f3262958f9e32afb077ef1d97477fc5bd185c5fc4"
+checksum = "c05a2686fe623b9cf321acf3e8bb327c1ba2aba0462e715da95c464e0bd58280"
 dependencies = [
  "thiserror 2.0.21",
  "tracing",
@@ -6625,9 +6625,9 @@ dependencies = [
 
 [[package]]
 name = "pinray-platform-linux"
-version = "0.2.6"
+version = "0.2.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "84f6558ce4f15291154685dfa82c46e29249ce7976132ba841402b5f07ded8d4"
+checksum = "66bdd404e1b885dbb9067207d788c7ec5d5abbc5facef9483ea66d8ab69da2e0"
 dependencies = [
  "pinray-core",
  "pipewire",
@@ -6639,14 +6639,15 @@ dependencies = [
 
 [[package]]
 name = "pinray-platform-macos"
-version = "0.2.6"
+version = "0.2.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b03b14bd087a67e195d13a646b2be10e9cb0ef9de9804d232dd0d3a5308946d5"
+checksum = "329353ea7276b89656cccb61a51cec6622c2a5073af8128465bf92316ac73936"
 dependencies = [
  "block2 0.6.2",
  "dispatch2",
  "objc2 0.6.4",
  "objc2-core-foundation",
+ "objc2-core-graphics",
  "objc2-core-media",
  "objc2-core-video",
  "objc2-foundation 0.3.2",
@@ -6657,9 +6658,9 @@ dependencies = [
 
 [[package]]
 name = "pinray-platform-windows"
-version = "0.2.6"
+version = "0.2.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "44338b1ec460a63356f098dcca0f64fd9acf0dcfe8e2f08bdfab1800efa539a0"
+checksum = "a746dc849ec42b8f984d456e26f6b0f2f4dc3a99d1e0fd180b384107dce501f2"
 dependencies = [
  "pinray-core",
  "tracing",
