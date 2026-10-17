@@ -17,7 +17,8 @@ on:
 
 env:
   RUST_VERSION: "1.97.0"
-  LLVM_VERSION: "23.1.0"
+  LLVM_VERSION: "23.1.2"
+  WINDOWS_LLVM_VERSION: "15.0.6"
   FLUTTER_VERSION: "3.47.2"
   TAG_NAME: "${{ inputs.upload-tag }}"
 
@@ -67,7 +68,7 @@ jobs:
       - name: Install LLVM and clang
         uses: KyleMayes/install-llvm-action@v2
         with:
-          version: ${{ env.LLVM_VERSION }}
+          version: ${{ env.WINDOWS_LLVM_VERSION }}
 
       - name: Install flutter
         id: flutter
