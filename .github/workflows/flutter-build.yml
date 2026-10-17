@@ -38,14 +38,14 @@ jobs:
               os: windows-2022,
               arch: x86_64,
               flutter-arch: x64,
-              bridge-artifact-name: "bridge-artifact-windows-x64",
+              build-args: "--vram",
             }
           - {
               target: aarch64-pc-windows-msvc,
               os: windows-11-arm,
               arch: aarch64,
               flutter-arch: arm64,
-              bridge-artifact-name: "bridge-artifact-windows-arm64",
+              build-args: "",
             }
     steps:
       - name: Export Github actions cache environment variables
@@ -63,7 +63,7 @@ jobs:
       - name: Restore bridge files
         uses: actions/download-artifact@v4
         with:
-          name: ${{ matric.job.bridge-actifact-name }}
+          name: "bridge-artifact"
           path: ./
 
       - name: Install LLVM and clang
@@ -127,18 +127,8 @@ jobs:
       fail-fast: false
       matrix:
         job:
-          - {
-              target: x86_64-apple-darwin,
-              os: macos-15-intel,
-              arch: x86_64,
-              bridge-artifact-name: "bridge-artifact-macos-x64",
-            }
-          - {
-              target: aarch64-apple-darwin,
-              os: macos-14,
-              arch: aarch64,
-              bridge-artifact-name: "bridge-artifact-macos-arm64",
-            }
+          - { target: x86_64-apple-darwin, os: macos-15-intel, arch: x86_64 }
+          - { target: aarch64-apple-darwin, os: macos-14, arch: aarch64 }
 
     steps:
       - name: Export Github actions cache environment variables
@@ -184,7 +174,7 @@ jobs:
       - name: Restore bridge files
         uses: actions/download-artifact@v4
         with:
-          name: ${{ matric.job.bridge-actifact-name }}
+          name: "bridge-artifact"
           path: ./
 
       - name: Install Flutter dependencies
