@@ -194,14 +194,10 @@ impl DisplayHandler {
   }
 
   async fn display_info(&self) -> IpcDisplayInfo {
-    tracing::info!("looking for display info size");
-
     let mut info = self.info.clone();
 
     loop {
       if let Some(info) = *info.borrow() {
-        tracing::info!("display size found");
-
         return info;
       }
 

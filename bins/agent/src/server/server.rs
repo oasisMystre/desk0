@@ -317,7 +317,7 @@ impl AgentServer {
     let mut server = server.build();
     let mut tasks = JoinSet::new();
 
-    tasks.spawn({
+    tasks.spawn_local({
       let audio_handler = audio_handler.clone();
       let cancellation_token = cancellation_token.clone();
 
@@ -331,7 +331,6 @@ impl AgentServer {
           let Some(event) = result else {
             break;
           };
-          tracing::info!(data=?event.data, "frame data");
 
           if cancellation_token.is_cancelled() {
             break;
@@ -382,8 +381,6 @@ impl AgentServer {
             }
           }
         }
-
-        tracing::info!("weird");
       }
     });
 

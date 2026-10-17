@@ -16,11 +16,12 @@ where
     + rkyv::Deserialize<T, rkyv::rancor::Strategy<rkyv::de::Pool, rkyv::rancor::Error>>,
   U: RkyvEncode,
 {
+  /// todo: queue to retry
   pub fn blocking_ack_shared_buffers(&self, acks: Vec<IpcSharedBufferAck>) -> anyhow::Result<()> {
     let ack: IpcFrame<u8> = IpcFrame::Ack(acks);
     let bytes = ack.encode()?;
 
-    self.sender.blocking_send(IpcMessage {
+    self.sender.try_send(IpcMessage {
       bytes,
       reservation: None,
     })?;
@@ -130,7 +131,7 @@ where
       "encoded message exceeds maximum message size"
     );
 
-    self.sender.blocking_send(IpcMessage {
+    self.sender.try_send(IpcMessage {
       bytes,
       reservation: None,
     })?;
@@ -207,7 +208,7 @@ where
     );
 
     reservation.queue();
-    self.sender.blocking_send(IpcMessage {
+    self.sender.try_send(IpcMessage {
       bytes,
       reservation: Some(reservation),
     })?;
