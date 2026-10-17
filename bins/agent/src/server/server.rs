@@ -408,7 +408,7 @@ impl AgentServer {
       }
     });
 
-    tracing::info("running looppppp");
+    tracing::info!("running looppppp");
 
     loop {
       tokio::select! {
