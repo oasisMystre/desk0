@@ -64,12 +64,12 @@ impl AgentConfig {
   }
 
   pub fn get_ipc_share_memory_path() -> String {
-    // let path = Self::get_data_dir()
-    //   .join("desk0")
-    //   .to_string_lossy()
-    //   .into_owned();
+    let path = Self::get_data_dir()
+      .join("desk0")
+      .to_string_lossy()
+      .into_owned();
 
-    "desk0".to_owned()
+    path
   }
 
   pub fn get_ipc_path<'a>() -> anyhow::Result<ipc::Name<'a>> {

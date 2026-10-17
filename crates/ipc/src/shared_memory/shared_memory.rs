@@ -64,22 +64,24 @@ where
     + rkyv::Deserialize<T, rkyv::rancor::Strategy<rkyv::de::Pool, rkyv::rancor::Error>>,
   U: RkyvEncode,
 {
-  pub fn new(name: &str, create: bool, config: IpcConfig) -> anyhow::Result<Self> {
+  pub fn new(path: &str, create: bool, config: IpcConfig) -> anyhow::Result<Self> {
     assert!(
       config.max_slot >= 2 && config.max_slot.is_multiple_of(2),
       "invalid max slot must be multiple of 2"
     );
 
     let (shmem, role) = if create {
+      std::fs::remove_file(path).ok();
+
       let shmem = match ShmemConf::new()
         .size(config.memory_size())
-        .os_id(name)
+        .flink(path)
         .create()
       {
         Ok(it) => it,
         Err(ShmemError::LinkExists) => ShmemConf::new()
           .size(config.memory_size())
-          .os_id(name)
+          .flink(path)
           .open()?,
         Err(err) => return Err(err.into()),
       };
@@ -89,7 +91,7 @@ where
       (
         ShmemConf::new()
           .size(config.memory_size())
-          .os_id(name)
+          .flink(path)
           .open()?,
         Role::Guest,
       )
@@ -97,7 +99,7 @@ where
 
     anyhow::ensure!(
       shmem.len() >= config.memory_size(),
-      "shared memory {name:?} is {} bytes, need at least {}",
+      "shared memory {path:?} is {} bytes, need at least {}",
       shmem.len(),
       config.memory_size()
     );
