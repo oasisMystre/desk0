@@ -219,6 +219,7 @@ impl IpcInboundEventHandler {
                     source.audio.clone()
                   };
 
+                  tracing::info!(?index, "upadating monitor monitor index");
                   if let Err(error) = source_sender
                     .send(Source {
                       audio,
