@@ -357,7 +357,6 @@ impl AgentServer {
               };
             }
             IpcOutboundEvent::Display(event) => {
-              tracing::info!(?event, "frame gotten for display");
               match event.unpack(&mut buffers) {
                 Ok(event) => {
                   if let Err(error) = display_update_sender.send(event) {

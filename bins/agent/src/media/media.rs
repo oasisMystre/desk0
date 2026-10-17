@@ -232,7 +232,7 @@ impl MediaHandler {
         break 'capture Ok(());
       }
 
-      match session.next_event(Some(Duration::from_millis(100))) {
+      match session.next_event(None) {
         Ok(pinray::CaptureEvent::Video(frame)) => {
           video_sender.send(WrapVideoFrame {
             first_frame,

@@ -76,18 +76,7 @@ where
     }
 
     let countu32 = u32::try_from(count)?;
-    let (used, free) = {
-      let state = self.pool.state.lock().unwrap();
-      (state.used.len(), state.free.len())
-    };
 
-    tracing::info!(
-      slots = count,
-      permits = self.pool.permits.available_permits(),
-      used = used,
-      free = free,
-      "trying to acquire"
-    );
     self.pool.permits.acquire_many(countu32).await?.forget();
 
     let mut reservation = Reservation {

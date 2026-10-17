@@ -4768,7 +4768,9 @@ dependencies = [
  "ironrdp-pdu",
  "ironrdp-rdpei",
  "ironrdp-svc",
+ "qoicoubeh",
  "tracing",
+ "zstd-safe",
 ]
 
 [[package]]

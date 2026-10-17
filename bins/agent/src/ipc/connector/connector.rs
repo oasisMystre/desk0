@@ -143,13 +143,11 @@ impl IpcInboundEventHandler {
       )))
       .await?;
 
-    let media_source = self.media_source.lock().await;
-    source_sender
-      .send(Source {
-        audio: media_source.audio.clone(),
-        monitor: media_source.monitor.clone(),
-      })
-      .await?;
+    let (audio, monitor) = {
+      let source = self.media_source.lock().await;
+      (source.audio.clone(), source.monitor.clone())
+    };
+    source_sender.send(Source { audio, monitor }).await?;
 
     drop(media_source);
 
