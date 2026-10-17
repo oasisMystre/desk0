@@ -67,7 +67,7 @@ jobs:
           path: ./
 
       - name: Install LLVM and clang
-        uses: kyleMayes/install-llvm@v2.0.0
+        uses: KyleMayes/install-llvm-action@v2
         with:
           version: ${{ env.LLVM_VERSION }}
 
@@ -155,7 +155,7 @@ jobs:
 
       - name: Install build runtime
         run: |
-          brew install llvm create-dmg nasm
+          brew install llvm create-dmg nasm libpq
           if command -v pkg-config &>/dev/null; then
             echo "pkg-config is already installed"
           else

@@ -1,4 +1,4 @@
-use std::{fmt::Debug, sync::Arc, time::Duration};
+use std::{fmt::Debug, sync::Arc};
 
 use audio::audio::cpal_supported_stream_config_range_to_audio_format;
 use cpal::traits::{DeviceTrait, HostTrait};

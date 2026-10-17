@@ -52,7 +52,7 @@ jobs:
           submodules: recursive
 
       - name: Install LLVM and clang
-        uses: kyleMayes/install-llvm@v2.0.0
+        uses: KyleMayes/install-llvm-action@v2
         with:
           version: ${{ env.LLVM_VERSION }}
 

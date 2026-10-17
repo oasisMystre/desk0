@@ -12,6 +12,7 @@ crate-type = ["cdylib", "staticlib"]
 pdu.workspace = true
 shared = { workspace = true, features=["otel"] }
 desk0-client = { path = "../client", default-features = false, features=["ffi"] }
+
 anyhow.workspace = true
 tracing.workspace = true
 copypaste = { workspace = true }

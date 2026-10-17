@@ -9,7 +9,7 @@ opentelemetry = ["shared/opentelemetry"]
 default = ["otel"]
 
 [dependencies]
-# internal
+# internal crates
 flow.workspace = true
 shared =  { workspace = true,  features=["postgres", "redis", "otel"]}
 
