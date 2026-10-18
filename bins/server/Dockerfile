@@ -30,7 +30,7 @@ RUN apt-get update \
     libssl3 \
     && rm -rf /var/lib/apt/lists/*
 
-COPY --from=builder /usr/src/app/target/release/server ./server
+COPY --from=builder /usr/src/app/target/release/desk0-server ./desk0-server
 
 ENV RUST_LOG=info
-ENTRYPOINT ["./server"]
+ENTRYPOINT ["./desk0-server"]
