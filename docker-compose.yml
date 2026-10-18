@@ -115,8 +115,8 @@ caddy:
 volumes:
   redis_data:
   postgres_data:
-    caddy_data:
-    caddy_config:
+  caddy_data:
+  caddy_config:
 
 networks:
   desk0:
