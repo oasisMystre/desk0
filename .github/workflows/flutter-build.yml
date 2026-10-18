@@ -20,6 +20,7 @@ env:
   LLVM_VERSION: "23.1.2"
   WINDOWS_LLVM_VERSION: "15.0.6"
   FLUTTER_VERSION: "3.47.2"
+  FLUTTER_WINDOWS_ARM_VERSION: "3.44.9"
   TAG_NAME: "${{ inputs.upload-tag }}"
 
 jobs:
@@ -75,8 +76,31 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: "stable"
-          flutter-version: ${{ env.FLUTTER_VERSION }}
           architecture: ${{ matrix.job.flutter-arch }}
+          flutter-version: ${{ matrix.job.arch == 'aarch64' && env.FLUTTER_WINDOWS_ARM_VERSION || env.FLUTTER_VERSION }}
+
+      - name: Force arm64 Dart SDK + engine
+        if: ${{ matrix.job.arch == 'aarch64' }}
+        run: |
+          $flutterRoot = "${{ steps.flutter.outputs['CACHE-PATH'] }}"
+          Write-Host "PROCESSOR_ARCHITECTURE=$env:PROCESSOR_ARCHITECTURE"
+          Write-Host "Flutter root: $flutterRoot"
+          Remove-Item -Force "$flutterRoot\bin\cache\engine-dart-sdk.stamp" -ErrorAction SilentlyContinue
+          & "$flutterRoot\bin\internal\update_dart_sdk.ps1"
+          $dartVer = & "$flutterRoot\bin\dart.bat" --version 2>&1 | Out-String
+          Write-Host $dartVer
+          if ($dartVer -notmatch "windows_arm64") {
+            Write-Error "Expected an arm64 Dart SDK but got: $dartVer"
+            exit 1
+          }
+          & "$flutterRoot\bin\flutter.bat" precache --windows
+          $engineDir = "$flutterRoot\bin\cache\artifacts\engine"
+          Write-Host "Engine artifacts present:"
+          Get-ChildItem $engineDir -Directory | Select-Object -ExpandProperty Name | Write-Host
+          if (-not (Test-Path "$engineDir\windows-arm64-release")) {
+            Write-Error "Expected windows-arm64-release engine artifacts but they are missing (wrong-arch SDK)."
+            exit 1
+          }
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -94,7 +118,7 @@ jobs:
         working-directory: viewer
 
       - name: Build Flutter Windows (.exe) (Unsigned)
-        run: flutter build windows --release
+        run: flutter build windows --release -v
         working-directory: viewer
 
       - name: Package Windows build (.exe) (Unsigned)
