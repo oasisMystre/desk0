@@ -13,6 +13,21 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+        
+  buildx:
+    env_file:
+      - .env
+    build:
+      context: .
+      dockerfile: ./workers/buildx/Dockerfile
+    restart: unless-stopped
+    networks:
+      - desk0
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
 
   redis:
     image: redis:8.8,2
