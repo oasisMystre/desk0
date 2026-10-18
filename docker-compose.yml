@@ -78,7 +78,7 @@ services:
     image: cloudflare/cloudflared:2026.9.1
     restart: unless-stopped
     networks:
-      - internal
+      - desk0
     command: tunnel run
     environment:
       - TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_ACCESS_TOKEN}
