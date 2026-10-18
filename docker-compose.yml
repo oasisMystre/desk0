@@ -83,5 +83,9 @@ services:
     environment:
       - TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_ACCESS_TOKEN}
 
+volumes:
+  redis_data:
+  postgres_data:
+
 networks:
   desk0:
