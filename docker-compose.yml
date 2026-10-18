@@ -83,5 +83,5 @@ services:
     environment:
       - TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_ACCESS_TOKEN}
 
-network:
+networks:
   desk0:
