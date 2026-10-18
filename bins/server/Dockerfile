@@ -18,7 +18,7 @@ RUN mkdir -p bins/server/src \
 RUN cargo build --release --no-default-features
 
 COPY bins/server ./bins/server
-RUN touch bins/server/src/main.rs \
+RUN touch bins/server/src/main.rs && \
     cargo build --release --no-default-features
 
 FROM debian:bookworm-slim
