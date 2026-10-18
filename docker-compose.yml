@@ -71,8 +71,8 @@ services:
       redis:
         condition: service_healthy
     environment:
-      - REDIS_URL: "${REDIS_URL}"
-      - QUEUE_NAMES: "${QUEUE_NAMES:-desk0}"
+      - REDIS_URL=${REDIS_URL}
+      - QUEUE_NAMES=${QUEUE_NAMES:-desk0}
 
   cloudflared:
     image: cloudflare/cloudflared:2026.9.1
