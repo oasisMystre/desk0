@@ -1,0 +1,3 @@
+v1.api.desk0.xyz {
+    reverse_proxy server:8080
+}
