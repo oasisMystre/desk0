@@ -8,6 +8,7 @@ services:
     restart: unless-stopped
     networks:
       - desk0
+      - proxy
     depends_on:
       postgres:
         condition: service_healthy
@@ -98,24 +99,11 @@ services:
     environment:
       - TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_ACCESS_TOKEN}
 
-  caddy:
-    image: caddy:2
-    restart: unless-stopped
-    ports:
-      - "80:80"
-      - "443:443"
-    networks:
-      - desk0
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy_data:/data
-      - caddy_config:/config
-
 volumes:
   redis_data:
   postgres_data:
-  caddy_data:
-  caddy_config:
 
 networks:
   desk0:
+  proxy:
+    external: true
