@@ -456,17 +456,14 @@ impl Desk0Viewer {
   }
 
   fn platform() -> MajorPlatformType {
-    #[cfg(target_os = "windows")]
-    return MajorPlatformType::WINDOWS;
-
-    #[cfg(target_os = "macos")]
-    return MajorPlatformType::MACINTOSH;
-
-    #[cfg(target_os = "linux")]
-    return MajorPlatformType::UNIX;
-
-    #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
-    return MajorPlatformType::UNSPECIFIED;
+    match whoami::platform() {
+      whoami::Platform::Ios => MajorPlatformType::IOS,
+      whoami::Platform::Linux => MajorPlatformType::UNIX,
+      whoami::Platform::Mac => MajorPlatformType::MACINTOSH,
+      whoami::Platform::Android => MajorPlatformType::ANDROID,
+      whoami::Platform::Windows => MajorPlatformType::WINDOWS,
+      _ => MajorPlatformType::UNSPECIFIED,
+    }
   }
 
   pub fn client_name() -> String {

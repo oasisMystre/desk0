@@ -74,5 +74,14 @@ services:
       - REDIS_URL: "${REDIS_URL}"
       - QUEUE_NAMES: "${QUEUE_NAMES:-desk0}"
 
+  cloudflared:
+    image: cloudflare/cloudflared:2026.9.1
+    restart: unless-stopped
+    networks:
+      - internal
+    command: tunnel run
+    environment:
+      - TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_ACCESS_TOKEN}
+
 network:
   desk0:
