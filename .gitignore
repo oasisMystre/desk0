@@ -11,3 +11,4 @@ bins/ffi/src/frb_generated.rs
 out
 *.sock
 identity.json
+.DS_Store
