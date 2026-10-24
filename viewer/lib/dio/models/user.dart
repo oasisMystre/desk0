@@ -12,7 +12,6 @@ class User {
   });
 
   factory User.fromJson(Map<String, dynamic> json) {
-    print(json);
     return switch (json) {
       {
         'id': String id,

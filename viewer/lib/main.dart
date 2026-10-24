@@ -10,13 +10,11 @@ import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'env.dart';
 import 'dio/index.dart';
 import 'states/index.dart';
-import 'ffi/types/rdp.dart';
 import 'screens/index.dart';
 import 'theme/app_theme.dart';
 import 'components/index.dart';
 import 'ffi/frb_generated.dart';
 import 'l10n/generated/app_localizations.dart';
-import 'components/connection/open_connection.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -82,17 +80,7 @@ final router = GoRouter(
         );
       },
       routes: [
-        GoRoute(
-          path: '/',
-          builder: (context, state) => kDebugMode
-              ? const OpenConnection(
-                  token: Env.rdpToken,
-                  endpoint: Env.rdpEndpoint,
-                  connectionType: ConnectionType.desktop,
-                  size: SseDesktopSize(width: 1280, height: 720),
-                )
-              : const HomeScreen(),
-        ),
+        GoRoute(path: '/', builder: (context, state) => const HomeScreen()),
         GoRoute(
           path: '/devices',
           builder: (context, state) => const DevicesScreen(),
@@ -148,13 +136,12 @@ class MainApplication extends StatelessWidget {
           Positioned.fill(
             child: Row(
               children: [
-                if (!kDebugMode) SideNav(),
+                SideNav(),
                 Expanded(child: child),
               ],
             ),
           ),
-          if (!kDebugMode)
-            Positioned(top: 0, left: 0, right: 0, child: Toolbar()),
+          Positioned(top: 0, left: 0, right: 0, child: Toolbar()),
         ],
       ),
     );

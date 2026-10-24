@@ -45,7 +45,7 @@ class Attachment {
           contentType: contentType,
           organization: organization,
         ),
-      _ => throw const FormatException('Failed to load attachment.'),
+      _ => throw const FormatException('Failed to deserialize attachment.'),
     };
   }
 }

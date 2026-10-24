@@ -1,13 +1,14 @@
 use axum::{
   extract::{Query, State, WebSocketUpgrade},
   http::HeaderMap,
-  response::{IntoResponse, Response},
+  response::IntoResponse,
 };
 use serde::Deserialize;
 
-use crate::routes::{
-  state::AppState,
-  ws::{agent::AgentHandler, context::WsContext, rdp::RdpHandler},
+use crate::{
+  error::SharedError,
+  routes::ws::{agent::AgentHandler, context::WsContext, rdp::RdpHandler},
+  states::AppState,
 };
 
 #[derive(Deserialize)]
@@ -17,6 +18,7 @@ pub struct WebSocketQueryParams {
 
 pub async fn ws_route(
   State(AppState {
+    context,
     ws_context: WsContext {
       hub,
       auth,
@@ -37,29 +39,32 @@ pub async fn ws_route(
       .map(|value| value.to_string())
   };
 
-  let unauthorized = Response::builder()
-    .status(401)
-    .body("Unauthorized".into())
-    .unwrap();
+  let unauthorized = SharedError::WsAuthFailed;
 
   if let Some(token) = token {
     return match auth.authenticate(&token) {
-      Ok(claims) if claims.role.as_deref() == Some("agent") => ws.on_upgrade({
-        let claims = claims.clone();
-        async move |socket| {
-          let mut handler = AgentHandler::new(hub);
-          if let Err(error) = handler.handle(socket, claims).await {
-            tracing::error!(?error, "agent session ended with error");
-          }
+      Ok(claims) if claims.role.as_deref() == Some("agent") => {
+        if let Err(error) =
+          crate::states::consume_connection_token(&context, &token, claims.jti.as_deref()).await
+        {
+          tracing::warn!(?error, "failed to consume agent connection token");
+          return unauthorized.into_response();
         }
-      }),
-      Ok(_) => Response::builder()
-        .status(401)
-        .body("invalid role".into())
-        .unwrap(),
+
+        ws.on_upgrade({
+          let claims = claims.clone();
+          async move |socket| {
+            let mut handler = AgentHandler::new(hub);
+            if let Err(error) = handler.handle(socket, claims).await {
+              tracing::error!(?error, "agent session ended with error");
+            }
+          }
+        })
+      }
+      Ok(_) => SharedError::WsInvalidRole.into_response(),
       Err(error) => {
         tracing::error!(?error, "agent WebSocket authentication failed");
-        unauthorized
+        unauthorized.into_response()
       }
     };
   }

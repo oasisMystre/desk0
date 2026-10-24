@@ -1,11 +1,12 @@
 import 'dart:math' show Point;
 import 'dart:async' show StreamSubscription;
 
-import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:get/get.dart' show Obx;
 import 'package:flutter/material.dart' hide KeyboardListener;
 import 'package:irondash_engine_context/irondash_engine_context.dart'
     show EngineContext;
+import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart'
+    show RustStreamSink;
 
 import 'mouse.dart' show MouseListener;
 import 'keyboard.dart' show KeyboardListener;
@@ -110,12 +111,9 @@ class DeviceViewerState extends State<DeviceViewer> {
         displayState.resize(width, height);
         break;
       case SseOutputEvent_PointerHidden():
-        debugPrint("pointer hide");
         displayState.hideCursor();
-
         break;
       case SseOutputEvent_PointerDefault():
-        debugPrint("pointer default");
         displayState.defaultCursor();
         break;
       case SseOutputEvent_PointerBitmap(
@@ -125,10 +123,6 @@ class DeviceViewerState extends State<DeviceViewer> {
         :final hotspotX,
         :final hotspotY,
       ):
-        debugPrint("pointer bitmap");
-        debugPrint(
-          'Received cursor: ${width}x$height, ${bitmapData.length} bytes',
-        );
         displayState.onCursorBitmap(
           width: width,
           height: height,
@@ -217,10 +211,10 @@ class DeviceViewerState extends State<DeviceViewer> {
       fit: StackFit.expand,
       children: [
         content,
-        //   if (phase != ConnectionPhase.connected)
-        //     Positioned.fill(
-        //       child: ConnectionOverlay(phase: phase, message: connectionMessage),
-        //     ),
+        if (phase != ConnectionPhase.connected)
+          Positioned.fill(
+            child: ConnectionOverlay(phase: phase, message: connectionMessage),
+          ),
       ],
     );
   }

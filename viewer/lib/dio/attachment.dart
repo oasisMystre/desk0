@@ -1,4 +1,4 @@
-import 'apl_impl.dart';
+import 'api_impl.dart';
 import 'models/attachment.dart';
 
 class AttachmentApi extends ApiImpl {
@@ -6,12 +6,8 @@ class AttachmentApi extends ApiImpl {
 
   Future<List<Attachment>> getAttachment() async {
     final response = await client.get('/attachments');
-    if (response.statusCode == 200) {
-      final result = response.data as List<Map<String, dynamic>>;
-      return result.map((data) => Attachment.fromJson(data)).toList();
-    } else {
-      throw Exception(response.data);
-    }
+    final result = response.data as List<Map<String, dynamic>>;
+    return result.map((data) => Attachment.fromJson(data)).toList();
   }
 
   Future<Attachment> createAttachment(
@@ -23,12 +19,8 @@ class AttachmentApi extends ApiImpl {
       data: {'filename': filename, 'contentType': contentType},
     );
 
-    if (response.statusCode == 200) {
-      final result = response.data as Map<String, dynamic>;
-      return Attachment.fromJson(result);
-    } else {
-      throw Exception(response.data);
-    }
+    final result = response.data as Map<String, dynamic>;
+    return Attachment.fromJson(result);
   }
 
   Future<Attachment> updateAttachment(String id, bool uploaded) async {
@@ -37,12 +29,8 @@ class AttachmentApi extends ApiImpl {
       data: {'uploaded': uploaded},
     );
 
-    if (response.statusCode == 200) {
-      final result = response.data as Map<String, dynamic>;
-      return Attachment.fromJson(result);
-    } else {
-      throw Exception(response.data);
-    }
+    final result = response.data as Map<String, dynamic>;
+    return Attachment.fromJson(result);
   }
 
   Future<Attachment> deleteAttachment(String id, bool uploaded) async {
@@ -51,11 +39,7 @@ class AttachmentApi extends ApiImpl {
       data: {'uploaded': uploaded},
     );
 
-    if (response.statusCode == 200) {
-      final result = response.data as Map<String, dynamic>;
-      return Attachment.fromJson(result);
-    } else {
-      throw Exception(response.data);
-    }
+    final result = response.data as Map<String, dynamic>;
+    return Attachment.fromJson(result);
   }
 }

@@ -1,4 +1,4 @@
-import 'apl_impl.dart';
+import 'api_impl.dart';
 import 'models/user.dart';
 import 'models/organization.dart';
 
@@ -26,36 +26,24 @@ class CreateUser {
 class UserApi extends ApiImpl {
   const UserApi({required super.client});
 
-  // Future<User> getUser() async {
-  //   final response = await http.get(buildPath('user'));
+  Future<User> getUser() async {
+    final response = await client.get('user');
 
-  //   if (response.statusCode == 200) {
-  //     final result = response.data as Map<String, dynamic>;
-  //     return User.fromJson(result);
-  //   } else {
-  //     throw Exception(response.body);
-  //   }
-  // }
+    final result = response.data as Map<String, dynamic>;
+    return User.fromJson(result);
+  }
 
   Future<CreateUser> createUser() async {
     final response = await client.post('/users');
 
-    if (response.statusCode == 200) {
-      final result = response.data as Map<String, dynamic>;
-      return CreateUser.fromJson(result);
-    } else {
-      throw Exception(response.data);
-    }
+    final result = response.data as Map<String, dynamic>;
+    return CreateUser.fromJson(result);
   }
 
   Future<User> deleteUser() async {
     final response = await client.delete('/user');
 
-    if (response.statusCode == 200) {
-      final result = response.data as Map<String, dynamic>;
-      return User.fromJson(result);
-    } else {
-      throw Exception(response.data);
-    }
+    final result = response.data as Map<String, dynamic>;
+    return User.fromJson(result);
   }
 }

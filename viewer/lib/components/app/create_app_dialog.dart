@@ -18,7 +18,7 @@ class CreateAppDialog extends StatelessWidget {
             Column(
               children: [
                 Text(
-                  "Drag and drop your executable file",
+                  "Drag and drop your executable files",
                   style: TextTheme.of(context).labelLarge
                       ?.copyWith(color: Colors.white),
                 ),

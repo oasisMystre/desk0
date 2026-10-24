@@ -9,6 +9,7 @@ use crate::schema::devices;
 pub struct Device {
   pub id: uuid::Uuid,
   pub os: Option<String>,
+  pub pubkey: Vec<u8>,
   pub hostname: Option<String>,
   pub username: Option<String>,
   pub version: Option<String>,

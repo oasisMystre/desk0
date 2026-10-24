@@ -1,7 +1,8 @@
 import {
-  jsonb,
   uuid,
   text,
+  bytea,
+  jsonb,
   boolean,
   pgTable,
   timestamp,
@@ -23,6 +24,7 @@ export const devices = pgTable("devices", {
   hostname: text(),
   username: text(),
   version: text(),
+  pubkey: bytea().notNull(),
   favorite: boolean().default(false),
   metadata: jsonb().$type<DeviceMetadata>(),
   organization: uuid()

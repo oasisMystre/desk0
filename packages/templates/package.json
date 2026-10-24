@@ -1,0 +1,20 @@
+{
+  "name": "@workspace/templates",
+  "private": true,
+  "scripts": {
+    "build": "bun run src/index.tsx"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@tsconfig/bun": "=1.0.11",
+    "@types/react": "=19.3.0"
+  },
+  "peerDependencies": {
+    "typescript": "=7"
+  },
+  "dependencies": {
+    "react": "=19.3.1",
+    "react-email": "=6.11.3",
+    "@react-email/components": "=1.0.12"
+  }
+}

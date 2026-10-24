@@ -3,9 +3,9 @@ import assert from "assert";
 import { tmpdir } from "os";
 import { format } from "util";
 import { randomUUID } from "crypto";
-import { createReadStream, existsSync } from "fs";
 import { spawn } from "child_process";
 import { Upload } from "@aws-sdk/lib-storage";
+import { createReadStream, existsSync } from "fs";
 import { DeleteObjectCommand, type S3Client } from "@aws-sdk/client-s3";
 import { copyFile, mkdir, mkdtemp, rm, stat, writeFile } from "fs/promises";
 import { agentAssets, attachments, type Database } from "@workspace/datasource";
@@ -25,7 +25,14 @@ export const buildMsi = (
 ) => {
   return new Promise<void>((resolve, reject) => {
     const errorLogs: string[] = [];
-    const args = ["build", source, "-arch", arch, "-d", format('Version=%d.0.0', version)];
+    const args = [
+      "build",
+      source,
+      "-arch",
+      arch,
+      "-d",
+      format("Version=%d.0.0", version),
+    ];
     if (publishDir) args.push("-d", format("PublishDir=%s", publishDir));
 
     args.push("-o", output, "-v");
@@ -111,7 +118,14 @@ export const bundleWindowAgentAsMsi = async (
       ),
     ]);
 
-    await buildMsi(installerWxs, output, archBuildDir, arch, payload.version, distDir);
+    await buildMsi(
+      installerWxs,
+      output,
+      archBuildDir,
+      arch,
+      payload.version,
+      distDir,
+    );
   };
 
   await runner();

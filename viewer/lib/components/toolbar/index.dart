@@ -40,7 +40,7 @@ class Toolbar extends StatelessWidget {
               children: [
                 TabIconButton(
                   data: TabIconData(
-                    name: "New Application",
+                    name: "New Agent",
                     icon: (color) {
                       return SvgPicture.asset(
                         'assets/icons/add.svg',
