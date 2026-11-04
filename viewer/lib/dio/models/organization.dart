@@ -1,8 +1,6 @@
 class Organization {
-  final String id;
-  final String? name;
   final String? user;
-  final String createdAt;
+  final String id, name, createdAt;
 
   const Organization({
     required this.id,
@@ -15,7 +13,7 @@ class Organization {
     return switch (json) {
       {
         'id': String id,
-        'name': String? name,
+        'name': String name,
         'user': String? user,
         'created_at': String createdAt,
       } =>

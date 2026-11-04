@@ -45,6 +45,7 @@ pub async fn main() -> anyhow::Result<()> {
     .nest("/devices", routes::devices::routes::router())
     .nest("/agents", routes::agent::routes::router())
     .nest("/attachments", routes::attachments::routes::router())
+    .nest("/applications", routes::applications::routes::router())
     .route("/ws", get(routes::ws::websocket::ws_route))
     .fallback(|| async { SharedError::EndpointNotFound })
     .layer(TraceLayer::new_for_http())

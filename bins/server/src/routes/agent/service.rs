@@ -2,11 +2,15 @@ use std::collections::HashMap;
 
 use bullmq::Queue;
 use diesel::result::{DatabaseErrorKind, Error::DatabaseError};
+use uuid::Uuid;
 
 use super::{
-  dto::{Agents, GenerateAgentPayload, GenerateAgentRequest},
+  dto::{
+    Agents, BuildAgentPayload, BuildAgentRequest, BuildAgentResponse, BuildAgentStatusRequest,
+    BuildAgentStatusResponse,
+  },
   error::AgentError,
-  models::Agent,
+  models::{Agent, AgentAsset},
   repository::AgentRepository,
 };
 use crate::context::Context;
@@ -18,14 +22,13 @@ impl AgentService {
     context: &Context,
     queue: &Queue,
     organization: uuid::Uuid,
-    request: GenerateAgentRequest,
-  ) -> Result<Agent, AgentError> {
+    request: BuildAgentRequest,
+  ) -> Result<BuildAgentResponse, AgentError> {
     let mut connection = context.get_pg().await?;
 
     let mut retries = 0;
     let agent = loop {
-      let result =
-        AgentRepository::allocate_and_create_agent(&mut connection, organization).await;
+      let result = AgentRepository::allocate_and_create_agent(&mut connection, organization).await;
 
       match result {
         Ok(agent) => break agent,
@@ -47,7 +50,7 @@ impl AgentService {
       }
     };
 
-    let payload = GenerateAgentPayload {
+    let payload = BuildAgentPayload {
       agent: agent.id,
       os: request.os,
       version: agent.version,
@@ -59,12 +62,69 @@ impl AgentService {
       AgentError::PayloadSerializationFailed
     })?;
 
-    queue.add("build-agent", data).await.map_err(|error| {
+    let job = queue.add("build-agent", data).await.map_err(|error| {
       tracing::error!(?error, "failed to add payload to build-agent queue");
       AgentError::QueueFailed
     })?;
 
-    Ok(agent)
+    Ok(BuildAgentResponse {
+      agent,
+      job: job.id().to_owned(),
+    })
+  }
+
+  pub async fn get_agent_build_status(
+    context: &Context,
+    request: BuildAgentStatusRequest,
+    queue: &Queue,
+    organization: uuid::Uuid,
+  ) -> Result<BuildAgentStatusResponse, AgentError> {
+    let mut connection = context.get_pg().await?;
+
+    let state = queue.get_job_state(&request.job).await.map_err(|error| {
+      tracing::error!(?error, "failed to fetch build asset job state");
+      AgentError::FetchQueueFailed
+    })?;
+
+    Ok(match state {
+      bullmq::JobState::Completed => {
+        let assets = AgentRepository::find_agent_assets_by_agent_and_organization(
+          &mut connection,
+          request.asset,
+          organization,
+        )
+        .await
+        .map_err(|error| {
+          tracing::error!(?error, "failed to fetch agent assets");
+          AgentError::AssetFetchFailed
+        })?;
+
+        BuildAgentStatusResponse {
+          state,
+          error: None,
+          assets: Some(assets),
+        }
+      }
+      bullmq::JobState::Failed => {
+        let job = queue.get_job(&request.job).await.map_err(|error| {
+          tracing::error!(?error, "failed to fetch build asset job");
+          AgentError::FetchQueueFailed
+        })?;
+
+        let error = job.map(|job| job.failed_reason().to_owned());
+
+        BuildAgentStatusResponse {
+          state,
+          error,
+          assets: None,
+        }
+      }
+      state => BuildAgentStatusResponse {
+        state,
+        error: None,
+        assets: None,
+      },
+    })
   }
 
   pub async fn get_agents(
@@ -73,38 +133,33 @@ impl AgentService {
   ) -> Result<Vec<Agents>, AgentError> {
     let mut connection = context.get_pg().await?;
 
-    let agent_rows =
-      AgentRepository::find_agents_by_organization(&mut connection, organization)
-        .await
-        .map_err(|error| {
-          tracing::error!(?error, "failed to fetch agents");
-          AgentError::FetchFailed
-        })?;
+    let agents = AgentRepository::find_agents_by_organization(&mut connection, organization)
+      .await
+      .map_err(|error| {
+        tracing::error!(?error, "failed to fetch agents");
+        AgentError::FetchFailed
+      })?;
 
-    let mut result = Vec::with_capacity(agent_rows.len());
+    let mut grouped: HashMap<Uuid, (Agent, HashMap<i32, Vec<AgentAsset>>)> = HashMap::new();
 
-    for agent in agent_rows {
-      let asset_rows = AgentRepository::find_assets_by_agent(&mut connection, agent.id)
-        .await
-        .map_err(|error| {
-          tracing::error!(?error, agent_id = %agent.id, "failed to fetch agent assets");
-          AgentError::AssetsFetchFailed
-        })?;
+    for (agent, asset) in agents {
+      let (_, versions) = grouped
+        .entry(agent.id)
+        .or_insert_with(|| (agent, HashMap::new()));
 
-      let mut assets = HashMap::new();
-
-      for asset in asset_rows {
-        assert_eq!(
-          asset.version, agent.version,
-          "agent asset version must match its agent version"
-        );
-
-        assets.insert(asset.version, asset);
-      }
-
-      result.push(Agents { agent, assets });
+      versions
+        .entry(asset.version)
+        .or_insert_with(Vec::new)
+        .push(asset);
     }
 
-    Ok(result)
+    Ok(
+      grouped
+        .into_values()
+        .map(|(agent, assets)| {
+          return Agents { agent, assets };
+        })
+        .collect(),
+    )
   }
 }

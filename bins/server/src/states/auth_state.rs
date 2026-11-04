@@ -225,6 +225,7 @@ impl FromRequestParts<AppState> for AuthenticatedUser {
         let (user_id, session_id) = Self::validate_user_claims(&claims)?;
 
         let org_id = org_id
+          .filter(|value| !value.is_empty())
           .map(|value| {
             value.parse::<uuid::Uuid>().map_err(|error| {
               tracing::error!(?error, "invalid organization id header");

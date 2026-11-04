@@ -1,7 +1,9 @@
 use std::{collections::BTreeMap, sync::Arc};
 
+use base64::{Engine, engine::general_purpose::STANDARD};
 use chrono::Utc;
 use deadpool_redis::redis::{AsyncTypedCommands, RedisResult, Script, aio::MultiplexedConnection};
+use diesel_async::AsyncConnection;
 use jwt::SignWithKey;
 use rand::{RngExt, rng};
 use resend_rs::types::CreateEmailBaseOptions;
@@ -15,11 +17,11 @@ use super::{
     VerifyOtpResponse,
   },
   error::AuthError,
-  models::{RefreshToken, Session},
-  repository::AuthRepository,
+  models::{Organization, RefreshToken, Session},
+  repository::{AuthRepository, RefreshRotationOutcome},
 };
 use crate::{
-  context::Context, error::SharedError, routes::auth::repository::RefreshRotationOutcome,
+  context::Context, error::SharedError, routes::organizations::repository::OrganizationRepository,
 };
 
 const SESSION_DURATION_DAYS: i64 = 30;
@@ -93,9 +95,17 @@ impl AuthService {
     let email_options = CreateEmailBaseOptions::new(
       "Desk0 <noreply@desk0.xyz>",
       [email],
-      "%s is your Desk0 sign-in code".to_string(),
+      format!("{} is your Desk0 sign-in code", otp),
     )
-    .with_html(&EMAIL_OTP_TEMPLATE.replace("__OTP_CODE__", &otp));
+    .with_html(
+      &EMAIL_OTP_TEMPLATE
+        .replace("__OTP_CODE__", &otp)
+        .replace("__APP_NAME", "Desk0")
+        .replace(
+          "__OTP_EXPIRES_IN_MINUTES__",
+          &(OTP_EXPIRES_IN_SECS / 60).to_string(),
+        ),
+    );
 
     let _ = context
       .resend
@@ -148,86 +158,109 @@ impl AuthService {
       if is_valid {
         let mut postgres = context.get_pg().await?;
 
-        let user = AuthRepository::upsert_user(&mut postgres, &email)
-          .await
-          .map_err(|error| {
-            tracing::error!(?error, "failed to get user");
-            AuthError::UserCreateFailed
-          })?;
+        let response = postgres
+          .transaction::<_, AuthError, _>(async |connection| {
+            let (user, is_new_user) = AuthRepository::upsert_user(connection, &email)
+              .await
+              .map_err(|error| {
+                tracing::error!(?error, "failed to get user");
+                AuthError::UserCreateFailed
+              })?;
 
-        let now = Utc::now();
-        let session_id = Uuid::new_v4();
-        let session_expires_at = now + chrono::Duration::days(SESSION_DURATION_DAYS);
+            if is_new_user {
+              OrganizationRepository::create(
+                connection,
+                &Organization {
+                  user: user.id,
+                  created_at: Utc::now(),
+                  id: uuid::Uuid::new_v4(),
+                  name: Some("default".to_owned()),
+                },
+              )
+              .await
+              .map_err(|error| {
+                tracing::error!(?error, "failed to create organization for new user");
+                AuthError::OrganizationCreateFailed
+              })?;
+            }
 
-        let raw_token_bytes: [u8; 32] = rng().random();
-        let refresh_token_string = hex::encode(raw_token_bytes);
-        let token_hash = Sha256::digest(&raw_token_bytes).to_vec();
+            let now = Utc::now();
+            let session_id = Uuid::new_v4();
+            let session_expires_at = now + chrono::Duration::days(SESSION_DURATION_DAYS);
 
-        AuthRepository::create_session_with_refresh_token(
-          &mut postgres,
-          Session {
-            id: session_id,
-            user: user.id,
-            user_agent,
-            ip_address,
-            expires_at: session_expires_at,
-            created_at: now,
-            last_used_at: Some(now),
-            revoked_at: None,
-          },
-          RefreshToken {
-            id: Uuid::new_v4(),
-            session: session_id,
-            token: token_hash,
-            expires_at: session_expires_at,
-            created_at: now,
-            consumed_at: None,
-            revoked_at: None,
-          },
-        )
-        .await
-        .map_err(|error| {
-          tracing::error!(
-            ?error,
-            "failed to create user session and refresh token in transaction"
-          );
-          AuthError::SessionCreateFailed
-        })?;
+            let raw_token_bytes: [u8; 32] = rng().random();
+            let refresh_token_string = STANDARD.encode(raw_token_bytes);
+            let token_hash = Sha256::digest(&raw_token_bytes).to_vec();
 
-        let now = Utc::now().timestamp();
+            AuthRepository::create_session_with_refresh_token(
+              connection,
+              Session {
+                id: session_id,
+                user: user.id,
+                user_agent,
+                ip_address,
+                expires_at: session_expires_at,
+                created_at: now,
+                last_used_at: Some(now),
+                revoked_at: None,
+              },
+              RefreshToken {
+                id: Uuid::new_v4(),
+                session: session_id,
+                token: token_hash,
+                expires_at: session_expires_at,
+                created_at: now,
+                consumed_at: None,
+                revoked_at: None,
+              },
+            )
+            .await
+            .map_err(|error| {
+              tracing::error!(
+                ?error,
+                "failed to create user session and refresh token in transaction"
+              );
+              AuthError::SessionCreateFailed
+            })?;
 
-        let mut claims = BTreeMap::new();
-        claims.insert("role", "user".into());
-        claims.insert("iat", now.to_string());
-        claims.insert("sub", user.id.to_string());
-        claims.insert("sid", session_id.to_string());
-        claims.insert("exp", (now + ACCESS_TOKEN_TTL_SECS).to_string());
+            let now = Utc::now().timestamp();
 
-        deadpool_redis::redis::pipe()
-          .cmd("DEL")
-          .arg(otp_redis_key)
-          .cmd("DEL")
-          .arg(otp_attempts_key)
-          .exec_async(&mut redis)
-          .await
-          .map_err(|error| {
-            tracing::error!(?error, "failed to delete otp from redis");
-            SharedError::RedisOperation
-          })?;
+            let mut claims = BTreeMap::new();
+            claims.insert("role", "user".into());
+            claims.insert("iat", now.to_string());
+            claims.insert("sub", user.id.to_string());
+            claims.insert("sid", session_id.to_string());
+            claims.insert("exp", (now + ACCESS_TOKEN_TTL_SECS).to_string());
 
-        let token = claims
-          .sign_with_key(&Arc::unwrap_or_clone(context.auth_key.clone()))
-          .map_err(|error| {
-            tracing::error!(?error, "claim sign error");
-            AuthError::TokenSignFailed
-          })?;
+            deadpool_redis::redis::pipe()
+              .cmd("DEL")
+              .arg(otp_redis_key)
+              .cmd("DEL")
+              .arg(otp_attempts_key)
+              .exec_async(&mut redis)
+              .await
+              .map_err(|error| {
+                tracing::error!(?error, "failed to delete otp from redis");
+                SharedError::RedisOperation
+              })?;
 
-        return Ok(VerifyOtpResponse {
-          token,
-          user,
-          refresh_token: refresh_token_string,
-          session_id,
-        });
+            let token = claims
+              .sign_with_key(&Arc::unwrap_or_clone(context.auth_key.clone()))
+              .map_err(|error| {
+                tracing::error!(?error, "claim sign error");
+                AuthError::TokenSignFailed
+              })?;
+
+            Ok(VerifyOtpResponse {
+              token,
+              user,
+              refresh_token: refresh_token_string,
+              session_id,
+            })
+          })
+          .await?;
+
+        return Ok(response);
       }
     }
 
@@ -238,14 +271,15 @@ impl AuthService {
     context: &Context,
     raw_refresh_token: String,
   ) -> Result<RefreshTokenResponse, AuthError> {
-    let token_bytes =
-      hex::decode(raw_refresh_token.trim()).map_err(|_| AuthError::InvalidRefreshToken)?;
+    let token_bytes = STANDARD
+      .decode(raw_refresh_token.trim())
+      .map_err(|_| AuthError::InvalidRefreshToken)?;
     let token_hash = Sha256::digest(&token_bytes).to_vec();
 
     let now = Utc::now();
 
     let new_raw_token: [u8; 32] = rng().random();
-    let new_refresh_token = hex::encode(new_raw_token);
+    let new_refresh_token = STANDARD.encode(new_raw_token);
     let new_token_hash = Sha256::digest(&new_raw_token).to_vec();
 
     let new_expires_at = now + chrono::Duration::days(SESSION_DURATION_DAYS);

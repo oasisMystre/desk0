@@ -1,12 +1,14 @@
 use std::time::Duration;
 
+use base64::{Engine, engine::general_purpose::STANDARD};
+use ed25519_dalek::Signer;
 use futures::{SinkExt, StreamExt};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio_tungstenite::{connect_async, tungstenite::Message};
 use tokio_util::sync::CancellationToken;
 
 use crate::{
-  api::Api,
+  api::{Api, device::CreateConnectionTokenRequest},
   server::{
     identity::Identity,
     server::{AgentServer, AgentServerConfig},
@@ -52,7 +54,26 @@ impl AgentTunnel {
   }
 
   async fn connect(&self, cancellation_token: CancellationToken) -> anyhow::Result<()> {
-    let token = self.api.device.get_token(&self.identity.device_id).await?;
+    let challenge = self
+      .api
+      .device
+      .get_challenge(&self.identity.device_id)
+      .await?;
+    let signature = self
+      .identity
+      .signing_key()
+      .sign(challenge.challenge.as_bytes());
+    let token = self
+      .api
+      .device
+      .get_token(
+        &self.identity.device_id,
+        CreateConnectionTokenRequest {
+          challenge: challenge.challenge,
+          signature: STANDARD.encode(signature.to_bytes()),
+        },
+      )
+      .await?;
     let url = self.websocket_url(&token);
 
     tracing::info!("connecting agent WebSocket");

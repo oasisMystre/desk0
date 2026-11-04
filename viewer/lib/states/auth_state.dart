@@ -5,20 +5,21 @@ import 'package:dio/dio.dart' show DioException;
 import 'package:shared_preferences/shared_preferences.dart'
     show SharedPreferences;
 
-import '../../dio/index.dart' show Api, User, AuthResponse;
+import '../../dio/index.dart' show Api, User, AuthResponse, Organization;
 
 class AuthState extends GetxController {
   static const accessTokenCacheKey = "accessToken";
+  static const refreshTokenCacheKey = "refreshToken";
 
-  late final Api api;
+  final Api api;
   final SharedPreferences sharedPreferences;
 
   RxBool ready = false.obs;
   Rx<User?> user = null.obs;
+  Rx<Organization?> organization = null.obs;
+  RxList<Organization> organizations = <Organization>[].obs;
 
-  AuthState(this.sharedPreferences) {
-    api = Get.find<Api>();
-  }
+  AuthState({required this.api, required this.sharedPreferences});
 
   Future<void> init() async {
     final cachedToken = sharedPreferences.getString(accessTokenCacheKey);
@@ -46,14 +47,24 @@ class AuthState extends GetxController {
   }
 
   Future<AuthResponse> verifyOTP(String otp) async {
-    final response = await api.auth.verifyOTP(otp);
-    final apiUser = response.user;
+    final response = await api.auth.verifyOtp(otp);
     final token = response.token;
+    final apiUser = response.user;
 
     user.value = apiUser;
     api.updateAccessToken(token);
+
     await sharedPreferences.setString(accessTokenCacheKey, token);
+    await sharedPreferences.setString(
+      refreshTokenCacheKey,
+      response.refreshToken,
+    );
 
     return response;
+  }
+
+  void setOrganization(Organization? value) {
+    organization.value = value;
+    if (value != null) api.updateOrganizationId(value.id);
   }
 }

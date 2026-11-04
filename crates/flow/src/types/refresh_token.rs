@@ -12,7 +12,7 @@ pub struct RefreshToken {
   pub id: Uuid,
   pub session: Uuid,
   pub token: Vec<u8>,
-  #[diesel(column_name = "expiredAt")]
+  #[diesel(column_name = "expiresAt")]
   pub expires_at: DateTime<Utc>,
   #[diesel(column_name = "createdAt")]
   pub created_at: DateTime<Utc>,

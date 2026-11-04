@@ -1,5 +1,6 @@
 import { jsonb, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 
+import { os } from "./enums";
 import { attachments } from "./attachments";
 import { organizations } from "./organizations";
 
@@ -16,8 +17,9 @@ type Scripts = {
 };
 
 export const applications = pgTable("applications", {
-  id: uuid().defaultRandom().notNull(),
+  id: uuid().defaultRandom().primaryKey(),
   name: text().notNull(),
+  os: os().notNull(),
   image: uuid().references(() => attachments.id, { onDelete: "set null" }),
   asset: uuid()
     .references(() => attachments.id, { onDelete: "cascade" })

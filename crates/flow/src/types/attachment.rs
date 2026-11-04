@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::attachments;
 
-#[derive(HasQuery, Insertable, Serialize, Deserialize, Default)]
+#[derive(HasQuery, Insertable, Serialize, Deserialize, Default, Clone, Debug)]
 #[diesel(table_name = attachments)]
 pub struct Attachment {
   pub id: uuid::Uuid,

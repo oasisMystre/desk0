@@ -1,5 +1,6 @@
 use std::{collections::BTreeMap, sync::Arc};
 
+use base64::{Engine, engine::general_purpose::STANDARD};
 use chrono::Utc;
 use deadpool_redis::redis::AsyncCommands;
 use ed25519_dalek::{Signature, Verifier, VerifyingKey};
@@ -57,12 +58,12 @@ impl DeviceService {
       os: device.os,
       created_at: now,
       last_logged_in: now,
+      id: uuid::Uuid::new_v4(),
       version: device.version,
       metadata: device.metadata,
       hostname: device.hostname,
       username: device.username,
       organization: device.organization,
-      ..Default::default()
     };
 
     let mut connection = context.get_pg().await?;
@@ -135,7 +136,7 @@ impl DeviceService {
       })?;
 
     let challenge_bytes: [u8; 32] = rng().random();
-    let challenge = hex::encode(challenge_bytes);
+    let challenge = STANDARD.encode(challenge_bytes);
 
     let mut redis = context.get_redis().await?;
     let key = Self::get_redis_challenge_key(&device_id);
@@ -204,7 +205,7 @@ impl DeviceService {
     let verifying_key =
       VerifyingKey::from_bytes(&pubkey_bytes).map_err(|_| DeviceError::InvalidPublicKey)?;
 
-    let signature_bytes = hex::decode(&body.signature).map_err(|error| {
+    let signature_bytes = STANDARD.decode(&body.signature).map_err(|error| {
       tracing::error!(?error, "failed to hex decode signature");
       DeviceError::InvalidSignature
     })?;
@@ -219,7 +220,7 @@ impl DeviceService {
     let is_verified = match verifying_key.verify(body.challenge.as_bytes(), &signature) {
       Ok(()) => true,
       Err(_) => {
-        if let Ok(raw) = hex::decode(&body.challenge) {
+        if let Ok(raw) = STANDARD.decode(&body.challenge) {
           verifying_key.verify(&raw, &signature).is_ok()
         } else {
           false

@@ -1,4 +1,4 @@
-import 'package:desk0/dio/models/attachment.dart';
+import 'attachment.dart' show Attachment;
 
 class AgentAsset {
   final int version;
@@ -20,14 +20,14 @@ class AgentAsset {
         "arch": String arch,
         "agent": String agent,
         "version": num version,
-        "attachment": dynamic attachment,
+        "attachment": Map<String, dynamic> attachment,
       } =>
         AgentAsset(
           os: os,
           arch: arch,
           agent: agent,
           version: version.toInt(),
-          attachment: Attachment.fromJson(attachment as Map<String, dynamic>),
+          attachment: Attachment.fromJson(attachment),
         ),
       _ => throw const FormatException("Failed to deserialize agent asset."),
     };

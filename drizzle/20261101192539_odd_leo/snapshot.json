@@ -1,9 +1,9 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "d5ad09a1-5584-40cd-80d7-cfb7285adb35",
+  "id": "24060143-7293-4a57-9665-8b87f48457f4",
   "prevIds": [
-    "6c404cba-75d8-4465-87da-f466cf71617a"
+    "00000000-0000-0000-0000-000000000000"
   ],
   "ddl": [
     {
@@ -26,13 +26,13 @@
     },
     {
       "isRlsEnabled": false,
-      "name": "agent_assets",
+      "name": "agents",
       "entityType": "tables",
       "schema": "public"
     },
     {
       "isRlsEnabled": false,
-      "name": "agents",
+      "name": "agent_assets",
       "entityType": "tables",
       "schema": "public"
     },
@@ -63,6 +63,18 @@
     {
       "isRlsEnabled": false,
       "name": "organizations",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "applications",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "device_applications",
       "entityType": "tables",
       "schema": "public"
     },
@@ -117,6 +129,58 @@
       "entityType": "columns",
       "schema": "public",
       "table": "users"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "gen_random_uuid()",
+      "generated": null,
+      "identity": null,
+      "name": "id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "agents"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "organization",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "agents"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "version",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "agents"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "createdAt",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "agents"
     },
     {
       "type": "uuid",
@@ -194,58 +258,6 @@
       "name": "id",
       "entityType": "columns",
       "schema": "public",
-      "table": "agents"
-    },
-    {
-      "type": "uuid",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "organization",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "agents"
-    },
-    {
-      "type": "integer",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "version",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "agents"
-    },
-    {
-      "type": "timestamp with time zone",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": "now()",
-      "generated": null,
-      "identity": null,
-      "name": "createdAt",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "agents"
-    },
-    {
-      "type": "uuid",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": "gen_random_uuid()",
-      "generated": null,
-      "identity": null,
-      "name": "id",
-      "entityType": "columns",
-      "schema": "public",
       "table": "devices"
     },
     {
@@ -296,6 +308,19 @@
       "generated": null,
       "identity": null,
       "name": "version",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "devices"
+    },
+    {
+      "type": "bytea",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "pubkey",
       "entityType": "columns",
       "schema": "public",
       "table": "devices"
@@ -717,6 +742,175 @@
       "table": "organizations"
     },
     {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "gen_random_uuid()",
+      "generated": null,
+      "identity": null,
+      "name": "id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "applications"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "name",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "applications"
+    },
+    {
+      "type": "os",
+      "typeSchema": "public",
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "os",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "applications"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "image",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "applications"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "asset",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "applications"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "organization",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "applications"
+    },
+    {
+      "type": "jsonb",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "scripts",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "applications"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "createdAt",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "applications"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "gen_random_uuid()",
+      "generated": null,
+      "identity": null,
+      "name": "id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "device_applications"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "device",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "device_applications"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "application",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "device_applications"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "organization",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "device_applications"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "createdAt",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "device_applications"
+    },
+    {
       "nameExplicit": false,
       "columns": [
         {
@@ -736,6 +930,23 @@
       "entityType": "indexes",
       "schema": "public",
       "table": "agent_assets"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        "organization"
+      ],
+      "schemaTo": "public",
+      "tableTo": "organizations",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "agents_organization_organizations_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "agents"
     },
     {
       "nameExplicit": false,
@@ -770,23 +981,6 @@
       "entityType": "fks",
       "schema": "public",
       "table": "agent_assets"
-    },
-    {
-      "nameExplicit": false,
-      "columns": [
-        "organization"
-      ],
-      "schemaTo": "public",
-      "tableTo": "organizations",
-      "columnsTo": [
-        "id"
-      ],
-      "onUpdate": "NO ACTION",
-      "onDelete": "CASCADE",
-      "name": "agents_organization_organizations_id_fkey",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "agents"
     },
     {
       "nameExplicit": false,
@@ -874,6 +1068,110 @@
       "table": "organizations"
     },
     {
+      "nameExplicit": false,
+      "columns": [
+        "image"
+      ],
+      "schemaTo": "public",
+      "tableTo": "attachments",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "SET NULL",
+      "name": "applications_image_attachments_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "applications"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        "asset"
+      ],
+      "schemaTo": "public",
+      "tableTo": "attachments",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "applications_asset_attachments_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "applications"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        "organization"
+      ],
+      "schemaTo": "public",
+      "tableTo": "organizations",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "applications_organization_organizations_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "applications"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        "application"
+      ],
+      "schemaTo": "public",
+      "tableTo": "applications",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "device_applications_application_applications_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "device_applications"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        "organization"
+      ],
+      "schemaTo": "public",
+      "tableTo": "organizations",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "device_applications_organization_organizations_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "device_applications"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        "device",
+        "organization"
+      ],
+      "schemaTo": "public",
+      "tableTo": "devices",
+      "columnsTo": [
+        "id",
+        "organization"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "device_applications_device_organization_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "device_applications"
+    },
+    {
       "columns": [
         "agent",
         "os",
@@ -921,6 +1219,26 @@
         "id"
       ],
       "nameExplicit": false,
+      "name": "refresh_tokens_pkey",
+      "schema": "public",
+      "table": "refresh_tokens",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "sessions_pkey",
+      "schema": "public",
+      "table": "sessions",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
       "name": "attachments_pkey",
       "schema": "public",
       "table": "attachments",
@@ -934,6 +1252,26 @@
       "name": "organizations_pkey",
       "schema": "public",
       "table": "organizations",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "applications_pkey",
+      "schema": "public",
+      "table": "applications",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "device_applications_pkey",
+      "schema": "public",
+      "table": "device_applications",
       "entityType": "pks"
     },
     {
@@ -951,6 +1289,18 @@
     {
       "nameExplicit": false,
       "columns": [
+        "id",
+        "organization"
+      ],
+      "nullsNotDistinct": false,
+      "name": "devices_id_organization_unique",
+      "entityType": "uniques",
+      "schema": "public",
+      "table": "devices"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
         "user",
         "name"
       ],
@@ -959,6 +1309,17 @@
       "entityType": "uniques",
       "schema": "public",
       "table": "organizations"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        "uid"
+      ],
+      "nullsNotDistinct": false,
+      "name": "users_uid_key",
+      "schema": "public",
+      "table": "users",
+      "entityType": "uniques"
     },
     {
       "nameExplicit": true,

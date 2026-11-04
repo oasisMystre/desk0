@@ -3,8 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../states/app_state.dart' show AppState, ListType;
 import '../states/device_state.dart' show DeviceState;
-import '../components/connection/index.dart'
-    show ConnectionCard, ConnectionListItem;
+import '../features/index.dart' show ConnectionCard, ConnectionListItem;
 
 class DevicesScreen extends StatelessWidget {
   const DevicesScreen({super.key});
@@ -36,10 +35,10 @@ class DevicesScreen extends StatelessWidget {
           left: appState.isSideNavOpened.value ? 0 : 8,
         ),
         gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
-          maxCrossAxisExtent: isList ? 280 : 150,
-          mainAxisExtent: isList ? 48 : 72,
-          crossAxisSpacing: 8,
           mainAxisSpacing: 8,
+          crossAxisSpacing: 8,
+          mainAxisExtent: isList ? 48 : 72,
+          maxCrossAxisExtent: isList ? 280 : 150,
         ),
         itemBuilder: (context, index) {
           final device = devices[index];

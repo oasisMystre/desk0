@@ -1,3 +1,3 @@
-
-pub use flow::{refresh_token::RefreshToken, session::Session, user::User};
-
+pub use flow::{
+  organization::Organization, refresh_token::RefreshToken, session::Session, user::User,
+};

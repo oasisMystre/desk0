@@ -16,7 +16,7 @@ class PlatformImageCard extends StatelessWidget {
       case "linux":
         return SvgPicture.asset("assets/icons/linux.svg");
       default:
-        return SvgPicture.asset("assets/icons");
+        return SvgPicture.asset("assets/icons/screen.svg");
     }
   }
 

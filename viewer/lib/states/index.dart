@@ -1,6 +1,9 @@
 export 'app_state.dart' show AppState;
+export 'auth_state.dart' show AuthState;
+export 'agent_state.dart' show AgentState;
 export 'display_state.dart' show DisplayState;
-export 'device_state.dart' show DeviceState, FavoriteState;
+export 'device_state.dart' show DeviceState;
+export 'application_state.dart' show ApplicationState;
 export 'io_channel_state.dart' show IoStaticChannelState;
 export 'app_installer_state.dart' show AppInstallerState;
 export 'terminal_channel_state.dart' show TerminalStaticChannelState;

@@ -6,8 +6,9 @@ import 'package:liquid_glass_widgets/widgets/interactive/glass_button.dart'
 
 import 'connection_menu.dart' show ConnectionMenu;
 import '../../dio/models/device.dart' show Device;
-import '../../states/index.dart' show FavoriteState;
+import '../../states/device_state.dart' show DeviceState;
 import 'platform_image_card.dart' show PlatformImageCard;
+import '../../error.dart' show handleHttpErrorFromContext;
 
 class ConnectionCard extends StatefulWidget {
   final Device device;
@@ -23,7 +24,8 @@ class ConnectionCard extends StatefulWidget {
 class ConnectionCardState extends State<ConnectionCard> {
   bool hovered = false;
 
-  late Device device = widget.device;
+  late final Device device = widget.device;
+  final DeviceState deviceState = Get.find<DeviceState>();
 
   void toggleHovered(bool? value) {
     if (value != null) {
@@ -86,7 +88,12 @@ class ConnectionCardState extends State<ConnectionCard> {
                       ),
                     ),
                     onTap: () async {
-                      await Get.find<FavoriteState>().toggle(device);
+                      await handleHttpErrorFromContext(
+                        context,
+                        () => deviceState.toggleFavorite(device.id),
+                        "Failed to add device to favorites",
+                      );
+
                       if (mounted) setState(() {});
                     },
                   ),
@@ -104,19 +111,19 @@ class ConnectionCardState extends State<ConnectionCard> {
                   Text(
                     device.username!,
                     style: theme.textTheme.bodySmall?.copyWith(
+                      height: 1.2,
                       color: Colors.white,
                       fontWeight: FontWeight.w600,
-                      height: 1.2,
                     ),
                   ),
                 if (device.os != null)
                   Text(
                     device.os!,
                     style: theme.textTheme.labelSmall?.copyWith(
+                      height: 1.0,
                       fontSize: 9,
                       color: Colors.white70,
                       fontWeight: FontWeight.w300,
-                      height: 1.0,
                     ),
                     overflow: TextOverflow.ellipsis,
                   ),

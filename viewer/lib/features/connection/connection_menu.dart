@@ -3,6 +3,7 @@ import 'package:get/get.dart' show Get, Inst;
 import 'package:flutter_svg/svg.dart' show SvgPicture;
 import 'package:multiview_desktop/multiview_desktop.dart'
     show openWindow, WindowOptions, TitleBarStyle;
+
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart'
     show
         GlassMenu,
@@ -13,23 +14,28 @@ import 'package:liquid_glass_widgets/liquid_glass_widgets.dart'
 
 import '../../env.dart' show Env;
 import '../../dio/index.dart' show Api, Device;
+import '../../states/index.dart' show DeviceState;
 import '../../theme/app_theme.dart' show AppColors;
-import '../../states/index.dart' show DeviceState, FavoriteState;
+import '../../error.dart' show handleHttpErrorFromContext;
 import 'open_connection.dart' show OpenConnection, ConnectionType;
+import '../../l10n/generated/app_localizations.dart' show AppLocalizations;
 
 class ConnectionMenu extends StatelessWidget {
   final Device device;
   final Widget Function(void Function() toggle)? trigger;
 
-  const ConnectionMenu({super.key, required this.device, this.trigger});
+  late final DeviceState deviceState = Get.find();
+
+  ConnectionMenu({super.key, required this.device, this.trigger});
 
   Future<void> openViewer(BuildContext context) async {
     final api = Get.find<Api>();
     final desktopSize = device.metadata.size;
 
-    try {
+    handleHttpErrorFromContext(context, () async {
       final token = await api.organization.createConnectionToken(device.id);
       if (!context.mounted) return;
+
       await openWindow(
         (_, _) => OpenConnection(
           token: token,
@@ -39,30 +45,31 @@ class ConnectionMenu extends StatelessWidget {
         ),
         parentContext: context,
         options: WindowOptions(
-          title: device.hostname ?? device.username ?? 'Desk0 Viewer',
+          title: device.hostname != null ? device.hostname : device.username,
+          windowButtonVisibility: true,
+          minimumSize: const Size(640, 360),
+          titleBarStyle: TitleBarStyle.normal,
           size: Size(
             desktopSize.width.toDouble(),
             desktopSize.height.toDouble(),
           ),
-          minimumSize: const Size(640, 360),
-          titleBarStyle: TitleBarStyle.normal,
-          windowButtonVisibility: true,
         ),
       );
-    } catch (error) {
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('Unable to connect: $error')));
-    }
+    }, "Unable to connect to device");
   }
 
-  Future<void> _toggleFavorite() async {
-    await Get.find<FavoriteState>().toggle(device);
+  Future<void> toggleFavorite(BuildContext context) async {
+    await handleHttpErrorFromContext(
+      context,
+      () => deviceState.toggleFavorite(device.id),
+      "Failed to add device to favorites",
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final i10n = AppLocalizations.of(context)!;
 
     return GlassMenu(
       itemBorderRadius: 0,
@@ -90,7 +97,7 @@ class ConnectionMenu extends StatelessWidget {
       },
       items: [
         GlassMenuItem(
-          title: "Connect",
+          title: i10n.connect_button,
           icon: SvgPicture.asset(
             "assets/icons/connect.svg",
             width: 20,
@@ -106,7 +113,7 @@ class ConnectionMenu extends StatelessWidget {
           onTap: () => openViewer(context),
         ),
         GlassMenuItem(
-          title: "Terminal",
+          title: i10n.terminal_button,
           icon: SvgPicture.asset(
             "assets/icons/terminal.svg",
             width: 20,
@@ -122,7 +129,7 @@ class ConnectionMenu extends StatelessWidget {
           onTap: () {},
         ),
         GlassMenuItem(
-          title: "Install App",
+          title: i10n.install_app_button,
           icon: SvgPicture.asset(
             "assets/icons/install_app.svg",
             width: 20,
@@ -138,7 +145,9 @@ class ConnectionMenu extends StatelessWidget {
           onTap: () {},
         ),
         GlassMenuItem(
-          title: device.favorite ? "Remove from Favorites" : "Add to Favorites",
+          title: device.favorite
+              ? i10n.remove_favorite_title
+              : i10n.add_favorite_title,
           icon: SvgPicture.asset(
             "assets/icons/star.svg",
             width: 20,
@@ -151,10 +160,10 @@ class ConnectionMenu extends StatelessWidget {
           titleStyle: theme.textTheme.labelMedium?.copyWith(
             color: Colors.white70,
           ),
-          onTap: _toggleFavorite,
+          onTap: () => toggleFavorite(context),
         ),
         GlassMenuItem(
-          title: "Delete",
+          title: i10n.delete_button,
           icon: SvgPicture.asset(
             "assets/icons/trash.svg",
             width: 20,
@@ -178,12 +187,14 @@ class ConnectionMenu extends StatelessWidget {
 
 class DeleteConfirmationDialog extends StatelessWidget {
   final Device device;
+  late final DeviceState deviceState = Get.find();
 
-  const DeleteConfirmationDialog({super.key, required this.device});
+  DeleteConfirmationDialog({super.key, required this.device});
 
   @override
   Widget build(BuildContext context) {
     final theme = TextTheme.of(context);
+    final i10n = AppLocalizations.of(context)!;
 
     return Dialog(
       elevation: 0,
@@ -203,7 +214,7 @@ class DeleteConfirmationDialog extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    "Delete device?",
+                    i10n.delete_dialog_title,
                     style: theme.titleSmall?.copyWith(
                       color: AppColors.textPrimary,
                       fontWeight: FontWeight.w600,
@@ -211,7 +222,7 @@ class DeleteConfirmationDialog extends StatelessWidget {
                   ),
 
                   Text(
-                    "Device will be deleted permanently.",
+                    i10n.delete_dialog_subtitle,
                     style: theme.bodySmall?.copyWith(
                       color: AppColors.textSecondary,
                       height: 1.3,
@@ -232,7 +243,7 @@ class DeleteConfirmationDialog extends StatelessWidget {
                     onPressed: () {
                       Navigator.of(context).pop();
                     },
-                    child: Text("Cancel"),
+                    child: Text(i10n.cancel_button),
                   ),
                 ),
                 Expanded(
@@ -241,21 +252,15 @@ class DeleteConfirmationDialog extends StatelessWidget {
                       backgroundColor: Colors.redAccent,
                     ),
                     child: Text(
-                      "Delete",
+                      i10n.delete_button,
                       style: TextStyle(color: AppColors.textPrimary),
                     ),
                     onPressed: () async {
-                      try {
-                        await Get.find<DeviceState>().deleteDevice(device.id);
-                        if (context.mounted) Navigator.of(context).pop();
-                      } catch (error) {
-                        if (!context.mounted) return;
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text('Unable to delete device: $error'),
-                          ),
-                        );
-                      }
+                      await handleHttpErrorFromContext(
+                        context,
+                        () => deviceState.deleteDevice(device.id),
+                        "Failed to delete device",
+                      );
                     },
                   ),
                 ),

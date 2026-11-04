@@ -1,7 +1,8 @@
 use chrono::{DateTime, Utc};
 use diesel::{
   ExpressionMethods, OptionalExtension, QueryDsl, SelectableHelper,
-  dsl::{insert_into, update},
+  dsl::{insert_into, sql, update},
+  sql_types::Bool,
 };
 use diesel_async::{AsyncConnection, AsyncPgConnection, RunQueryDsl};
 use flow::{refresh_tokens, sessions, user::User, users};
@@ -23,14 +24,14 @@ impl AuthRepository {
   pub async fn upsert_user(
     connection: &mut AsyncPgConnection,
     email: &str,
-  ) -> Result<User, diesel::result::Error> {
+  ) -> Result<(User, bool), diesel::result::Error> {
     insert_into(users::table)
       .values(users::uid.eq(Some(email)))
       .on_conflict(users::uid)
       .do_update()
       .set(users::uid.eq(users::uid))
-      .returning(User::as_returning())
-      .get_result(connection)
+      .returning((User::as_returning(), sql::<Bool>("xmax = 0")))
+      .get_result::<(User, bool)>(connection)
       .await
   }
 

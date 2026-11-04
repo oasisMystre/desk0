@@ -56,6 +56,11 @@ dependencies:
   terminal_view: ^0.4.0
   xterm: ^4.0.0
   uuid: ^4.6.0
+  dio_cache_interceptor: ^4.0.7
+  http_cache_hive_store: ^5.1.1
+  path_provider: ^2.1.6
+  file_picker: ^13.3.2
+  desktop_drop: ^0.8.0
 
 dev_dependencies:
   freezed: ^3.1.0
@@ -72,6 +77,7 @@ dev_dependencies:
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
   build_runner: ^2.4.6
+  flutter_launcher_icons: ^0.14.4
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
@@ -113,3 +119,19 @@ flutter:
   #
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/to/font-from-package
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/icons/app_icon.jpg"
+  remove_alpha_ios: true
+  web:
+    generate: true
+    background_color: "#000000"
+    theme_color: "#000000"
+  windows:
+    generate: true
+  linux:
+    generate: true
+  macos:
+    generate: true

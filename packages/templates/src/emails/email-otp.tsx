@@ -17,11 +17,7 @@ interface OtpEmailProps {
   expiresInMinutes: string;
 }
 
-export function EmailOTP({
-  otp,
-  appName,
-  expiresInMinutes,
-}: OtpEmailProps) {
+export function EmailOTP({ otp, appName, expiresInMinutes }: OtpEmailProps) {
   return (
     <Html>
       <Head />

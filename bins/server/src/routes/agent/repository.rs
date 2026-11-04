@@ -1,5 +1,5 @@
 use diesel::{
-  ExpressionMethods, QueryDsl, SelectableHelper,
+  BoolExpressionMethods, ExpressionMethods, JoinOnDsl, QueryDsl, SelectableHelper,
   dsl::{insert_into, max},
 };
 use diesel_async::{AsyncConnection, AsyncPgConnection, RunQueryDsl};
@@ -44,20 +44,27 @@ impl AgentRepository {
   pub async fn find_agents_by_organization(
     connection: &mut AsyncPgConnection,
     organization: uuid::Uuid,
-  ) -> Result<Vec<Agent>, diesel::result::Error> {
+  ) -> Result<Vec<(Agent, AgentAsset)>, diesel::result::Error> {
     agents::table
+      .inner_join(agent_assets::table.on(agent_assets::agent.eq(agents::id)))
       .filter(agents::organization.eq(organization))
-      .select(Agent::as_select())
-      .load::<Agent>(connection)
+      .select((Agent::as_select(), AgentAsset::as_select()))
+      .load::<(Agent, AgentAsset)>(connection)
       .await
   }
 
-  pub async fn find_assets_by_agent(
+  pub async fn find_agent_assets_by_agent_and_organization(
     connection: &mut AsyncPgConnection,
-    agent_id: uuid::Uuid,
+    agent: uuid::Uuid,
+    organization: uuid::Uuid,
   ) -> Result<Vec<AgentAsset>, diesel::result::Error> {
     agent_assets::table
-      .filter(agent_assets::agent.eq(agent_id))
+      .inner_join(agents::table.on(agents::id.eq(agent_assets::agent)))
+      .filter(
+        agent_assets::agent
+          .eq(agent)
+          .and(agents::organization.eq(organization)),
+      )
       .select(AgentAsset::as_select())
       .load::<AgentAsset>(connection)
       .await

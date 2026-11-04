@@ -1,14 +1,24 @@
-import 'api_impl.dart';
-import 'models/agent.dart';
+import 'api_impl.dart' show ApiImpl;
+import 'models/agent.dart' show Agent, BuildAgent, BuildAgentStatus;
 
 class AgentApi extends ApiImpl {
   AgentApi({required super.client});
 
-  Future<Agent> createAgent(List<String> os) async {
+  Future<BuildAgent> createAgent(List<String> os) async {
     final response = await client.post("agents", data: {"os": os});
 
     final result = response.data;
-    return Agent.fromJson(result as Map<String, dynamic>);
+    return BuildAgent.fromJson(result as Map<String, dynamic>);
+  }
+
+  Future<BuildAgentStatus> getAgentStatus(String job, String agent) async {
+    final response = await client.post(
+      "agents/status",
+      data: {"job": job, "agent": agent},
+    );
+
+    final result = response.data;
+    return BuildAgentStatus.fromJson(result as Map<String, dynamic>);
   }
 
   Future<List<Agent>> getAgents() async {

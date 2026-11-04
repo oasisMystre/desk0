@@ -1,6 +1,4 @@
-use diesel::{
-  BoolExpressionMethods, ExpressionMethods, HasQuery, QueryDsl, SelectableHelper,
-};
+use diesel::{BoolExpressionMethods, ExpressionMethods, HasQuery, QueryDsl, SelectableHelper};
 use diesel_async::{AsyncPgConnection, RunQueryDsl};
 use flow::{attachment::Attachment, attachments};
 
@@ -21,10 +19,10 @@ impl AttachmentRepository {
 
   pub async fn create(
     connection: &mut AsyncPgConnection,
-    attachment: &Attachment,
+    attachments: &[Attachment],
   ) -> Result<(), diesel::result::Error> {
     diesel::insert_into(attachments::table)
-      .values(attachment)
+      .values(attachments)
       .execute(connection)
       .await?;
     Ok(())

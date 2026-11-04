@@ -1,10 +1,9 @@
 import 'package:get/get.dart';
 import 'package:flutter/material.dart';
 
+import '../states/device_state.dart' show DeviceState;
 import '../states/app_state.dart' show AppState, ListType;
-import '../states/device_state.dart' show DeviceState, FavoriteState;
-import '../components/connection/index.dart'
-    show ConnectionCard, ConnectionListItem;
+import '../features/index.dart' show ConnectionCard, ConnectionListItem;
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -13,7 +12,6 @@ class HomeScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final AppState appState = Get.find();
     final DeviceState deviceState = Get.find();
-    final FavoriteState favoriteState = Get.find();
 
     return Obx(() {
       if (deviceState.isLoading.value && deviceState.devices.isEmpty) {
@@ -26,10 +24,10 @@ class HomeScreen extends StatelessWidget {
         );
       }
 
-      final devices = deviceState.devices
-          .where(favoriteState.isFavorite)
-          .toList(growable: false);
       final isList = appState.deviceTabListType.value == ListType.list;
+      final devices = deviceState.devices
+          .where((device) => device.favorite)
+          .toList(growable: false);
 
       return GridView.builder(
         itemCount: devices.length,
@@ -39,10 +37,10 @@ class HomeScreen extends StatelessWidget {
           left: appState.isSideNavOpened.value ? 0 : 8,
         ),
         gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
-          maxCrossAxisExtent: isList ? 280 : 150,
-          mainAxisExtent: isList ? 48 : 72,
-          crossAxisSpacing: 8,
           mainAxisSpacing: 8,
+          crossAxisSpacing: 8,
+          mainAxisExtent: isList ? 48 : 72,
+          maxCrossAxisExtent: isList ? 280 : 150,
         ),
         itemBuilder: (context, index) {
           final device = devices[index];

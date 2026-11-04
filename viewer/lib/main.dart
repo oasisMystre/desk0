@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:get/instance_manager.dart';
@@ -7,9 +6,11 @@ import 'package:multiview_desktop/multiview_desktop.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 
+
 import 'env.dart';
 import 'dio/index.dart';
 import 'states/index.dart';
+import 'screens/auth.dart';
 import 'screens/index.dart';
 import 'theme/app_theme.dart';
 import 'components/index.dart';
@@ -22,38 +23,24 @@ void main() async {
   await RustLib.init();
   await LiquidGlassWidgets.initialize();
 
-  final Api api = Api(baseUrl: Env.apiBaseUrl);
-
   final sharedPreferences = await SharedPreferences.getInstance();
-  final guestUser = sharedPreferences.getStringList('user');
+  final api = Api(
+    baseUrl: Env.apiBaseUrl,
+    sharedPreferences: sharedPreferences,
+  );
 
-  late String user, organization;
+  final AuthState authState = AuthState(
+    api: api,
+    sharedPreferences: sharedPreferences,
+  );
 
-  if (guestUser == null) {
-    final response = await api.user.createUser();
-    await sharedPreferences.setStringList('user', [
-      response.user.id,
-      response.organization.id,
-    ]);
-    user = response.user.id;
-    organization = response.organization.id;
-  } else {
-    [user, organization] = guestUser;
-  }
-
-  api.updateUserId(user);
-  api.updateOrganizationId(organization);
-
-  final deviceState = DeviceState();
-  final favoriteState = FavoriteState(sharedPreferences);
+  await authState.init();
 
   Get.put(api);
+  Get.put(authState);
   Get.put(AppState());
-  Get.put(deviceState);
-  Get.put(favoriteState);
-
-  await deviceState.loadDevices();
-  await favoriteState.loadFavorites();
+  Get.put(DeviceState(api: api));
+  Get.put(ApplicationState(api: api));
 
   runMultiApp(
     home: (context, publicId) => const MainApplication(),
@@ -64,6 +51,7 @@ void main() async {
         titleBarStyle: TitleBarStyle.hidden,
         windowButtonVisibility: true,
         backgroundColor: Colors.transparent,
+        minimumSize: const Size(512, 320),
       ),
     ),
   );
@@ -72,6 +60,7 @@ void main() async {
 final router = GoRouter(
   initialLocation: '/',
   routes: [
+    GoRoute(path: '/auth', builder: (context, state) => const AuthScreen()),
     ShellRoute(
       builder: (context, state, child) {
         return LiquidGlassWidgets.wrap(

@@ -15,10 +15,12 @@ pub enum AgentError {
   PayloadSerializationFailed,
   #[error("Failed to enqueue agent build job")]
   QueueFailed,
+  #[error("Failed to fetch agent build job")]
+  FetchQueueFailed,
   #[error("Failed to retrieve agents")]
   FetchFailed,
-  #[error("Failed to retrieve agent assets")]
-  AssetsFetchFailed,
+  #[error("Failed to retrieve agents assets")]
+  AssetFetchFailed,
   #[error(transparent)]
   Shared(#[from] SharedError),
 }
@@ -30,8 +32,9 @@ impl AgentError {
       Self::CreateFailed
       | Self::PayloadSerializationFailed
       | Self::QueueFailed
+      | Self::FetchQueueFailed
       | Self::FetchFailed
-      | Self::AssetsFetchFailed => StatusCode::INTERNAL_SERVER_ERROR,
+      | Self::AssetFetchFailed => StatusCode::INTERNAL_SERVER_ERROR,
       Self::Shared(shared) => shared.status(),
     }
   }
@@ -40,9 +43,10 @@ impl AgentError {
     match self {
       Self::QueueFailed => "AGENT_QUEUE_ERROR",
       Self::FetchFailed => "AGENT_FETCH_ERROR",
+      Self::FetchQueueFailed => "QUEUE_FETCH_ERROR",
+      Self::AssetFetchFailed => "ASSET_FETCH_ERROR",
       Self::CreateFailed => "AGENT_CREATE_ERROR",
       Self::VersionConflict => "AGENT_VERSION_CONFLICT",
-      Self::AssetsFetchFailed => "AGENT_ASSETS_FETCH_ERROR",
       Self::PayloadSerializationFailed => "AGENT_PAYLOAD_ERROR",
       Self::Shared(shared) => shared.code(),
     }

@@ -2,7 +2,7 @@ mod dto;
 mod error;
 mod handlers;
 mod models;
-mod repository;
 mod service;
 
+pub(crate) mod repository;
 pub mod routes;

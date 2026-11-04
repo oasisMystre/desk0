@@ -1,12 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/cupertino.dart';
 import 'package:get/get.dart' show Get, Inst;
 import 'package:flutter_svg/svg.dart' show SvgPicture;
 
 import './tab_list_type.dart' show TabListType;
 import '../search_input.dart' show SearchInput;
 import '../../states/app_state.dart' show AppState;
-import '../app/create_app_dialog.dart' show CreateAppDialog;
 import './tab_icon_button.dart'
     show TabIconButton, TabIconData, TabIconGroupButton;
 
@@ -50,15 +48,7 @@ class Toolbar extends StatelessWidget {
                       );
                     },
                   ),
-                  onPressed: () {
-                    showCupertinoDialog(
-                      context: context,
-                      barrierDismissible: true,
-                      builder: (context) {
-                        return Dialog(child: CreateAppDialog());
-                      },
-                    );
-                  },
+                  onPressed: () {},
                 ),
                 TabIconButton(
                   data: TabIconData(

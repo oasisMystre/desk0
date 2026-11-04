@@ -1,5 +1,5 @@
-import 'api_impl.dart';
-import 'models/organization.dart';
+import 'api_impl.dart' show ApiImpl;
+import 'models/organization.dart' show Organization;
 
 class OrganizationApi extends ApiImpl {
   const OrganizationApi({required super.client});

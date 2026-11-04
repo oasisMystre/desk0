@@ -42,7 +42,7 @@ impl OrganizationService {
         user,
         name: request.name,
         created_at: Utc::now(),
-        ..Default::default()
+        id: uuid::Uuid::new_v4(),
       },
     )
     .await

@@ -5,7 +5,7 @@ use uuid::Uuid;
 
 use crate::{agent_assets, agents, os::AgentOs};
 
-#[derive(HasQuery, Insertable, Serialize, Deserialize)]
+#[derive(HasQuery, Insertable, Serialize, Deserialize, Clone, Debug)]
 #[diesel(table_name = agents)]
 pub struct Agent {
   pub id: Uuid,
@@ -15,7 +15,7 @@ pub struct Agent {
   pub created_at: DateTime<Utc>,
 }
 
-#[derive(HasQuery, Insertable, Serialize, Deserialize)]
+#[derive(HasQuery, Insertable, Serialize, Deserialize, Clone, Debug)]
 #[diesel(table_name = agent_assets)]
 pub struct AgentAsset {
   pub agent: Uuid,

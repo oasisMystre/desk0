@@ -124,6 +124,8 @@ class DisplayState extends GetxController {
     return destination;
   }
 
-  static int alignDown(int v, int a) => (v ~/ a) * a;
-  static int alignUp(int v, int a) => ((v + a - 1) ~/ a) * a;
+  static int alignDown(int value, int alignment) =>
+      (value ~/ alignment) * alignment;
+  static int alignUp(int value, int alignment) =>
+      ((value + alignment - 1) ~/ alignment) * alignment;
 }

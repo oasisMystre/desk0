@@ -1,15 +1,8 @@
-import 'package:shared_preferences/shared_preferences.dart'
-    show SharedPreferences;
+import 'dart:developer';
+
+import 'package:dio/dio.dart';
 import 'package:get/get.dart'
-    show
-        Get,
-        Inst,
-        RxList,
-        RxSet,
-        GetxController,
-        ListExtension,
-        SetExtension,
-        BoolExtension;
+    show Get, Inst, RxList, GetxController, ListExtension, BoolExtension;
 
 import '../dio/index.dart' show Api;
 import '../dio/models/device.dart' show Device;
@@ -18,75 +11,81 @@ enum OrderBy { asc, desc }
 
 enum SortBy { deviceName, timeLastConnected, manual }
 
-class FavoriteState extends GetxController {
-  static const _storageKey = 'favorite_device_ids';
-
-  final SharedPreferences preferences;
-  final RxList<Device> favorites = <Device>[].obs;
-  final RxSet<String> favoriteIds = <String>{}.obs;
-
-  FavoriteState(this.preferences);
-
-  Future<void> load() async {}
-
-  Future<void> loadFavorites() async {
-    favoriteIds.assignAll(
-      preferences.getStringList(_storageKey)?.toSet() ?? <String>{},
-    );
-  }
-
-  bool isFavorite(Device device) {
-    return favoriteIds.contains(device.id) || device.favorite;
-  }
-
-  Future<void> toggle(Device device) async {
-    final nextValue = !isFavorite(device);
-    device.favorite = nextValue;
-
-    if (nextValue) {
-      favoriteIds.add(device.id);
-    } else {
-      favoriteIds.remove(device.id);
-    }
-
-    await preferences.setStringList(_storageKey, favoriteIds.toList());
-    favorites.assignAll(Get.find<DeviceState>().devices.where(isFavorite));
-  }
-
-  void sync(List<Device> devices) {
-    for (final device in devices) {
-      device.favorite = isFavorite(device);
-    }
-    favorites.assignAll(devices.where(isFavorite));
-  }
-
-  List<Device> get() => favorites;
-}
-
 class DeviceState extends GetxController {
+  final Api api;
   final RxList<Device> devices = <Device>[].obs;
-  final isLoading = false.obs;
+  final RxList<Device> favorites = <Device>[].obs;
+
   Object? error;
+  final isLoading = false.obs;
+
+  DeviceState({required this.api});
 
   Future<void> loadDevices() async {
-    final Api api = Get.find();
     isLoading.value = true;
     error = null;
     try {
       final List<Device> response = await api.device.getDevices();
       devices.assignAll(response);
-      if (Get.isRegistered<FavoriteState>()) {
-        Get.find<FavoriteState>().sync(response);
-      }
-    } catch (value) {
-      error = value;
+    } on DioException catch (response, stackTrace) {
+      final data = response.response?.data;
+      final message = data is Map ? data['message'] as String? : null;
+
+      error = message == null ? "Failed to load devices" : message;
+
+      log(
+        'Failed to load devices',
+        name: 'desk0.devices',
+        error: response,
+        stackTrace: stackTrace,
+      );
+    } catch (value, stackTrace) {
+      error = 'Unexpected error loading devices';
+
+      log(
+        'Failed to load devices',
+        name: 'desk0.devices',
+        error: value,
+        stackTrace: stackTrace,
+      );
     } finally {
       isLoading.value = false;
     }
   }
 
+  Future<void> toggleFavorite(String deviceId) async {
+    final int index = devices.indexWhere((value) => value.id == deviceId);
+    if (index == -1) return;
+
+    final device = devices[index];
+    final previousFavoriteValue = device.favorite;
+
+    device.favorite = !previousFavoriteValue;
+    devices.refresh();
+
+    try {
+      final Api api = Get.find();
+      final updated = await api.device.updateDevice(device.id, {
+        'favorite': device.favorite,
+      });
+
+      devices[index] = updated;
+    } catch (error, stackTrace) {
+      device.favorite = previousFavoriteValue;
+      devices.refresh();
+
+      log(
+        'Failed to toggle device favorite',
+        name: 'desk0.devices',
+        error: error,
+        stackTrace: stackTrace,
+      );
+
+      rethrow;
+    }
+  }
+
   Future<void> deleteDevice(String device) async {
-    final Api api = Get.find();
     final Device response = await api.device.deleteDevice(device);
     devices.removeWhere((value) => value.id == response.id);
   }

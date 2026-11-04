@@ -6,8 +6,21 @@
   "reconnecting_retries": "Reconnecting ({attempt}/{maximumAttempts})…",
   "@reconnecting_retries": {
     "placeholders": {
-      "attempt": { "type": "int" },
-      "maximumAttempts": { "type": "int" }
+      "attempt": {
+        "type": "int"
+      },
+      "maximumAttempts": {
+        "type": "int"
+      }
     }
-  }
+  },
+  "install_app_button": "Install App",
+  "terminal_button": "Terminal",
+  "connect_button": "Connect",
+  "delete_button": "Delete",
+  "cancel_button": "Cancel",
+  "delete_dialog_title": "Delete device?",
+  "delete_dialog_subtitle": "Device will be deleted permanently.",
+  "add_favorite_title": "Add to Favorites",
+  "remove_favorite_title": "Remove from Favorites"
 }

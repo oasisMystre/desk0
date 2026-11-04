@@ -1,27 +1,5 @@
-import 'api_impl.dart';
-import 'models/user.dart';
-import 'models/organization.dart';
-
-class CreateUser {
-  final User user;
-  final Organization organization;
-
-  const CreateUser({required this.user, required this.organization});
-
-  factory CreateUser.fromJson(Map<String, dynamic> json) {
-    return switch (json) {
-      {
-        'user': Map<String, dynamic> user,
-        'organization': Map<String, dynamic> organization,
-      } =>
-        CreateUser(
-          user: User.fromJson(user),
-          organization: Organization.fromJson(organization),
-        ),
-      _ => throw const FormatException("failed to load user"),
-    };
-  }
-}
+import 'api_impl.dart' show ApiImpl;
+import 'models/user.dart' show User;
 
 class UserApi extends ApiImpl {
   const UserApi({required super.client});
@@ -33,12 +11,6 @@ class UserApi extends ApiImpl {
     return User.fromJson(result);
   }
 
-  Future<CreateUser> createUser() async {
-    final response = await client.post('/users');
-
-    final result = response.data as Map<String, dynamic>;
-    return CreateUser.fromJson(result);
-  }
 
   Future<User> deleteUser() async {
     final response = await client.delete('/user');

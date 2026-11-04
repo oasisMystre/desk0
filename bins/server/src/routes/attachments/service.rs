@@ -1,6 +1,7 @@
 use std::time::Duration;
 
 use aws_sdk_s3::presigning::PresigningConfig;
+use chrono::Utc;
 use shared::env::FromEnv;
 
 use super::{
@@ -41,10 +42,11 @@ impl AttachmentService {
       AttachmentError::ConfigError
     })?;
 
-    let presigning_config = PresigningConfig::expires_in(Duration::from_mins(30)).map_err(|error| {
-      tracing::error!(?error, "failed to create presigning config");
-      AttachmentError::PresignFailed
-    })?;
+    let presigning_config =
+      PresigningConfig::expires_in(Duration::from_mins(30)).map_err(|error| {
+        tracing::error!(?error, "failed to create presigning config");
+        AttachmentError::PresignFailed
+      })?;
 
     let presigned = context
       .s3
@@ -77,10 +79,10 @@ impl AttachmentService {
       organization: org_id,
       public_url: public_url.clone(),
       content_type: body.content_type.clone(),
-      ..Default::default()
+      created_at: Utc::now(),
     };
 
-    AttachmentRepository::create(&mut connection, &attachment)
+    AttachmentRepository::create(&mut connection, &[attachment])
       .await
       .map_err(|error| {
         tracing::error!(?error, "failed to insert attachment");

@@ -19,6 +19,8 @@ pub enum AuthError {
   TokenSignFailed,
   #[error("Failed to retrieve or create user account")]
   UserCreateFailed,
+  #[error("Failed to retrieve or create organization for user")]
+  OrganizationCreateFailed,
   #[error("Failed to store OTP in cache")]
   OtpStorageFailed,
   #[error("Too many failed OTP attempts. Please request a new code.")]
@@ -47,6 +49,7 @@ impl AuthError {
       | Self::OtpSendFailed
       | Self::TokenSignFailed
       | Self::UserCreateFailed
+      | Self::OrganizationCreateFailed
       | Self::SessionCreateFailed
       | Self::SessionFetchFailed
       | Self::SessionRevokeFailed => StatusCode::INTERNAL_SERVER_ERROR,
@@ -69,8 +72,19 @@ impl AuthError {
       Self::TooManyOtpAttempts => "TOO_MANY_OTP_ATTEMPTS",
       Self::SessionCreateFailed => "SESSION_CREATE_ERROR",
       Self::SessionRevokeFailed => "SESSION_REVOKE_ERROR",
-
+      Self::OrganizationCreateFailed => "ORGANIZATION_CREATE_FAILED",
       Self::Shared(shared) => shared.code(),
+    }
+  }
+}
+
+impl From<diesel::result::Error> for AuthError {
+  fn from(value: diesel::result::Error) -> Self {
+    match value {
+      error => {
+        tracing::error!(?error, "application database operation failed");
+        SharedError::DatabaseOperation.into()
+      }
     }
   }
 }

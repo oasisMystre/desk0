@@ -1,5 +1,5 @@
-import 'api_impl.dart';
-import 'models/attachment.dart';
+import 'api_impl.dart' show ApiImpl;
+import 'models/attachment.dart' show Attachment;
 
 class AttachmentApi extends ApiImpl {
   const AttachmentApi({required super.client});

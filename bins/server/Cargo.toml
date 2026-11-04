@@ -10,10 +10,11 @@ default = ["otel"]
 
 [dependencies]
 # internal crates
-flow.workspace = true
+flow = { workspace = true, features = ["axum"] }
 shared =  { workspace = true,  features=["postgres", "redis", "otel"]}
 
 jwt.workspace = true
+rand.workspace = true 
 sha2.workspace = true
 hmac.workspace = true
 uuid.workspace = true
@@ -21,34 +22,33 @@ clap.workspace = true
 strum.workspace = true
 tokio.workspace = true
 serde.workspace = true
+base64.workspace = true 
 anyhow.workspace = true
 futures.workspace = true
 tracing.workspace = true
+thiserror.workspace = true
 serde_json.workspace = true
 tokio-util.workspace = true
 diesel-async.workspace = true
+ed25519-dalek.workspace = true 
 deadpool-redis.workspace = true
 ironrdp-rdcleanpath.workspace = true
 
 rcgen = "0.14.10"
 dashmap = "6.2.1"
+subtle = "2.6.1"
 diesel = "2.3.12"
 chrono = "0.4.45"
 rmp-serde = "1.3.1"
 aws-config = "1.11.0"
+resend-rs = "0.35.0"
 aws-sdk-s3 = "1.144.0"
 futures-util = "0.3.34"
 bullmq-official = "1.3.5"
-axum =  { version = "0.8.9", features = ["ws"] }
 tower-http = { version="0.7.1", features=["trace"]}
-resend-rs = "0.35.0"
-rand = "0.10.3"
-subtle = "2.6.1"
 ipnet = { version = "2.12.2", features = ["serde"] }
-hex = "0.4.3"
-tower = "0.5.3"
-ed25519-dalek = { version = "=3.0.0-rc.1", features = ["rand_core"] }
-thiserror.workspace = true
+axum =  { workspace = true, features = ["ws", "multipart"] }
+
 
 [package.metadata.cargo-machete]
 ignored = ["bullmq-official"]
