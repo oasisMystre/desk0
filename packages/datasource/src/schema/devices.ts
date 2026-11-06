@@ -1,10 +1,12 @@
 import {
-  jsonb,
   uuid,
   text,
+  bytea,
+  jsonb,
   boolean,
   pgTable,
   timestamp,
+  unique,
 } from "drizzle-orm/pg-core";
 
 import { organizations } from "./organizations";
@@ -17,17 +19,22 @@ type DeviceMetadata = {
   };
 };
 
-export const devices = pgTable("devices", {
-  id: uuid().defaultRandom().primaryKey(),
-  os: text(),
-  hostname: text(),
-  username: text(),
-  version: text(),
-  favorite: boolean().default(false),
-  metadata: jsonb().$type<DeviceMetadata>(),
-  organization: uuid()
-    .references(() => organizations.id, { onDelete: "cascade" })
-    .notNull(),
-  lastLoggedIn: timestamp({ withTimezone: true }).defaultNow().notNull(),
-  createdAt: timestamp({ withTimezone: true }).defaultNow().notNull(),
-});
+export const devices = pgTable(
+  "devices",
+  {
+    id: uuid().defaultRandom().primaryKey(),
+    os: text(),
+    hostname: text(),
+    username: text(),
+    version: text(),
+    pubkey: bytea().notNull(),
+    favorite: boolean().default(false),
+    metadata: jsonb().$type<DeviceMetadata>(),
+    organization: uuid()
+      .references(() => organizations.id, { onDelete: "cascade" })
+      .notNull(),
+    lastLoggedIn: timestamp({ withTimezone: true }).defaultNow().notNull(),
+    createdAt: timestamp({ withTimezone: true }).defaultNow().notNull(),
+  },
+  (column) => [unique().on(column.id, column.organization)],
+);

@@ -3,13 +3,13 @@
 #
 
 list(APPEND FLUTTER_PLUGIN_LIST
+  app_links
   flutter_custom_cursor
   irondash_engine_context
   multiview_desktop
 )
 
 list(APPEND FLUTTER_FFI_PLUGIN_LIST
-  jni
   rust_lib_desk0
 )
 

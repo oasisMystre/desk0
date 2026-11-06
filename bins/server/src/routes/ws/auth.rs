@@ -17,6 +17,7 @@ pub struct Claims {
   pub org_id: String,
   pub device_id: String,
   pub role: Option<String>,
+  pub jti: Option<String>,
 }
 
 impl Auth {
@@ -43,6 +44,7 @@ impl Auth {
     Ok(Claims {
       org_id: org_id.clone(),
       device_id: device_id.clone(),
+      jti: claims.get("jti").cloned(),
       role: claims
         .get("role")
         .map(|role| role.trim_matches('"').to_ascii_lowercase()),

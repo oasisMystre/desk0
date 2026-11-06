@@ -6,10 +6,10 @@ edition = "2024"
 [features]
 
 [dependencies]
-tokio.workspace = true
 anyhow.workspace = true
 tracing.workspace = true
 tokio-util.workspace = true
+tokio = { workspace = true, features = ["sync", "rt", "macros", "time", "io-util"] }
 
 rkyv = "0.8.18"
 shared_memory = "0.12.4"

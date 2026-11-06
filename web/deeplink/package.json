@@ -1,0 +1,13 @@
+{
+  "name": "@desk0/well-known",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "deploy": "wrangler deploy",
+    "preview": "wrangler dev"
+  },
+  "devDependencies": {
+    "wrangler": "^4.70.0"
+  }
+}
+

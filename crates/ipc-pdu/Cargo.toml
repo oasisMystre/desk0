@@ -14,4 +14,4 @@ pinray.workspace = true
 ironrdp = { workspace = true, features = ["pdu", "svc", "rdpsnd", "server"] }
 
 [dev-dependencies]
-tokio = { workspace = true }
+tokio = { workspace = true, features = ["io-util", "macros", "rt"] }

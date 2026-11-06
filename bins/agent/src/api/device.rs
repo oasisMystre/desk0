@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -20,16 +19,13 @@ pub struct Device {
   pub username: Option<String>,
   pub version: Option<String>,
   pub organization: uuid::Uuid,
+  pub metadata: Option<serde_json::Value>,
 }
 
 #[derive(Serialize, Deserialize)]
 pub struct CreateDevice {
-  pub os: Option<String>,
-  pub hostname: Option<String>,
-  pub username: Option<String>,
-  pub version: Option<String>,
-  pub organization: uuid::Uuid,
-  pub metadata: Option<serde_json::Value>,
+  pub pubkey: Vec<u8>,
+  pub device: Device,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -41,16 +37,37 @@ pub struct UpdateDevice {
   pub version: Option<String>,
   pub metadata: Option<serde_json::Value>,
 }
+#[derive(Serialize, Deserialize)]
+pub struct Challenge {
+  pub id: uuid::Uuid,
+  pub challenge: String,
+  pub expires_in: u64,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct CreateConnectionTokenRequest {
+  pub challenge: String,
+  pub signature: String,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct CreateConnectionTokenResponse {
+  pub token: String,
+}
 
 impl From<Identity> for CreateDevice {
   fn from(value: Identity) -> Self {
     Self {
-      os: Some(value.os()),
-      metadata: value.metadata(),
-      hostname: value.hostname(),
-      username: value.username(),
-      version: Some(value.version()),
-      organization: value.org_id,
+      pubkey: value.pubkey.clone(),
+      device: Device {
+        id: uuid::Uuid::new_v4(),
+        organization: value.org_id,
+        metadata: value.metadata(),
+        os: Some(value.os.clone()),
+        version: Some(value.version()),
+        hostname: value.hostname.clone(),
+        username: value.username.clone(),
+      },
     }
   }
 }
@@ -58,12 +75,12 @@ impl From<Identity> for CreateDevice {
 impl From<Identity> for UpdateDevice {
   fn from(value: Identity) -> Self {
     Self {
-      os: Some(value.os()),
-      metadata: value.metadata(),
-      hostname: value.hostname(),
-      username: value.username(),
-      version: Some(value.version()),
       organization: value.org_id,
+      metadata: value.metadata(),
+      os: Some(value.os.clone()),
+      version: Some(value.version()),
+      hostname: value.hostname.clone(),
+      username: value.username.clone(),
     }
   }
 }
@@ -86,15 +103,12 @@ impl DeviceApi {
       request = request.headers(headers.clone());
     }
 
-    let request = request.send().await?;
-    let status = request.status();
-
-    if status != StatusCode::OK {
-      let response = request.text().await?;
-      anyhow::bail!(response)
-    }
-
-    let response = request.json::<Device>().await?;
+    let response = request
+      .send()
+      .await?
+      .error_for_status()?
+      .json::<Device>()
+      .await?;
 
     Ok(response)
   }
@@ -120,19 +134,17 @@ impl DeviceApi {
       request = request.headers(headers.clone());
     }
 
-    let request = request.send().await?;
-
-    if request.status() != StatusCode::OK {
-      let response = request.text().await?;
-      anyhow::bail!(response)
-    }
-
-    let response = request.json::<Device>().await?;
+    let response = request
+      .send()
+      .await?
+      .error_for_status()?
+      .json::<Device>()
+      .await?;
 
     Ok(response)
   }
 
-  pub async fn get_token(&self, device_id: &uuid::Uuid) -> anyhow::Result<String> {
+  pub async fn get_challenge(&self, device: &uuid::Uuid) -> anyhow::Result<Challenge> {
     let mut request = self
       .client
       .client
@@ -140,7 +152,7 @@ impl DeviceApi {
         self
           .client
           .base_url
-          .join(&format!("devices/token/{device_id}"))?,
+          .join(&format!("devices/challenge/{device}"))?,
       )
       .json(&serde_json::json!({"role": "agent"}));
 
@@ -148,19 +160,42 @@ impl DeviceApi {
       request = request.headers(headers.clone());
     }
 
-    let request = request.send().await?;
+    let response = request
+      .send()
+      .await?
+      .error_for_status()?
+      .json::<Challenge>()
+      .await?;
 
-    if request.status() != StatusCode::OK {
-      let response = request.text().await?;
-      anyhow::bail!(response)
+    Ok(response)
+  }
+
+  pub async fn get_token(
+    &self,
+    device: &uuid::Uuid,
+    body: CreateConnectionTokenRequest,
+  ) -> anyhow::Result<String> {
+    let mut request = self
+      .client
+      .client
+      .post(
+        self
+          .client
+          .base_url
+          .join(&format!("devices/token/{device}"))?,
+      )
+      .json(&body);
+
+    if let Some(ref headers) = self.client.headers {
+      request = request.headers(headers.clone());
     }
 
-    #[derive(Deserialize)]
-    struct Response {
-      token: String,
-    }
-
-    let response = request.json::<Response>().await?;
+    let response = request
+      .send()
+      .await?
+      .error_for_status()?
+      .json::<CreateConnectionTokenResponse>()
+      .await?;
 
     Ok(response.token)
   }

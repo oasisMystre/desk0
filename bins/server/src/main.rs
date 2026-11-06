@@ -1,19 +1,23 @@
 use std::time::Duration;
 
-use axum::{
-  Router,
-  routing::{delete, get, patch, post},
-};
+use axum::{Json, Router, routing::get};
 use clap::Parser;
 use shared::init::{init_tracing, load_env};
 use tokio::{net::TcpListener, time::sleep};
 use tower_http::trace::TraceLayer;
+use utoipa::OpenApi;
+use utoipa_swagger_ui::SwaggerUi;
 
-use crate::routes::state::AppState;
+use crate::states::AppState;
+
+pub mod error;
+pub mod openapi;
+pub use error::{AppError, AppResult, SharedError};
 
 mod context;
 mod env;
 mod routes;
+mod states;
 
 #[derive(Parser, Debug)]
 #[command(name = "desk0-server", about = "Desk0 Relay Server & Device Broker")]
@@ -23,6 +27,9 @@ struct Args {
 
   #[arg(long, default_value = "8080")]
   port: u16,
+
+  #[arg(long)]
+  export_openapi: Option<std::path::PathBuf>,
 }
 
 #[tokio::main]
@@ -31,54 +38,44 @@ pub async fn main() -> anyhow::Result<()> {
   init_tracing()?;
 
   let args = Args::parse();
+
+  if let Some(path) = args.export_openapi {
+    let spec = openapi::ApiDoc::openapi().to_pretty_json()?;
+    if path.to_string_lossy() == "-" {
+      println!("{spec}");
+    } else {
+      std::fs::write(&path, spec)?;
+      println!("Exported OpenAPI spec to {}", path.display());
+    }
+    return Ok(());
+  }
+
   let state = AppState::init().await?;
 
   let address = format!("{}:{}", args.bind_addr, args.port);
   let listener = TcpListener::bind(&address).await?;
   tracing::info!(%address, "server listening");
 
+  let openapi_doc = openapi::ApiDoc::openapi();
+
   let app = Router::new()
-    .route("/users", post(routes::users::create_user))
-    .route("/user", delete(routes::users::delete_user))
+    .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", openapi_doc.clone()))
     .route(
-      "/organizations",
-      get(routes::organizations::get_organizations),
+      "/openapi.json",
+      get({
+        let openapi_doc = openapi_doc.clone();
+        move || async move { Json(openapi_doc) }
+      }),
     )
-    .route(
-      "/organizations",
-      post(routes::organizations::create_organization),
-    )
-    .route(
-      "/organizations/token/{device_id}",
-      post(routes::organizations::create_connection_token),
-    )
-    .route("/devices", get(routes::devices::get_devices))
-    .route("/devices", post(routes::devices::create_device))
-    .route(
-      "/devices/token/{device_id}",
-      post(routes::devices::create_connection_token),
-    )
-    .route(
-      "/devices/{device_id}",
-      patch(routes::devices::update_device),
-    )
-    .route(
-      "/devices/{device_id}",
-      delete(routes::devices::delete_device),
-    )
-    .route("/agents", post(routes::agent::build_agent))
-    .route("/agents", get(routes::agent::get_agents))
-    .route("/attachments", get(routes::attachments::get_attachments))
-    .route("/attachments", post(routes::attachments::create_attachment))
-    .route(
-      "/attachments/{file_id}",
-      patch(routes::attachments::update_attachment),
-    )
-    .route(
-      "/attachments/{file_id}",
-      delete(routes::attachments::delete_attachment),
-    )
+    .nest("/auth", routes::auth::routes::router())
+    .merge(routes::users::routes::router())
+    .nest("/organizations", routes::organizations::routes::router())
+    .nest("/devices", routes::devices::routes::router())
+    .nest("/agents", routes::agent::routes::router())
+    .nest("/attachments", routes::attachments::routes::router())
+    .nest("/applications", routes::applications::routes::router())
     .route("/ws", get(routes::ws::websocket::ws_route))
+    .fallback(|| async { SharedError::EndpointNotFound })
     .layer(TraceLayer::new_for_http())
     .with_state(state.clone());
 

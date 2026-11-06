@@ -12,10 +12,10 @@ client = ["ironrdp/client", "ironrdp/client-clipboard"]
 ipc.workspace = true
 ipc-pdu.workspace = true
 anyhow.workspace = true
-tokio.workspace = true
 tracing.workspace = true
 tokio-util.workspace = true
 ironrdp = { workspace = true, features = ["cliprdr"] }
+tokio = { workspace = true, features = ["sync", "rt", "macros"] }
 
 image = "0.25.10"
 clipboard-rs = "0.3.5"

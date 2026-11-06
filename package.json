@@ -6,7 +6,8 @@
     "codegen": "flutter_rust_bridge_codegen generate",
     "drizzle:generate": "drizzle-kit generate",
     "drizzle:migrate": "drizzle-kit migrate",
-    "lint": "bun x biome format --write && bun x biome lint --fix && biome check ."
+    "lint": "bun x biome format --write && bun x biome lint --fix && biome check .",
+    "deploy:well-known": "cd web/deeplink && wrangler deploy"
   },
   "devDependencies": {
     "@biomejs/biome": "=2.4.15",
@@ -25,6 +26,7 @@
     "pg": "^8.23.0"
   },
   "workspaces": [
+    "web/*",
     "packages/*",
     "workers/*"
   ],

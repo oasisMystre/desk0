@@ -1,7 +1,10 @@
-use ironrdp::{core::{
-  Decode, DecodeError, DecodeResult, Encode, EncodeResult, ReadCursor, UnexpectedMessageTypeErr,
-  WriteCursor, cast_length,
-}, svc::SvcEncode};
+use ironrdp::{
+  core::{
+    Decode, DecodeError, DecodeResult, Encode, EncodeResult, ReadCursor, UnexpectedMessageTypeErr,
+    WriteCursor, cast_length,
+  },
+  svc::SvcEncode,
+};
 
 pub enum IoOutputEvent {
   DownloadStarted(u32),
@@ -133,6 +136,5 @@ impl Encode for IoOutputEvent {
     size_of::<u8>() + size
   }
 }
-
 
 impl SvcEncode for IoOutputEvent {}

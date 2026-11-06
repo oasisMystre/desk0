@@ -31,10 +31,8 @@ impl RdpHandler {
     }
   }
 
-  /// skip negotiation if agent is still connected
-  /// reconnect if agent is in connecting state
   pub async fn handle(&mut self, mut socket: WebSocket) -> anyhow::Result<()> {
-    let (request, claims) = self
+    let (request, claims, proxy_auth) = self
       .read_rdcleanpath_request(&mut socket)
       .await
       .context("RDCleanPath viewer authentication failed")?;
@@ -43,22 +41,21 @@ impl RdpHandler {
       anyhow::bail!("rejected non organization RDP token {:?}", claims.role);
     }
 
-    // read all message from rdp and forward to agent
+    crate::states::consume_connection_token(&self.hub.context, &proxy_auth, claims.jti.as_deref())
+      .await
+      .context("organization connection token already used or expired")?;
+
     let upstream = &format!("rdp:{}:{}", claims.org_id, claims.device_id);
-    // read all message from agent and forward to rdp
     let inbound = &format!("agent:{}:{}", claims.org_id, claims.device_id);
 
-    // this first to prevent missing message from agent
     let mut inbound_receiver = self.hub.subscribe(inbound).await;
 
-    // mark rdp as connected immediately
     self
       .hub
       .register(upstream, HubConnectionState::Connected)
       .await?;
 
     let state = self.wait_for_agent(&mut socket, inbound).await?;
-    tracing::info!(?state, "rdp state");
     if !matches!(
       state,
       Some(HubConnectionState::Connected | HubConnectionState::Connecting)
@@ -159,10 +156,6 @@ impl RdpHandler {
     Ok(())
   }
 
-  /// if agent is idle, give a grace period of 10s
-  /// if agent is disconnected, give a grace period of 10s
-  /// if agent is connecting, still wait but timeout 10s
-  /// if agent is connected return
   async fn wait_for_agent(
     &self,
     socket: &mut WebSocket,
@@ -206,7 +199,7 @@ impl RdpHandler {
   async fn read_rdcleanpath_request(
     &self,
     socket: &mut WebSocket,
-  ) -> anyhow::Result<(Vec<u8>, Claims)> {
+  ) -> anyhow::Result<(Vec<u8>, Claims, String)> {
     loop {
       let Some(message) = socket.next().await else {
         anyhow::bail!("viewer closed during RDCleanPath authentication")
@@ -225,7 +218,11 @@ impl RdpHandler {
             anyhow::bail!("expected RDCleanPath request")
           };
           let claims = self.auth.authenticate(&proxy_auth)?;
-          return Ok((x224_connection_request.as_bytes().to_vec(), claims));
+          return Ok((
+            x224_connection_request.as_bytes().to_vec(),
+            claims,
+            proxy_auth,
+          ));
         }
         Message::Pong(_) | Message::Text(_) => {}
         Message::Close(_) => anyhow::bail!("viewer closed during RDCleanPath authentication"),

@@ -1,2 +1,2 @@
-pub mod viewer;
 mod static_channel;
+pub mod viewer;

@@ -1,0 +1,16 @@
+/.well-known/apple-app-site-association
+  Content-Type: application/json
+  Access-Control-Allow-Origin: *
+
+/.well-known/assetlinks.json
+  Content-Type: application/json
+  Access-Control-Allow-Origin: *
+
+/apple-app-site-association
+  Content-Type: application/json
+  Access-Control-Allow-Origin: *
+
+/assetlinks.json
+  Content-Type: application/json
+  Access-Control-Allow-Origin: *
+

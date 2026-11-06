@@ -27,7 +27,6 @@ pub enum HubConnectionState {
 pub enum HubMessageType {
   Text,
   Binary,
-  // used to reset connection
   Ping,
   Pong,
   Close,
@@ -47,9 +46,10 @@ pub struct HubHandle {
 #[derive(Clone)]
 pub struct Hub {
   channel: String,
-  context: Arc<Context>,
   connection_states: Arc<Mutex<HashMap<String, HubConnectionState>>>,
   subscriptions: Arc<Mutex<HashMap<String, UnboundedSender<Message>>>>,
+
+  pub context: Arc<Context>,
 }
 
 impl TryFrom<u8> for HubConnectionState {

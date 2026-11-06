@@ -8,6 +8,22 @@ services:
     restart: unless-stopped
     networks:
       - desk0
+      - proxy
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  buildx:
+    env_file:
+      - .env
+    build:
+      context: .
+      dockerfile: ./workers/buildx/Dockerfile
+    restart: unless-stopped
+    networks:
+      - desk0
     depends_on:
       postgres:
         condition: service_healthy
@@ -15,7 +31,7 @@ services:
         condition: service_healthy
 
   redis:
-    image: redis:8.8,2
+    image: redis:8.8.2
     restart: unless-stopped
     networks:
       - desk0
@@ -48,16 +64,16 @@ services:
       - PGUSER=postgres
       - PGPASSWORD=${POSTGRES_PASSWORD}
       - PGDATABASE=desk0
-      - AWS_ENDPOINT=${R2_ENDPOINT}
-      - AWS_REGION=${R2_REGION}
-      - AWS_ACCESS_KEY_ID=${R2_ACCESS_KEY_ID}
-      - AWS_SECRET_ACCESS_KEY=${R2_SECRET_ACCESS_KEY}
+      - AWS_ENDPOINT=${S3_ENDPOINT}
+      - AWS_REGION=${S3_REGION}
+      - AWS_ACCESS_KEY_ID=${S3_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${S3_ACCESS_KEY}
       - WALG_COMPRESSION_METHOD=lz4
-      - WALG_S3_PREFIX=s3://${R2_BUCKET_POSTGRES}/wal-g
+      - WALG_S3_PREFIX=s3://${S3_BUCKET_POSTGRES}/wal-g
     volumes:
       - postgres_data:/var/lib/postgresql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d rhiva"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d desk0"]
       interval: 5s
       timeout: 5s
       retries: 20
@@ -71,8 +87,23 @@ services:
       redis:
         condition: service_healthy
     environment:
-      - REDIS_URL: "${REDIS_URL}"
-      - QUEUE_NAMES: "${QUEUE_NAMES:-desk0}"
+      - REDIS_URL=${REDIS_URL}
+      - QUEUE_NAMES=${QUEUE_NAMES:-desk0}
 
-network:
+  cloudflared:
+    image: cloudflare/cloudflared:2026.9.1
+    restart: unless-stopped
+    networks:
+      - desk0
+    command: tunnel run
+    environment:
+      - TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_ACCESS_TOKEN}
+
+volumes:
+  redis_data:
+  postgres_data:
+
+networks:
   desk0:
+  proxy:
+    external: true

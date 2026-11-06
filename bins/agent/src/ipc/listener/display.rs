@@ -35,8 +35,8 @@ pub struct DisplayHandler {
   ipc: Arc<Listener>,
   inbound: Arc<Mutex<Option<UnboundedReceiver<IpcUnpackedDisplayEvent>>>>,
 
-  handle: Arc<Mutex<Option<JoinHandle<()>>>>,
   cancellation_token: CancellationToken,
+  handle: Arc<Mutex<Option<JoinHandle<()>>>>,
 }
 
 struct DisplayUpdates {

@@ -4,7 +4,10 @@ use serde::{Deserialize, Serialize};
 
 use crate::users;
 
-#[derive(Queryable, Selectable, Insertable, Serialize, Deserialize, Identifiable, Default, Debug)]
+#[derive(
+  Queryable, Selectable, Insertable, Serialize, Deserialize, Identifiable, Default, Debug,
+)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[diesel(table_name = users)]
 pub struct User {
   pub id: uuid::Uuid,

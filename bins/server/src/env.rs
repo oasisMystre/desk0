@@ -10,6 +10,7 @@ pub enum Env {
   S3Endpoint,
   S3AccessKeyId,
   S3AccessKey,
+  ResendApiKey,
 }
 
 impl FromEnv for Env {}

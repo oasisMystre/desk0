@@ -7,5 +7,9 @@
 	<true />
 	<key>com.apple.security.network.client</key>
 	<true />
+	<key>com.apple.developer.associated-domains</key>
+    <array>
+        <string>applinks:app.desk0.xyz</string>
+    </array>
 </dict>
 </plist>

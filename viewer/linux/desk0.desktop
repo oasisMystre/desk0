@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Desk0
+Comment=Desk0 Remote Desktop Manager
+Exec=desk0 %u
+Icon=desk0
+Terminal=false
+Categories=Network;RemoteAccess;Utility;
+MimeType=x-scheme-handler/desk0;
+

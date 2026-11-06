@@ -22,20 +22,20 @@ opentelemetry = [
 [dependencies]
 dotenvy.workspace = true
 anyhow.workspace = true
+strum = { workspace = true, features = ["derive"] }
 deadpool-redis = { workspace = true, optional = true }
 diesel-async = { workspace = true, features = ["postgres", "bb8"], optional = true }
 
-strum.workspace = true
 
 tracing-log = "0.2.0"
 tracing-error = "0.2.1"
 tracing-throttle = "0.4.3"
 dirs = { version = "7.0.0", optional = true }
 tracing-opentelemetry = { version = "0.32.0", optional = true }
-tracing-subscriber = { version = "0.3.23", features = ["env-filter", "fmt"] }
+tracing-subscriber = { workspace = true, features = ["env-filter", "fmt"] }
 
 opentelemetry = { version = "0.31.0", optional = true }
 tracing-appender =  { version = "0.2.5", optional = true }
 opentelemetry-appender-tracing = { version = "0.31.1", optional = true }
-opentelemetry_sdk = { version = "0.31.0", features = ["trace", "metrics", "logs"], optional = true }
+opentelemetry_sdk = { version = "0.32.1", features = ["trace", "metrics", "logs"], optional = true }
 opentelemetry-otlp = { version = "0.31.1", features = ["metrics", "grpc-tonic"], optional = true }

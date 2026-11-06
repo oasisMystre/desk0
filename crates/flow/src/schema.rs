@@ -8,6 +8,31 @@ diesel::table! {
 }
 
 diesel::table! {
+    sessions (id) {
+        id -> Uuid,
+        user -> Uuid,
+        userAgent -> Nullable<Text>,
+        ipAddress -> Nullable<Inet>,
+        expiresAt -> Timestamptz,
+        createdAt -> Timestamptz,
+        lastUsedAt -> Nullable<Timestamptz>,
+        revokedAt -> Nullable<Timestamptz>,
+    }
+}
+
+diesel::table! {
+    refresh_tokens (id) {
+        id -> Uuid,
+        session -> Uuid,
+        token -> Bytea,
+        expiresAt -> Timestamptz,
+        createdAt -> Timestamptz,
+        consumedAt -> Nullable<Timestamptz>,
+        revokedAt -> Nullable<Timestamptz>,
+    }
+}
+
+diesel::table! {
     organizations (id) {
         id -> Uuid,
         name -> Nullable<Text>,
@@ -19,12 +44,13 @@ diesel::table! {
 diesel::table! {
     devices (id) {
         id -> Uuid,
+        pubkey -> Bytea,
+        organization -> Uuid,
         os -> Nullable<Text>,
-        metadata -> Nullable<Jsonb>,
+        version -> Nullable<Text>,
         hostname -> Nullable<Text>,
         username -> Nullable<Text>,
-        version -> Nullable<Text>,
-        organization -> Uuid,
+        metadata -> Nullable<Jsonb>,
         lastLoggedIn -> Timestamptz,
         createdAt -> Timestamptz
     }
@@ -63,7 +89,38 @@ diesel::table! {
     }
 }
 
+diesel::table! {
+    applications (id) {
+        id -> Uuid,
+        name -> Text,
+        os -> crate::sql_types::Os,
+        image -> Nullable<Uuid>,
+        asset -> Uuid,
+        organization -> Uuid,
+        scripts -> Jsonb,
+        createdAt -> Timestamptz
+    }
+}
+
+diesel::table! {
+    device_applications (id) {
+        id -> Uuid,
+        device -> Uuid,
+        organization -> Uuid,
+        application -> Uuid,
+        createdAt -> Timestamptz
+    }
+}
+
 diesel::allow_tables_to_appear_in_same_query!(organizations, users);
+diesel::allow_tables_to_appear_in_same_query!(agents, agent_assets);
+diesel::allow_tables_to_appear_in_same_query!(devices, applications);
+diesel::allow_tables_to_appear_in_same_query!(devices, attachments);
+diesel::allow_tables_to_appear_in_same_query!(devices, device_applications);
+diesel::allow_tables_to_appear_in_same_query!(applications, attachments);
+diesel::allow_tables_to_appear_in_same_query!(applications, organizations);
+diesel::allow_tables_to_appear_in_same_query!(device_applications, attachments);
+diesel::allow_tables_to_appear_in_same_query!(device_applications, applications);
 
 pub mod sql_types {
   #[derive(diesel::sql_types::SqlType, diesel::query_builder::QueryId)]

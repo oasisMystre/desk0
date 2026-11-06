@@ -1,10 +1,10 @@
 import {
-  boolean,
-  jsonb,
-  pgTable,
   text,
-  timestamp,
   uuid,
+  jsonb,
+  boolean,
+  pgTable,
+  timestamp,
 } from "drizzle-orm/pg-core";
 
 import { organizations } from "./organizations";

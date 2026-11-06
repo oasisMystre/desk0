@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.desk0.viewer",
+      "sha256_cert_fingerprints": [
+        "36:9B:BA:DC:E5:CA:F5:77:28:A9:30:05:47:3A:FF:FA:4B:62:7F:8C:7B:7F:81:AC:A0:9F:1D:9E:89:B1:6C:E8"
+      ]
+    }
+  }
+]
