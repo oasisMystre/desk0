@@ -4,7 +4,7 @@ import 'package:flutter/material.dart' show IconButton;
 import 'terminal_tab.dart' show TerminalTab;
 import '../../../channels/channel.dart' show Channel;
 import '../../../ffi/flutter.dart' show ViewerHandle;
-import '../../../components/tab_button.dart' show TabButton;
+import '../../../components/index.dart' show TabButton;
 import '../../../states/index.dart' show TerminalStaticChannelState;
 
 class TerminalViewer extends StatefulWidget {
@@ -71,7 +71,7 @@ class TerminalViewerState extends State<TerminalViewer> {
     return FutureBuilder(
       future: Channel.getTrafficLightFrame(),
       builder: (context, snapshot) {
-        final trafficLightWidth = snapshot.hasData ? snapshot.data!.width : 14;
+        final trafficLightWidth = snapshot.hasData ? snapshot.data!.width : 14.0;
 
         return SafeArea(
           child: Column(
@@ -81,19 +81,17 @@ class TerminalViewerState extends State<TerminalViewer> {
                 child: Row(
                   children: [
                     SizedBox(width: trafficLightWidth + 64),
-                    for (final entry in terminalIds.asMap().entries)
+                    for (final (index, value) in terminalIds.indexed)
                       TabButton(
-                        selected: currentTabIndex == entry.key,
+                        selected: currentTabIndex == index,
                         onPressed: () {
-                          setState(() {
-                            currentTabIndex = entry.key;
-                          });
+                          setState(() => currentTabIndex = index);
                         },
                         onClose: () {
-                          removeTerminal(entry.key);
-                          terminalStaticChannelState.exit(entry.value);
+                          removeTerminal(index);
+                          terminalStaticChannelState.exit(value);
                         },
-                        data: 'Terminal ${entry.key + 1}',
+                        data: 'Terminal ${index + 1}',
                       ),
                     IconButton(
                       onPressed: createTerminal,

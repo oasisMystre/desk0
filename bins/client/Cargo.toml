@@ -19,13 +19,13 @@ shared = { workspace = true, features=["otel"] }
 copypaste = { workspace = true, features=["client"] }
 
 cpal.workspace = true
-clap.workspace = true
-tokio.workspace = true
 anyhow.workspace = true
 tracing.workspace = true
 thiserror.workspace = true
 tokio-util.workspace = true
-display-info.workspace = true 
+display-info.workspace = true
+tokio = { workspace = true, features = ["full"] }
+clap = { workspace = true, features = ["derive"] }
 ironrdp = { workspace = true, features = ["client", "rustls", "cliprdr", "input", "session", "rdpsnd", "qoiz"] }
 
 url = "2"

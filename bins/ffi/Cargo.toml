@@ -16,7 +16,7 @@ desk0-client = { path = "../client", default-features = false, features=["ffi"] 
 anyhow.workspace = true
 tracing.workspace = true
 copypaste = { workspace = true }
-tokio = {workspace = true, features=["sync"]}
+tokio = { workspace = true, features = ["sync", "rt-multi-thread"] }
 ironrdp = { workspace = true, features = ["client", "connector", "cliprdr", "input", "session", "client-clipboard", "graphics"] }
 
 rayon = "1.12.0"

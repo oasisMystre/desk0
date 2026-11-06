@@ -25,6 +25,7 @@
     "pg": "^8.23.0"
   },
   "workspaces": [
+    "web/*",
     "packages/*",
     "workers/*"
   ],

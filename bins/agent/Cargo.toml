@@ -21,11 +21,7 @@ shared = { workspace = true, features = ["otel"] }
 audio = { workspace = true, features = ["convert"] }
 copypaste = { workspace = true, features = ["server"] }
 
-uuid.workspace = true
 cpal.workspace = true
-clap.workspace = true
-serde.workspace = true
-tokio.workspace = true
 bytes.workspace = true
 base64.workspace = true 
 pinray.workspace = true
@@ -37,8 +33,12 @@ serde_json.workspace = true
 tokio-util.workspace = true
 async-trait.workspace = true
 display-info.workspace = true
-tokio-rustls.workspace = true
-ed25519-dalek.workspace = true 
+tokio = { workspace = true, features = ["full"] }
+clap = { workspace = true, features = ["derive"] }
+serde = { workspace = true, features = ["derive"] }
+uuid = { workspace = true, features = ["v4", "serde"] }
+tokio-rustls = { workspace = true, features = ["ring"] }
+ed25519-dalek = { workspace = true, features = ["rand_core"] } 
 ironrdp = { workspace = true, features = [
     "acceptor",
     "server",

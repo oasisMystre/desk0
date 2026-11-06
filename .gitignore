@@ -12,3 +12,13 @@ out
 *.sock
 identity.json
 .DS_Store
+
+
+*.local
+.nitro
+.tanstack
+.wrangler
+.output
+.vinxi
+__unconfig*
+todos.json

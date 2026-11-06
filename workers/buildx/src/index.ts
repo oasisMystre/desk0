@@ -2,6 +2,7 @@ import { Worker } from "bullmq";
 import { formatError } from "zod";
 
 import { createRedis } from "./redis";
+import { createJobLogger } from "./utils";
 import { buildWindowAgent } from "./build";
 import { generateAgentSchema } from "./types";
 import { db, s3, s3Bucket } from "./instances";
@@ -9,6 +10,8 @@ import { db, s3, s3Bucket } from "./instances";
 const worker = new Worker(
   "desk0",
   async (job) => {
+    const logger = createJobLogger(job.log);
+
     if (job.name === "build-agent") {
       const result = generateAgentSchema.safeParse(JSON.parse(job.data));
 
@@ -20,16 +23,22 @@ const worker = new Worker(
           switch (os) {
             case "windows":
               results.push(
-                buildWindowAgent(db, s3, s3Bucket, {
-                  ...payload,
-                  os: ["windows"],
-                }),
+                buildWindowAgent(
+                  db,
+                  s3,
+                  s3Bucket,
+                  {
+                    ...payload,
+                    os: ["windows"],
+                  },
+                  logger,
+                ),
               );
           }
         }
 
         return await Promise.all(results).catch((error) => {
-          console.error("Job failed", { error, job: job.id });
+          logger.error("Job failed", { error, job: job.id });
           return Promise.reject(error);
         });
       }

@@ -1,36 +1,84 @@
-import 'package:get/get.dart' show GetxController, Get, Inst;
-import 'package:shared_preferences/shared_preferences.dart'
-    show SharedPreferences;
+import 'dart:convert';
 
-import '../../dio/index.dart' show Api;
+import 'package:get/get.dart';
+
+import '../env.dart' show Env;
+import '../models/index.dart' show Device;
+import '../../ffi/flutter.dart' show ViewerHandle;
+import '../ffi/types/rdp.dart' show SseDesktopSize;
+import '../features/connection/index.dart' show ConnectionType;
+
+class Connection {
+  final Device device;
+  final String token, endpoint;
+  final SseDesktopSize desktopSize;
+  final ConnectionType connectionType;
+
+  late final ViewerHandle viewer = ViewerHandle(
+    token: token,
+    size: desktopSize,
+    endpoint: endpoint,
+  );
+
+  Connection({
+    required this.device,
+    required this.token,
+    required this.endpoint,
+    required this.desktopSize,
+    required this.connectionType,
+  });
+
+  factory Connection.fromEncodedString(String encoded) {
+    final json =
+        jsonDecode(Uri.decodeComponent(encoded)) as Map<String, dynamic>;
+
+    return switch (json) {
+      {
+        'width': int? width,
+        'height': int? height,
+        'token': String token,
+        'endpoint': String? endpoint,
+        'device': Map<String, dynamic> device,
+        'connectionType': String connectionType,
+      } =>
+        Connection(
+          token: token,
+          device: Device.fromJson(device),
+          endpoint: endpoint == null ? Env.rdpEndpoint : endpoint,
+          desktopSize: SseDesktopSize(
+            width: width == null ? 720 : width,
+            height: height == null ? 1280 : height,
+          ),
+          connectionType: ConnectionType.values.firstWhere(
+            (value) => value.name == connectionType,
+            orElse: () => ConnectionType.desktop,
+          ),
+        ),
+      _ => throw const FormatException("Failed to deserialize viewer config"),
+    };
+  }
+}
 
 class ConnectionState extends GetxController {
-  late final Api api;
-  final Map<String, Future<String>> pending = {};
+  final RxList<Connection> connections = <Connection>[].obs;
 
-  ConnectionState() {
-    api = Get.find<Api>();
+  void addConnection(Connection connection) {
+    final exists = connections.any(
+      (value) => value.device.id == connection.device.id,
+    );
+
+    if (exists) return;
+
+    connections.add(connection);
   }
 
-  Future<String> getDeviceToken(String device) {
-    final future = pending.putIfAbsent(device, () => loadDeviceToken(device));
+  int removeConnection(Connection connection) {
+    final index = connections.indexOf(
+      (value) => value.device.id == connection.device.id,
+    );
 
-    return future.whenComplete(() {
-      if (identical(pending[device], future)) {
-        pending.remove(device);
-      }
-    });
-  }
+    if (index > 0) connections.removeAt(index);
 
-  Future<String> loadDeviceToken(String device) async {
-    final sharedPreferences = await SharedPreferences.getInstance();
-
-    final key = "token:$device";
-    final cache = sharedPreferences.getString(key);
-    if (cache != null) return cache;
-
-    final token = await api.organization.createConnectionToken(device);
-    await sharedPreferences.setString(key, token);
-    return token;
+    return index;
   }
 }

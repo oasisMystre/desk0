@@ -61,6 +61,9 @@ class MainFlutterWindow: NSWindow {
         self.titleVisibility = .hidden
         self.styleMask.insert(.fullSizeContentView)
 
+        self.orderOut(nil)
+        self.setIsVisible(false)
+
         setupMethodChannel(flutterViewController)
 
         RegisterGeneratedPlugins(registry: flutterViewController)

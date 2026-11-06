@@ -1,3 +1,4 @@
 {
-  "rust-analyzer.cargo.target": null
+  "css.validate": false,
+  "css.lint.unknownAtRules": "ignore"
 }
