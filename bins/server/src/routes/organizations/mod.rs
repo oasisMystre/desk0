@@ -1,7 +1,7 @@
-mod dto;
-mod error;
-mod handlers;
-mod models;
+pub mod dto;
+pub mod error;
+pub mod handlers;
+pub mod models;
 mod service;
 
 pub(crate) mod repository;

@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 use crate::attachments;
 
 #[derive(HasQuery, Insertable, Serialize, Deserialize, Default, Clone, Debug)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[diesel(table_name = attachments)]
 pub struct Attachment {
   pub id: uuid::Uuid,

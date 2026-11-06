@@ -3,8 +3,8 @@ use ironrdp::server::ServerEvent;
 #[cfg(feature = "server")]
 use tokio::sync::mpsc::UnboundedSender;
 
-#[cfg(not(feature = "server"))] 
-#[cfg(feature = "client")] 
+#[cfg(not(feature = "server"))]
+#[cfg(feature = "client")]
 use ironrdp::client::rdp::{RdpInputEvent, RdpInputSender};
 
 pub mod clipboard_event;
@@ -19,8 +19,8 @@ pub type Event = ServerEvent;
 pub type Sender = Option<UnboundedSender<Event>>;
 
 #[cfg(not(feature = "server"))]
-#[cfg(feature = "client")] 
+#[cfg(feature = "client")]
 pub type Event = RdpInputEvent;
 #[cfg(not(feature = "server"))]
-#[cfg(feature = "client")] 
+#[cfg(feature = "client")]
 pub type Sender = Option<RdpInputSender>;

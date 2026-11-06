@@ -5,12 +5,14 @@ edition = "2024"
 
 [features]
 axum = ["dep:axum"]
+utoipa = ["dep:utoipa"]
 
 [dependencies]
 serde_json.workspace = true
 uuid = { workspace = true, features = ["serde"] }
 serde = { workspace = true, features = ["derive"] }
 axum = { workspace = true, features = ["multipart"], optional = true }
+utoipa = { workspace = true, features = ["uuid", "chrono"], optional = true }
 
 ipnet = { version = "2.12.2", features = ["serde"] }
 chrono = { version = "0.4.45", features = ["serde"] }

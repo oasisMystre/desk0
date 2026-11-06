@@ -1,5 +1,5 @@
 {
-  "name": "app",
+  "name": "@desk0/console",
   "private": true,
   "type": "module",
   "imports": {

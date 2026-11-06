@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 use crate::schema::organizations;
 
 #[derive(HasQuery, Insertable, Serialize, Deserialize, Identifiable, Default, Debug)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[diesel(table_name = organizations)]
 pub struct Organization {
   pub id: uuid::Uuid,

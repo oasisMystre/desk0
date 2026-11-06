@@ -5,11 +5,13 @@ use serde::{Deserialize, Serialize};
 use crate::{applications, os::AgentOs};
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 pub struct ScriptArgs {
   pub args: Vec<String>,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug, Default)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 pub struct Scripts {
   #[serde(default)]
   pub _version: Option<u64>,
@@ -19,6 +21,7 @@ pub struct Scripts {
 }
 
 #[derive(HasQuery, Insertable, Serialize, Deserialize, Clone, Debug)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[diesel(table_name = applications)]
 pub struct Application {
   pub id: uuid::Uuid,

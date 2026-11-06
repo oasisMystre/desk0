@@ -30,15 +30,15 @@ impl AttachmentRepository {
 
   pub async fn update(
     connection: &mut AsyncPgConnection,
-    file_id: uuid::Uuid,
-    org_id: uuid::Uuid,
+    attachment: uuid::Uuid,
+    organization: uuid::Uuid,
     changeset: &UpdateAttachmentChangeset,
   ) -> Result<Attachment, diesel::result::Error> {
     diesel::update(
       attachments::table.filter(
         attachments::id
-          .eq(file_id)
-          .and(attachments::organization.eq(org_id)),
+          .eq(attachment)
+          .and(attachments::organization.eq(organization)),
       ),
     )
     .set(changeset)
@@ -49,14 +49,14 @@ impl AttachmentRepository {
 
   pub async fn delete(
     connection: &mut AsyncPgConnection,
-    file_id: uuid::Uuid,
-    org_id: uuid::Uuid,
+    attachment: uuid::Uuid,
+    organization: uuid::Uuid,
   ) -> Result<Attachment, diesel::result::Error> {
     diesel::delete(
       attachments::table.filter(
         attachments::id
-          .eq(file_id)
-          .and(attachments::organization.eq(org_id)),
+          .eq(attachment)
+          .and(attachments::organization.eq(organization)),
       ),
     )
     .returning(Attachment::as_returning())

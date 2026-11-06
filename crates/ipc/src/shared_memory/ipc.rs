@@ -143,9 +143,7 @@ where
       .take()
       .ok_or_else(|| anyhow::anyhow!("a task already has ownership of shared_memory"))?;
 
-    
     self.handle = Some(tokio::spawn(async move {
-
       tasks.spawn({
         let shared_memory = Arc::clone(&shared_memory);
         let cancellation_token = cancellation_token.child_token();

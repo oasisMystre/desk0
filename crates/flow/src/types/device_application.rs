@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 use crate::device_applications;
 
 #[derive(HasQuery, Insertable, Serialize, Deserialize, Clone, Debug)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[diesel(table_name = device_applications)]
 pub struct DeviceApplication {
   pub id: uuid::Uuid,

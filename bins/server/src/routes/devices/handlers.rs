@@ -13,10 +13,22 @@ use super::{
   service::DeviceService,
 };
 use crate::{
+  error::ErrorResponse,
   routes::devices::dto::CreateDevice,
   states::{AppState, AuthRole, AuthenticatedUser},
 };
 
+#[utoipa::path(
+  post,
+  path = "/devices",
+  request_body = CreateDevice,
+  responses(
+    (status = 200, description = "Device registered", body = Device),
+    (status = 400, description = "Bad request", body = ErrorResponse),
+    (status = 500, description = "Internal server error", body = ErrorResponse)
+  ),
+  tag = "devices"
+)]
 pub async fn create_device(
   State(AppState { context, .. }): State<AppState>,
   Json(body): Json<CreateDevice>,
@@ -26,6 +38,20 @@ pub async fn create_device(
   Ok(Json(device))
 }
 
+#[utoipa::path(
+  patch,
+  path = "/devices/{device}",
+  params(
+    ("device" = uuid::Uuid, Path, description = "Device UUID")
+  ),
+  request_body = PartialDevice,
+  responses(
+    (status = 200, description = "Device updated", body = Device),
+    (status = 400, description = "Bad request", body = ErrorResponse),
+    (status = 500, description = "Internal server error", body = ErrorResponse)
+  ),
+  tag = "devices"
+)]
 pub async fn update_device(
   State(AppState { context, .. }): State<AppState>,
   Path(device): Path<Uuid>,
@@ -36,6 +62,19 @@ pub async fn update_device(
   ))
 }
 
+#[utoipa::path(
+  post,
+  path = "/devices/challenge/{device}",
+  params(
+    ("device" = uuid::Uuid, Path, description = "Device UUID")
+  ),
+  responses(
+    (status = 200, description = "Challenge created", body = ChallengeResponse),
+    (status = 400, description = "Bad request", body = ErrorResponse),
+    (status = 500, description = "Internal server error", body = ErrorResponse)
+  ),
+  tag = "devices"
+)]
 pub async fn create_challenge(
   State(AppState { context, .. }): State<AppState>,
   Path(device): Path<Uuid>,
@@ -45,6 +84,21 @@ pub async fn create_challenge(
   ))
 }
 
+#[utoipa::path(
+  post,
+  path = "/devices/token/{device}",
+  operation_id = "create_device_connection_token",
+  params(
+    ("device" = uuid::Uuid, Path, description = "Device UUID")
+  ),
+  request_body = CreateConnectionTokenRequest,
+  responses(
+    (status = 200, description = "Device connection token", body = CreateConnectionTokenResponse),
+    (status = 400, description = "Bad request", body = ErrorResponse),
+    (status = 500, description = "Internal server error", body = ErrorResponse)
+  ),
+  tag = "devices"
+)]
 pub async fn create_connection_token(
   State(AppState { context, .. }): State<AppState>,
   Path(device): Path<Uuid>,
@@ -55,6 +109,19 @@ pub async fn create_connection_token(
   ))
 }
 
+#[utoipa::path(
+  get,
+  path = "/devices",
+  responses(
+    (status = 200, description = "List organization devices", body = Vec<Device>),
+    (status = 401, description = "Unauthorized", body = ErrorResponse),
+    (status = 500, description = "Internal server error", body = ErrorResponse)
+  ),
+  security(
+    ("bearer_auth" = [])
+  ),
+  tag = "devices"
+)]
 pub async fn get_devices(
   State(AppState { context, .. }): State<AppState>,
   user: AuthenticatedUser,
@@ -66,6 +133,22 @@ pub async fn get_devices(
   ))
 }
 
+#[utoipa::path(
+  delete,
+  path = "/devices/{device}",
+  params(
+    ("device" = uuid::Uuid, Path, description = "Device UUID")
+  ),
+  responses(
+    (status = 200, description = "Device deleted", body = Device),
+    (status = 401, description = "Unauthorized", body = ErrorResponse),
+    (status = 500, description = "Internal server error", body = ErrorResponse)
+  ),
+  security(
+    ("bearer_auth" = [])
+  ),
+  tag = "devices"
+)]
 pub async fn delete_device(
   State(AppState { context, .. }): State<AppState>,
   Path(device): Path<Uuid>,

@@ -5,10 +5,12 @@ use serde::{Deserialize, Serialize};
 use crate::schema::devices;
 
 #[derive(HasQuery, Insertable, Serialize, Deserialize, Default)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[diesel(table_name = devices)]
 pub struct Device {
   pub id: uuid::Uuid,
   pub os: Option<String>,
+  #[cfg_attr(feature = "utoipa", schema(value_type = Vec<u8>))]
   pub pubkey: Vec<u8>,
   pub hostname: Option<String>,
   pub username: Option<String>,

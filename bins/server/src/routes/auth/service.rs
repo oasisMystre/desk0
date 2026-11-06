@@ -413,15 +413,9 @@ impl AuthService {
 
   pub async fn logout(
     context: &Context,
-    user_id: Uuid,
-    session_id: Option<Uuid>,
+    user: uuid::Uuid,
+    session: uuid::Uuid,
   ) -> Result<RevokeSessionResponse, AuthError> {
-    if let Some(session_id) = session_id {
-      Self::revoke_session(context, user_id, session_id).await
-    } else {
-      Ok(RevokeSessionResponse {
-        message: "logged out".into(),
-      })
-    }
+    Self::revoke_session(context, user, session).await
   }
 }

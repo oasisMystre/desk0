@@ -6,6 +6,7 @@ use uuid::Uuid;
 use crate::{agent_assets, agents, os::AgentOs};
 
 #[derive(HasQuery, Insertable, Serialize, Deserialize, Clone, Debug)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[diesel(table_name = agents)]
 pub struct Agent {
   pub id: Uuid,
@@ -16,6 +17,7 @@ pub struct Agent {
 }
 
 #[derive(HasQuery, Insertable, Serialize, Deserialize, Clone, Debug)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[diesel(table_name = agent_assets)]
 pub struct AgentAsset {
   pub agent: Uuid,

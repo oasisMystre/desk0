@@ -1,25 +1,26 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 
 use super::models::User;
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema)]
 pub struct EmailSignUpRequest {
   pub email: String,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, ToSchema)]
 pub struct EmailSignUpResponse {
   pub message: String,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema)]
 pub struct VerifyOtpRequest {
   pub otp: String,
   pub email: String,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, ToSchema)]
 pub struct VerifyOtpResponse {
   pub user: User,
   pub token: String,
@@ -27,18 +28,18 @@ pub struct VerifyOtpResponse {
   pub session_id: uuid::Uuid,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema)]
 pub struct RefreshTokenRequest {
   pub refresh_token: String,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, ToSchema)]
 pub struct RefreshTokenResponse {
   pub token: String,
   pub refresh_token: String,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, ToSchema)]
 pub struct SessionResponse {
   pub id: uuid::Uuid,
   pub user_agent: Option<String>,
@@ -49,7 +50,7 @@ pub struct SessionResponse {
   pub is_current: bool,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, ToSchema)]
 pub struct RevokeSessionResponse {
   pub message: String,
 }

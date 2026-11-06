@@ -29,11 +29,11 @@ impl DeviceService {
 
   pub async fn get_devices(
     context: &Context,
-    org_id: uuid::Uuid,
+    organization: uuid::Uuid,
   ) -> Result<Vec<Device>, DeviceError> {
     let mut connection = context.get_pg().await?;
 
-    DeviceRepository::find_by_organization(&mut connection, org_id)
+    DeviceRepository::find_by_organization(&mut connection, organization)
       .await
       .map_err(|error| {
         tracing::error!(?error, "failed to fetch devices");
@@ -105,11 +105,11 @@ impl DeviceService {
   pub async fn delete_device(
     context: &Context,
     device: uuid::Uuid,
-    org: uuid::Uuid,
+    organization: uuid::Uuid,
   ) -> Result<Device, DeviceError> {
     let mut connection = context.get_pg().await?;
 
-    DeviceRepository::delete(&mut connection, device, org)
+    DeviceRepository::delete(&mut connection, device, organization)
       .await
       .map_err(|error| match error {
         diesel::result::Error::NotFound => DeviceError::NotFound,
@@ -122,10 +122,10 @@ impl DeviceService {
 
   pub async fn create_challenge(
     context: &Context,
-    device_id: uuid::Uuid,
+    device: uuid::Uuid,
   ) -> Result<ChallengeResponse, DeviceError> {
     let mut connection = context.get_pg().await?;
-    let _ = DeviceRepository::find_by_id(&mut connection, device_id)
+    let _ = DeviceRepository::find_by_id(&mut connection, device)
       .await
       .map_err(|error| match error {
         diesel::result::Error::NotFound => DeviceError::NotFound,
@@ -139,7 +139,7 @@ impl DeviceService {
     let challenge = STANDARD.encode(challenge_bytes);
 
     let mut redis = context.get_redis().await?;
-    let key = Self::get_redis_challenge_key(&device_id);
+    let key = Self::get_redis_challenge_key(&device);
 
     let _: () = redis
       .set_ex(&key, &challenge, CHALLENGE_EXPIRES_IN_SECS)
@@ -151,7 +151,7 @@ impl DeviceService {
 
     Ok(ChallengeResponse {
       challenge,
-      id: device_id,
+      id: device,
       expires_in: CHALLENGE_EXPIRES_IN_SECS,
     })
   }

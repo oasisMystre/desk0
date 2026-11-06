@@ -1,14 +1,17 @@
 use std::time::Duration;
 
-use axum::{Router, routing::get};
+use axum::{Json, Router, routing::get};
 use clap::Parser;
 use shared::init::{init_tracing, load_env};
 use tokio::{net::TcpListener, time::sleep};
 use tower_http::trace::TraceLayer;
+use utoipa::OpenApi;
+use utoipa_swagger_ui::SwaggerUi;
 
 use crate::states::AppState;
 
 pub mod error;
+pub mod openapi;
 pub use error::{AppError, AppResult, SharedError};
 
 mod context;
@@ -24,6 +27,9 @@ struct Args {
 
   #[arg(long, default_value = "8080")]
   port: u16,
+
+  #[arg(long)]
+  export_openapi: Option<std::path::PathBuf>,
 }
 
 #[tokio::main]
@@ -32,13 +38,35 @@ pub async fn main() -> anyhow::Result<()> {
   init_tracing()?;
 
   let args = Args::parse();
+
+  if let Some(path) = args.export_openapi {
+    let spec = openapi::ApiDoc::openapi().to_pretty_json()?;
+    if path.to_string_lossy() == "-" {
+      println!("{spec}");
+    } else {
+      std::fs::write(&path, spec)?;
+      println!("Exported OpenAPI spec to {}", path.display());
+    }
+    return Ok(());
+  }
+
   let state = AppState::init().await?;
 
   let address = format!("{}:{}", args.bind_addr, args.port);
   let listener = TcpListener::bind(&address).await?;
   tracing::info!(%address, "server listening");
 
+  let openapi_doc = openapi::ApiDoc::openapi();
+
   let app = Router::new()
+    .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", openapi_doc.clone()))
+    .route(
+      "/openapi.json",
+      get({
+        let openapi_doc = openapi_doc.clone();
+        move || async move { Json(openapi_doc) }
+      }),
+    )
     .nest("/auth", routes::auth::routes::router())
     .merge(routes::users::routes::router())
     .nest("/organizations", routes::organizations::routes::router())

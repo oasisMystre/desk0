@@ -19,7 +19,7 @@ pub struct DeviceApplicationService;
 impl ApplicationService {
   pub async fn create_application(
     context: &Context,
-    org_id: uuid::Uuid,
+    organization: uuid::Uuid,
     request: CreateApplicationRequest,
   ) -> Result<ResolvedApplication, ApplicationError> {
     let bucket_name = Env::S3Bucket.get().map_err(|error| {
@@ -36,7 +36,7 @@ impl ApplicationService {
     let content_type = request.asset.content_type().to_owned();
 
     let id = uuid::Uuid::new_v4();
-    let key = format!("{}/{}/{}", org_id, id, filename);
+    let key = format!("{}/{}/{}", organization, id, filename);
     let public_url = format!("{}/{}", public_base_url, key);
 
     context
@@ -58,9 +58,9 @@ impl ApplicationService {
       key,
       filename,
       public_url,
+      organization,
       content_type,
       uploaded: true,
-      organization: org_id,
       created_at: Utc::now(),
 
       ..Default::default()
@@ -71,7 +71,7 @@ impl ApplicationService {
       let filename = image.filename().to_owned();
       let content_type = image.content_type().to_owned();
 
-      let key = format!("{}/{}/{}", org_id, id, filename);
+      let key = format!("{}/{}/{}", organization, id, filename);
       let public_url = format!("{}/{}", public_base_url, key);
 
       context
@@ -93,9 +93,9 @@ impl ApplicationService {
         key,
         filename,
         public_url,
+        organization,
         content_type,
         uploaded: true,
-        organization: org_id,
         created_at: Utc::now(),
         ..Default::default()
       };
@@ -116,9 +116,9 @@ impl ApplicationService {
       .transaction::<_, ApplicationError, _>(async |connection| {
         let application = Application {
           scripts,
+          organization,
           os: request.os,
           name: request.name,
-          organization: org_id,
           created_at: Utc::now(),
           id: uuid::Uuid::new_v4(),
           asset: asset_attachment.id,
@@ -169,11 +169,11 @@ impl ApplicationService {
 
   pub async fn get_applications(
     context: &Context,
-    organization_id: uuid::Uuid,
+    organization: uuid::Uuid,
   ) -> Result<Vec<ResolvedApplication>, ApplicationError> {
     let mut connection = context.get_pg().await?;
 
-    ApplicationRepository::find_by_organization(&mut connection, organization_id)
+    ApplicationRepository::find_by_organization(&mut connection, organization)
       .await
       .map_err(|error| {
         tracing::error!(?error, "failed to fetch applications");
@@ -221,12 +221,12 @@ impl ApplicationService {
 impl DeviceApplicationService {
   pub async fn get_device_applications(
     context: &Context,
-    org_id: uuid::Uuid,
-    device_id: uuid::Uuid,
+    organization: uuid::Uuid,
+    device: uuid::Uuid,
   ) -> Result<Vec<ResolvedDeviceApplication>, ApplicationError> {
     let mut connection = context.get_pg().await?;
 
-    DeviceApplicationRepository::find_device_applications(&mut connection, device_id, org_id)
+    DeviceApplicationRepository::find_device_applications(&mut connection, device, organization)
       .await
       .map_err(|error| {
         tracing::error!(?error, "failed to fetch device applications");

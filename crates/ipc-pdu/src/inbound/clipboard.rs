@@ -31,7 +31,7 @@ pub enum IpcClipboardEvent {
 impl IpcPackedClipboardData {
   pub fn unpack(
     self,
-     buffers: &mut VecDeque<IpcSharedBuffer>,
+    buffers: &mut VecDeque<IpcSharedBuffer>,
   ) -> anyhow::Result<IpcUnpackedClipboardData> {
     Ok(match self {
       IpcPackedClipboardData::Text(value) => IpcUnpackedClipboardData::Text(value),

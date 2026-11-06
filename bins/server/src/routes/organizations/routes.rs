@@ -14,6 +14,6 @@ pub fn router() -> Router<AppState> {
     )
     .route(
       "/token/{device_id}",
-      post(handlers::create_connection_token),
+      post(handlers::create_organization_connection_token),
     )
 }

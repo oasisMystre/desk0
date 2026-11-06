@@ -1,0 +1,16 @@
+{
+  "applinks": {
+    "details": [
+      {
+        "appIDs": [
+          "desk0.com.desk0.viewer"
+        ],
+        "components": [
+          {
+            "/": "/connect"
+          }
+        ]
+      }
+    ]
+  }
+}

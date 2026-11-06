@@ -1,0 +1,14 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "desk0-well-known",
+  "compatibility_date": "2025-09-02",
+  "assets": {
+    "directory": "./public"
+  },
+  "observability": {
+    "enabled": true,
+    "traces": {
+      "enabled": true
+    }
+  }
+}

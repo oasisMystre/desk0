@@ -1,4 +1,7 @@
-use ironrdp::{core::{Decode, DecodeError, Encode, UnexpectedMessageTypeErr, cast_length}, svc::SvcEncode};
+use ironrdp::{
+  core::{Decode, DecodeError, Encode, UnexpectedMessageTypeErr, cast_length},
+  svc::SvcEncode,
+};
 
 pub enum IoInputEvent {
   Poll,

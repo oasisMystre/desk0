@@ -6,7 +6,7 @@ pub use flow::{
   raw_file_from_request::RawFileFromRequest,
 };
 
-#[derive(serde::Deserialize, serde::Serialize, Clone, Debug)]
+#[derive(serde::Deserialize, serde::Serialize, Clone, Debug, utoipa::ToSchema)]
 pub struct ResolvedApplication {
   pub id: uuid::Uuid,
   pub name: String,
@@ -18,7 +18,7 @@ pub struct ResolvedApplication {
   pub created_at: chrono::DateTime<chrono::Utc>,
 }
 
-#[derive(serde::Deserialize, serde::Serialize, Clone, Debug)]
+#[derive(serde::Deserialize, serde::Serialize, Clone, Debug, utoipa::ToSchema)]
 pub struct ResolvedDeviceApplication {
   pub id: uuid::Uuid,
   pub device: uuid::Uuid,

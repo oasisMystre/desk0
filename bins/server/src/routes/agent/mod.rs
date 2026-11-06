@@ -1,7 +1,7 @@
-mod dto;
-mod error;
-mod handlers;
-mod models;
+pub mod dto;
+pub mod error;
+pub mod handlers;
+pub mod models;
 mod repository;
 mod service;
 

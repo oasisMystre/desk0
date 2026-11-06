@@ -10,7 +10,7 @@ default = ["otel"]
 
 [dependencies]
 # internal crates
-flow = { workspace = true, features = ["axum"] }
+flow = { workspace = true, features = ["axum", "utoipa"] }
 shared = { workspace = true, features = ["postgres", "redis", "otel"] }
 
 jwt.workspace = true
@@ -34,6 +34,8 @@ serde = { workspace = true, features = ["derive"] }
 uuid = { workspace = true, features = ["v4", "serde"] }
 axum = { workspace = true, features = ["ws", "multipart"] }
 diesel-async = { workspace = true, features = ["postgres", "bb8"] }
+utoipa = { workspace = true, features = ["axum_extras", "uuid", "chrono"] }
+utoipa-swagger-ui = { workspace = true, features = ["axum"] }
 
 rcgen = "0.14.10"
 dashmap = "6.2.1"

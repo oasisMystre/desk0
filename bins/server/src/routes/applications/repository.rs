@@ -118,14 +118,14 @@ impl ApplicationRepository {
 
   pub async fn delete(
     connection: &mut AsyncPgConnection,
-    app_id: uuid::Uuid,
-    org_id: uuid::Uuid,
+    application: uuid::Uuid,
+    organization: uuid::Uuid,
   ) -> Result<Application, diesel::result::Error> {
     diesel::delete(
       applications::table.filter(
         applications::id
-          .eq(app_id)
-          .and(applications::organization.eq(org_id)),
+          .eq(application)
+          .and(applications::organization.eq(organization)),
       ),
     )
     .returning(Application::as_returning())
@@ -147,8 +147,8 @@ impl DeviceApplicationRepository {
 
   pub async fn find_device_applications(
     connection: &mut AsyncPgConnection,
-    device_id: uuid::Uuid,
-    organization_id: uuid::Uuid,
+    device: uuid::Uuid,
+    organization: uuid::Uuid,
   ) -> Result<Vec<ResolvedDeviceApplication>, diesel::result::Error> {
     let (asset_attachments, image_attachments) = diesel::alias!(
       attachments as asset_attachments,
@@ -166,8 +166,8 @@ impl DeviceApplicationRepository {
       )
       .filter(
         device_applications::device
-          .eq(device_id)
-          .and(device_applications::organization.eq(organization_id)),
+          .eq(device)
+          .and(device_applications::organization.eq(organization)),
       )
       .select((
         DeviceApplication::as_select(),
@@ -210,18 +210,18 @@ impl DeviceApplicationRepository {
 
   pub async fn remove_device_application(
     connection: &mut AsyncPgConnection,
-    device_id: uuid::Uuid,
-    application_id: uuid::Uuid,
-    organization_id: uuid::Uuid,
+    device: uuid::Uuid,
+    application: uuid::Uuid,
+    organization: uuid::Uuid,
   ) -> Result<DeviceApplication, diesel::result::Error> {
     diesel::delete(
       device_applications::table
-        .filter(device_applications::device.eq(device_id))
-        .filter(device_applications::application.eq(application_id))
+        .filter(device_applications::device.eq(device))
+        .filter(device_applications::application.eq(application))
         .filter(
           device_applications::device.eq_any(
             devices::table
-              .filter(devices::organization.eq(organization_id))
+              .filter(devices::organization.eq(organization))
               .select(devices::id),
           ),
         ),

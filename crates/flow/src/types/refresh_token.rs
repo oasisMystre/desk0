@@ -1,5 +1,5 @@
 use chrono::{DateTime, Utc};
-use diesel::{prelude::Insertable, Selectable, associations::Identifiable, deserialize::Queryable};
+use diesel::{Selectable, associations::Identifiable, deserialize::Queryable, prelude::Insertable};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 

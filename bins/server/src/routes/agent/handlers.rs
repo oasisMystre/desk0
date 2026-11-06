@@ -2,14 +2,28 @@ use axum::{Json, extract::State};
 
 use super::{
   dto::{Agents, BuildAgentRequest, BuildAgentResponse},
-  error::AgentError,
+  error::{AgentError},
   service::AgentService,
 };
 use crate::{
-  routes::agent::dto::{BuildAgentStatusRequest, BuildAgentStatusResponse},
-  states::{AppState, AuthenticatedUser},
+  error::ErrorResponse, routes::agent::dto::{BuildAgentStatusRequest, BuildAgentStatusResponse}, states::{AppState, AuthenticatedUser},
 };
 
+#[utoipa::path(
+  post,
+  path = "/agents",
+  request_body = BuildAgentRequest,
+  responses(
+    (status = 200, description = "Agent build job queued", body = BuildAgentResponse),
+    (status = 401, description = "Unauthorized", body = ErrorResponse),
+    (status = 409, description = "Agent version conflict", body = ErrorResponse),
+    (status = 500, description = "Internal server error", body = ErrorResponse)
+  ),
+  security(
+    ("bearer_auth" = [])
+  ),
+  tag = "agents"
+)]
 pub async fn build_agent(
   State(AppState { queue, context, .. }): State<AppState>,
   auth: AuthenticatedUser,
@@ -19,6 +33,20 @@ pub async fn build_agent(
   Ok(Json(agent))
 }
 
+#[utoipa::path(
+  get,
+  path = "/agents/status",
+  request_body = BuildAgentStatusRequest,
+  responses(
+    (status = 200, description = "Agent build status", body = BuildAgentStatusResponse),
+    (status = 401, description = "Unauthorized", body = ErrorResponse),
+    (status = 500, description = "Internal server error", body = ErrorResponse)
+  ),
+  security(
+    ("bearer_auth" = [])
+  ),
+  tag = "agents"
+)]
 pub async fn get_build_agent_status(
   State(AppState { queue, context, .. }): State<AppState>,
   auth: AuthenticatedUser,
@@ -30,6 +58,19 @@ pub async fn get_build_agent_status(
   Ok(Json(status))
 }
 
+#[utoipa::path(
+  get,
+  path = "/agents",
+  responses(
+    (status = 200, description = "List built agents", body = Vec<Agents>),
+    (status = 401, description = "Unauthorized", body = ErrorResponse),
+    (status = 500, description = "Internal server error", body = ErrorResponse)
+  ),
+  security(
+    ("bearer_auth" = [])
+  ),
+  tag = "agents"
+)]
 pub async fn get_agents(
   State(AppState { context, .. }): State<AppState>,
   auth: AuthenticatedUser,

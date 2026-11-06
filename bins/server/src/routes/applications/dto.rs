@@ -2,14 +2,14 @@ use std::str::FromStr;
 
 use axum::extract::Multipart;
 use serde::{Deserialize, Serialize};
-
+use utoipa::ToSchema;
 
 use super::{
   error::ApplicationError,
   models::{AgentOs, RawFileFromRequest, Scripts},
 };
 
-#[derive(Deserialize, Serialize, Clone, Debug)]
+#[derive(Deserialize, Serialize, Clone, Debug, ToSchema)]
 pub struct AddDeviceApplicationRequest {
   pub application: uuid::Uuid,
 }

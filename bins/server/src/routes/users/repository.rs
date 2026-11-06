@@ -1,6 +1,8 @@
 use diesel::{ExpressionMethods, QueryDsl, SelectableHelper};
 use diesel_async::{AsyncPgConnection, RunQueryDsl};
-use flow::{user::User, users};
+use flow::users;
+
+use super::models::User;
 
 pub struct UserRepository;
 
