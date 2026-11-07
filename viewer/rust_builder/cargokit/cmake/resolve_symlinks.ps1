@@ -22,9 +22,17 @@ function Resolve-Symlinks {
             $realPath += '/'
         }
 
-        $item = Get-Item $realPath
-        if ($item.LinkTarget) {
-            $realPath = $item.LinkTarget.Replace('\', '/')
+        if (Test-Path -LiteralPath $realPath) {
+            $item = Get-Item -LiteralPath $realPath
+            if ($item.LinkTarget) {
+                $target = $item.LinkTarget.Replace('\', '/')
+                if ([System.IO.Path]::IsPathRooted($target)) {
+                    $realPath = $target
+                } else {
+                    $parentDir = [System.IO.Path]::GetDirectoryName($realPath)
+                    $realPath = [System.IO.Path]::GetFullPath([System.IO.Path]::Combine($parentDir, $target)).Replace('\', '/')
+                }
+            }
         }
     }
     $realPath
