@@ -7,7 +7,6 @@
 #include <multiview_desktop/multiview_desktop_runner.h>
 
 #include "flutter/generated_plugin_registrant.h"
-#include <bitsdojo_window_linux/bitsdojo_window_plugin.h>
 
 struct _MyApplication {
   GtkApplication parent_instance;
@@ -62,8 +61,6 @@ static void my_application_activate(GApplication *application) {
     gtk_window_set_title(window, "desk0");
   }
 
-  auto bdw = bitsdojo_window_from(window);
-  bdw->setCustomFrame(true);
 
   g_autoptr(FlDartProject) project = fl_dart_project_new();
   multiview_desktop_linux_runner_prepare_dart_project(project);
