@@ -21,6 +21,9 @@ env:
   WINDOWS_LLVM_VERSION: "15.0.6"
   FLUTTER_WINDOWS_ARM_VERSION: "3.44.9"
   TAG_NAME: "${{ inputs.upload-tag }}"
+  CONSOLE_URL: "${{ vars.CONSOLE_URL }}"
+  API_BASE_URL: "${{ vars.API_BASE_URL }}"
+  RDP_ENDPOINT: "${{ vars.RDP_ENDPOINT }}"
 
 jobs:
   generate-bridge:
@@ -117,7 +120,12 @@ jobs:
         working-directory: viewer
 
       - name: Build Flutter Windows (.exe) (Unsigned)
-        run: flutter build windows --release -v
+        shell: pwsh
+        run: |
+          flutter build windows --release -v `
+            "--dart-define=CONSOLE_URL=${{ env.CONSOLE_URL }}" `
+            "--dart-define=API_BASE_URL=${{ env.API_BASE_URL }}" `
+            "--dart-define=RDP_ENDPOINT=${{ env.RDP_ENDPOINT }}"
         working-directory: viewer
 
       - name: Package Windows build (.exe) (Unsigned)
@@ -150,7 +158,7 @@ jobs:
       matrix:
         job:
           - { target: x86_64-apple-darwin, os: macos-15-intel, arch: x86_64 }
-          - { target: aarch64-apple-darwin, os: macos-14, arch: aarch64 }
+          - { target: aarch64-apple-darwin, os: macos-15, arch: aarch64 }
 
     steps:
       - name: Export Github actions cache environment variables
@@ -173,6 +181,11 @@ jobs:
           else
             brew install pkg-config
           fi
+          LIBPQ_PREFIX="$(brew --prefix libpq)"
+          echo "PQ_LIB_DIR=$LIBPQ_PREFIX/lib" >> $GITHUB_ENV
+          echo "LIBRARY_PATH=$LIBPQ_PREFIX/lib:${LIBRARY_PATH:-}" >> $GITHUB_ENV
+          echo "PKG_CONFIG_PATH=$LIBPQ_PREFIX/lib/pkgconfig:${PKG_CONFIG_PATH:-}" >> $GITHUB_ENV
+          echo "$LIBPQ_PREFIX/bin" >> $GITHUB_PATH
 
       - name: Install flutter
         id: flutter
@@ -204,7 +217,11 @@ jobs:
         working-directory: viewer
 
       - name: Build Flutter macOS (Unsigned)
-        run: flutter build macos --release
+        run: |
+          flutter build macos --release \
+            "--dart-define=CONSOLE_URL=${{ env.CONSOLE_URL }}" \
+            "--dart-define=API_BASE_URL=${{ env.API_BASE_URL }}" \
+            "--dart-define=RDP_ENDPOINT=${{ env.RDP_ENDPOINT }}"
         working-directory: viewer
 
       - name: Package macOS DMG (Unsigned)

@@ -70,7 +70,7 @@ jobs:
       - name: Build Agent Windows Shell (.exe) (Unsigned)
         shell: pwsh
         run: |
-          cargo build --release --target ${{ matrix.job.target }} --bin desk0-agent
+          cargo build --release --target ${{ matrix.job.target }} -p desk0-agent --bin desk0-agent --features ipc
           New-Item -ItemType Directory -Force -Path dist
           $exePath = "target/${{ matrix.job.target }}/release/desk0-agent.exe"
           if (Test-Path $exePath) {
@@ -106,7 +106,7 @@ jobs:
             }
           - {
               target: aarch64-apple-darwin,
-              os: macos-14,
+              os: macos-15,
               arch: aarch64,
             }
 
@@ -131,6 +131,11 @@ jobs:
           else
             brew install pkg-config
           fi
+          LIBPQ_PREFIX="$(brew --prefix libpq)"
+          echo "PQ_LIB_DIR=$LIBPQ_PREFIX/lib" >> $GITHUB_ENV
+          echo "LIBRARY_PATH=$LIBPQ_PREFIX/lib:${LIBRARY_PATH:-}" >> $GITHUB_ENV
+          echo "PKG_CONFIG_PATH=$LIBPQ_PREFIX/lib/pkgconfig:${PKG_CONFIG_PATH:-}" >> $GITHUB_ENV
+          echo "$LIBPQ_PREFIX/bin" >> $GITHUB_PATH
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -145,7 +150,7 @@ jobs:
 
       - name: Build Agent macOS Shell (Unsigned)
         run: |
-          cargo build --release --target ${{ matrix.job.target }} --bin desk0-agent
+          cargo build --release --target ${{ matrix.job.target }} -p desk0-agent --bin desk0-agent --features ipc
 
       - name: Package macOS Agent Shell Artifacts (Unsigned)
         run: |
