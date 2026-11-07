@@ -174,17 +174,12 @@ jobs:
 
       - name: Install build runtime
         run: |
-          brew install llvm create-dmg nasm libpq
+          brew install llvm create-dmg nasm
           if command -v pkg-config &>/dev/null; then
             echo "pkg-config is already installed"
           else
             brew install pkg-config
           fi
-          LIBPQ_PREFIX="$(brew --prefix libpq)"
-          echo "PQ_LIB_DIR=$LIBPQ_PREFIX/lib" >> $GITHUB_ENV
-          echo "LIBRARY_PATH=$LIBPQ_PREFIX/lib:${LIBRARY_PATH:-}" >> $GITHUB_ENV
-          echo "PKG_CONFIG_PATH=$LIBPQ_PREFIX/lib/pkgconfig:${PKG_CONFIG_PATH:-}" >> $GITHUB_ENV
-          echo "$LIBPQ_PREFIX/bin" >> $GITHUB_PATH
 
       - name: Install flutter
         id: flutter

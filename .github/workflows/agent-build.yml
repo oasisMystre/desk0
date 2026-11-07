@@ -11,9 +11,9 @@ on:
         default: "nightly"
   workflow_dispatch:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
-    branches: [ main ]
+    branches: [main]
 
 env:
   RUST_VERSION: "1.97.0"
@@ -99,16 +99,8 @@ jobs:
       fail-fast: false
       matrix:
         job:
-          - {
-              target: x86_64-apple-darwin,
-              os: macos-15-intel,
-              arch: x86_64,
-            }
-          - {
-              target: aarch64-apple-darwin,
-              os: macos-15,
-              arch: aarch64,
-            }
+          - { target: x86_64-apple-darwin, os: macos-15-intel, arch: x86_64 }
+          - { target: aarch64-apple-darwin, os: macos-15, arch: aarch64 }
 
     steps:
       - name: Export Github actions cache environment variables
@@ -125,17 +117,12 @@ jobs:
 
       - name: Install build runtime
         run: |
-          brew install llvm create-dmg nasm libpq
+          brew install llvm create-dmg nasm
           if command -v pkg-config &>/dev/null; then
             echo "pkg-config is already installed"
           else
             brew install pkg-config
           fi
-          LIBPQ_PREFIX="$(brew --prefix libpq)"
-          echo "PQ_LIB_DIR=$LIBPQ_PREFIX/lib" >> $GITHUB_ENV
-          echo "LIBRARY_PATH=$LIBPQ_PREFIX/lib:${LIBRARY_PATH:-}" >> $GITHUB_ENV
-          echo "PKG_CONFIG_PATH=$LIBPQ_PREFIX/lib/pkgconfig:${PKG_CONFIG_PATH:-}" >> $GITHUB_ENV
-          echo "$LIBPQ_PREFIX/bin" >> $GITHUB_PATH
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
