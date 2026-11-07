@@ -10,6 +10,7 @@
 #include <flutter_custom_cursor/flutter_custom_cursor_plugin.h>
 #include <irondash_engine_context/irondash_engine_context_plugin.h>
 #include <multiview_desktop/multiview_desktop_plugin.h>
+#include <system_tray/system_tray_plugin.h>
 
 void fl_register_plugins(FlPluginRegistry* registry) {
   g_autoptr(FlPluginRegistrar) app_links_linux_registrar =
@@ -24,4 +25,7 @@ void fl_register_plugins(FlPluginRegistry* registry) {
   g_autoptr(FlPluginRegistrar) multiview_desktop_registrar =
       fl_plugin_registry_get_registrar_for_plugin(registry, "MultiviewDesktopPlugin");
   multiview_desktop_plugin_register_with_registrar(multiview_desktop_registrar);
+  g_autoptr(FlPluginRegistrar) system_tray_registrar =
+      fl_plugin_registry_get_registrar_for_plugin(registry, "SystemTrayPlugin");
+  system_tray_plugin_register_with_registrar(system_tray_registrar);
 }

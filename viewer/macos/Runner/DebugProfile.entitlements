@@ -11,8 +11,8 @@
 	<key>com.apple.security.network.client</key>
 	<true/>
 	<key>com.apple.developer.associated-domains</key>
-	<array>
+	<!-- <array>
 		<string>applinks:app.desk0.xyz</string>
-	</array>
+	</array> -->
 </dict>
-</plist>
+</plist>    

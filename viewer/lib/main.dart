@@ -2,20 +2,32 @@ import 'package:get/get.dart';
 import 'package:multiview_desktop/multiview_desktop.dart';
 import 'package:flutter/material.dart' hide ConnectionState;
 
+import 'extensions.dart' show DeepLinkUri;
+import 'system_tray.dart' show initSystemTray;
 import 'theme/app_theme.dart' show AppColors;
 import 'ffi/frb_generated.dart' show RustLib;
-import 'features/connection/index.dart' show OpenConnection;
+import 'deep_link_service.dart' show DeepLinkService;
+import 'window_manager.dart' show ConnectionWindowManager;
 import 'states/index.dart' show ConnectionState, Connection;
-import 'deep_link_service.dart' show DeepLinkService, DeepLinkUri;
 import 'l10n/generated/app_localizations.dart' show AppLocalizations;
 
 final DeepLinkService deepLinkService = DeepLinkService();
+
+class ViewerWindowObserver extends WindowObserver {
+  @override
+  void onWindowClosed(int viewId) {
+    ConnectionWindowManager.instance.onWindowClosed(viewId);
+  }
+}
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   await RustLib.init();
 
+  Get.put(ConnectionState());
+
+  await initSystemTray();
   runMultiApp(
     home: (context, publicId) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -33,7 +45,7 @@ void main() async {
           fontFamily: 'MonaSans',
           scaffoldBackgroundColor: Colors.transparent,
           colorScheme: const ColorScheme.dark(
-            primary: AppColors.accentBlue,
+            primary: AppColors.accentPrimary,
             surface: AppColors.mainBackground,
           ),
           iconButtonTheme: const IconButtonThemeData(
@@ -48,13 +60,19 @@ void main() async {
       );
     },
     config: MultiAppConfig(
+      observers: [ViewerWindowObserver()],
       generalParams: const MultiPlatformParams(
         enableDynamicAnchor: true,
         closeMode: CloseMode.softCascade,
       ),
-      macosParams: const MacosPlatformParams(
+      macosParams: MacosPlatformParams(
         closeAppAfterLastWindowClosed: false,
         saveLastWindowToReopen: false,
+        onTaskbarTap: () => ConnectionWindowManager.instance.show(),
+        onTerminate: () async {
+          await ConnectionWindowManager.instance.close(quit: true);
+          return true;
+        },
       ),
       globalWindowOptions: const WindowOptions(
         size: Size(1, 1),
@@ -77,9 +95,10 @@ class MainApplication extends StatefulWidget {
 }
 
 class MainApplicationState extends State<MainApplication> {
-  Future<int>? window;
-
-  final ConnectionState connectionState = ConnectionState();
+  late final ConnectionState connectionState =
+      Get.isRegistered<ConnectionState>()
+      ? Get.find<ConnectionState>()
+      : Get.put(ConnectionState());
 
   Future<void> handleDeepLink(Uri uri) async {
     if (uri.route != 'connect') return;
@@ -90,36 +109,35 @@ class MainApplicationState extends State<MainApplication> {
     final connection = Connection.fromEncodedString(rawConnection);
     connectionState.addConnection(connection);
 
-    if (window == null) {
-      window = openWindow(
-        (context, publicId) => const OpenConnection(),
-        options: const WindowOptions(
-          title: "Desk0 Viewer",
-          windowButtonVisibility: true,
-          minimumSize: Size(640, 400),
-          titleBarStyle: TitleBarStyle.hidden,
-          backgroundColor: Colors.transparent,
-        ),
-      );
-    }
+    await ConnectionWindowManager.instance.open(focus: true);
   }
 
   @override
   void initState() {
     super.initState();
 
-    Get.put(connectionState);
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      try {
-        await MultiViewDesktop.of(context).hide();
-      } catch (_) {}
-    });
+    try {
+      MultiViewDesktop.allWindowIdsNotifier.addListener(_onWindowIdsChanged);
+    } catch (_) {}
 
     deepLinkService.initialize(handleDeepLink);
   }
 
+  void _onWindowIdsChanged() {
+    try {
+      final openIds = MultiViewDesktop.allWindowIdsNotifier.value;
+      final currentId = ConnectionWindowManager.instance.viewId;
+      if (currentId != null && !openIds.contains(currentId)) {
+        ConnectionWindowManager.instance.onWindowClosed(currentId);
+      }
+    } catch (_) {}
+  }
+
   @override
   void dispose() {
+    try {
+      MultiViewDesktop.allWindowIdsNotifier.removeListener(_onWindowIdsChanged);
+    } catch (_) {}
     deepLinkService.dispose();
     super.dispose();
   }

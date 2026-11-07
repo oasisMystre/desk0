@@ -6,12 +6,15 @@ PODS:
     - FlutterMacOS
   - rust_lib_desk0 (0.0.1):
     - FlutterMacOS
+  - system_tray (0.0.1):
+    - FlutterMacOS
 
 DEPENDENCIES:
   - flutter_custom_cursor (from `Flutter/ephemeral/.symlinks/plugins/flutter_custom_cursor/macos`)
   - FlutterMacOS (from `Flutter/ephemeral`)
   - irondash_engine_context (from `Flutter/ephemeral/.symlinks/plugins/irondash_engine_context/macos`)
   - rust_lib_desk0 (from `Flutter/ephemeral/.symlinks/plugins/rust_lib_desk0/macos`)
+  - system_tray (from `Flutter/ephemeral/.symlinks/plugins/system_tray/macos`)
 
 EXTERNAL SOURCES:
   flutter_custom_cursor:
@@ -22,12 +25,15 @@ EXTERNAL SOURCES:
     :path: Flutter/ephemeral/.symlinks/plugins/irondash_engine_context/macos
   rust_lib_desk0:
     :path: Flutter/ephemeral/.symlinks/plugins/rust_lib_desk0/macos
+  system_tray:
+    :path: Flutter/ephemeral/.symlinks/plugins/system_tray/macos
 
 SPEC CHECKSUMS:
   flutter_custom_cursor: 37e588711a2746f5cf48adb58b582cacff11c0c6
   FlutterMacOS: c232990155153907050900a2e175c7773903ba4e
   irondash_engine_context: 893c7d96d20ce361d7e996f39d360c4c2f9869ba
   rust_lib_desk0: e4f9d5cf9724158dcbc5288adfb2609252ca7d91
+  system_tray: 53f0cdb020c3fbee711d3fe45ae7ce730e033d2b
 
 PODFILE CHECKSUM: 1e95c36afbfd1cb6423ceca4de7a8e1b256fb6ac
 
