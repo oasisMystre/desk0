@@ -40,18 +40,15 @@ class ConnectionOverlay extends StatelessWidget {
               Text(
                 title,
                 style: const TextStyle(
+                  fontSize: 12,
                   color: Colors.white,
                   fontStyle: FontStyle.normal,
                   fontWeight: FontWeight.normal,
-                  fontSize: 12,
                 ),
               ),
               if (message != null) ...[
                 const SizedBox(height: 8),
-                Text(
-                  message!,
-                  style: const TextStyle(color: Colors.white70),
-                ),
+                Text(message!, style: const TextStyle(color: Colors.white70)),
               ],
             ],
           ),

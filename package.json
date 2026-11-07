@@ -6,11 +6,13 @@
     "codegen": "flutter_rust_bridge_codegen generate",
     "drizzle:generate": "drizzle-kit generate",
     "drizzle:migrate": "drizzle-kit migrate",
-    "lint": "bun x biome format --write && bun x biome lint --fix && biome check .",
-    "deploy:well-known": "cd web/deeplink && wrangler deploy"
+    "lint": "biome format --write && biome lint --fix && biome check .",
+    "deploy:well-known": "cd web/deeplink && wrangler deploy",
+    "generate-client": "openapi-generator-cli generate -i ./openapi.json -g typescript-fetch -o ./packages/client --additional-properties=npmName=@workspace/client,supportsES6=true,modelPropertyNaming=camelCase"
   },
   "devDependencies": {
     "@biomejs/biome": "=2.4.15",
+    "@openapitools/openapi-generator-cli": "^2.42.0",
     "@tsconfig/bun": "^1.0.10",
     "@types/bun": "latest",
     "dotenv": "^17.4.2",

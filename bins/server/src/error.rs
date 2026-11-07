@@ -1,5 +1,6 @@
 use axum::{
   Json,
+  body::Body,
   http::StatusCode,
   response::{IntoResponse, Response},
 };
@@ -125,6 +126,9 @@ impl ErrorResponse {
     }
   }
 
+  pub fn into_body(self) -> Body {
+    Body::from(serde_json::to_vec(&self).expect("Failed to serialize ErrorResponse"))
+  }
   pub fn into_response(self, status: StatusCode) -> Response {
     (status, Json(self)).into_response()
   }

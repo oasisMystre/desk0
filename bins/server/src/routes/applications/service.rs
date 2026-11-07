@@ -1,17 +1,22 @@
+use axum::extract::Multipart;
 use chrono::Utc;
 use diesel_async::AsyncConnection;
 use shared::env::FromEnv;
 
 use super::{
-  dto::CreateApplicationRequest,
   error::ApplicationError,
-  models::{
-    Application, Attachment, DeviceApplication, ResolvedApplication, ResolvedDeviceApplication,
-  },
+  models::{Application, DeviceApplication, ResolvedApplication, ResolvedDeviceApplication},
+  parser::parse_application_multipart,
   repository::ApplicationRepository,
   repository::DeviceApplicationRepository,
 };
-use crate::{SharedError, context::Context, env::Env};
+use crate::{
+  SharedError,
+  context::Context,
+  env::Env,
+  routes::attachments::repository::AttachmentRepository,
+  utils::s3::delete_objects,
+};
 
 pub struct ApplicationService;
 pub struct DeviceApplicationService;
@@ -20,151 +25,92 @@ impl ApplicationService {
   pub async fn create_application(
     context: &Context,
     organization: uuid::Uuid,
-    request: CreateApplicationRequest,
+    multipart: Multipart,
   ) -> Result<ResolvedApplication, ApplicationError> {
-    let bucket_name = Env::S3Bucket.get().map_err(|error| {
+    let bucket = Env::S3Bucket.get().map_err(|error| {
       tracing::error!(?error, "missing S3 bucket configuration");
       ApplicationError::ConfigError
     })?;
 
-    let public_base_url = Env::S3PublicBaseUrl.get().map_err(|error| {
-      tracing::error!(?error, "missing S3 public base url configuration");
-      ApplicationError::ConfigError
-    })?;
+    let mut uploaded_keys = Vec::new();
 
-    let filename = request.asset.filename().to_owned();
-    let content_type = request.asset.content_type().to_owned();
-
-    let id = uuid::Uuid::new_v4();
-    let key = format!("{}/{}/{}", organization, id, filename);
-    let public_url = format!("{}/{}", public_base_url, key);
-
-    context
-      .s3
-      .put_object()
-      .bucket(&bucket_name)
-      .key(&key)
-      .body(request.asset.bytes.into())
-      .content_type(&content_type)
-      .send()
-      .await
-      .map_err(|error| {
-        tracing::error!(?error, "failed to upload asset to s3");
-        ApplicationError::UploadFailed
-      })?;
-
-    let asset_attachment = Attachment {
-      id,
-      key,
-      filename,
-      public_url,
-      organization,
-      content_type,
-      uploaded: true,
-      created_at: Utc::now(),
-
-      ..Default::default()
-    };
-
-    let image_attachment = if let Some(image) = request.image {
-      let id = uuid::Uuid::new_v4();
-      let filename = image.filename().to_owned();
-      let content_type = image.content_type().to_owned();
-
-      let key = format!("{}/{}/{}", organization, id, filename);
-      let public_url = format!("{}/{}", public_base_url, key);
-
-      context
-        .s3
-        .put_object()
-        .bucket(&bucket_name)
-        .key(&key)
-        .body(image.bytes.into())
-        .content_type(&content_type)
-        .send()
-        .await
-        .map_err(|error| {
-          tracing::error!(?error, "failed to upload image to s3");
-          ApplicationError::UploadFailed
-        })?;
-
-      let attachment = Attachment {
-        id,
-        key,
-        filename,
-        public_url,
+    let result = async {
+      let request = parse_application_multipart(
+        &context.s3,
+        &bucket,
         organization,
-        content_type,
-        uploaded: true,
-        created_at: Utc::now(),
-        ..Default::default()
-      };
-
-      Some(attachment)
-    } else {
-      None
-    };
-
-    let mut pg = context.get_pg().await?;
-
-    let scripts = serde_json::to_value(&request.scripts).map_err(|error| {
-      tracing::error!(?error, "failed to serialize scripts");
-      ApplicationError::InvalidField("scripts")
-    })?;
-
-    let result = pg
-      .transaction::<_, ApplicationError, _>(async |connection| {
-        let application = Application {
-          scripts,
-          organization,
-          os: request.os,
-          name: request.name,
-          created_at: Utc::now(),
-          id: uuid::Uuid::new_v4(),
-          asset: asset_attachment.id,
-          image: image_attachment.as_ref().map(|value| value.id),
-        };
-
-        let mut attachments = Vec::with_capacity(2);
-        attachments.push(asset_attachment);
-        if let Some(attachment) = image_attachment {
-          attachments.push(attachment);
-        }
-
-        super::super::attachments::repository::AttachmentRepository::create(
-          connection,
-          &attachments,
-        )
-        .await
-        .map_err(|error| {
-          tracing::error!(?error, "failed to save attachments");
-          ApplicationError::CreateFailed
-        })?;
-
-        let application = ApplicationRepository::create(connection, &application)
-          .await
-          .map_err(|error| {
-            tracing::error!(?error, "failed to insert application");
-            ApplicationError::CreateFailed
-          })?;
-
-        let image = attachments.pop();
-        let asset = attachments.pop().expect("asset should not be none");
-
-        Ok(ResolvedApplication {
-          asset,
-          image,
-          id: application.id,
-          os: application.os,
-          name: application.name,
-          scripts: request.scripts,
-          created_at: application.created_at,
-          organization: application.organization,
-        })
-      })
+        multipart,
+        &mut uploaded_keys,
+      )
       .await?;
 
-    Ok(result)
+      let mut pg = context.get_pg().await?;
+
+      let scripts = serde_json::to_value(&request.scripts).map_err(|error| {
+        tracing::error!(?error, "failed to serialize scripts");
+        ApplicationError::InvalidField("scripts")
+      })?;
+
+      let resolved = pg
+        .transaction::<_, ApplicationError, _>(async |connection| {
+          let application = Application {
+            scripts,
+            organization,
+            os: request.os,
+            name: request.name,
+            created_at: Utc::now(),
+            id: uuid::Uuid::new_v4(),
+            asset: request.asset.id,
+            image: request.image.as_ref().map(|value| value.id),
+          };
+
+          let mut attachments = Vec::with_capacity(2);
+          attachments.push(request.asset);
+          if let Some(attachment) = request.image {
+            attachments.push(attachment);
+          }
+
+          AttachmentRepository::create(connection, &attachments)
+            .await
+            .map_err(|error| {
+              tracing::error!(?error, "failed to save attachments");
+              ApplicationError::CreateFailed
+            })?;
+
+          let application = ApplicationRepository::create(connection, &application)
+            .await
+            .map_err(|error| {
+              tracing::error!(?error, "failed to insert application");
+              ApplicationError::CreateFailed
+            })?;
+
+          let image = attachments.pop();
+          let asset = attachments.pop().expect("asset should not be none");
+
+          Ok(ResolvedApplication {
+            asset,
+            image,
+            id: application.id,
+            os: application.os,
+            name: application.name,
+            scripts: request.scripts,
+            created_at: application.created_at,
+            organization: application.organization,
+          })
+        })
+        .await?;
+
+      Ok(resolved)
+    }
+    .await;
+
+    match result {
+      Ok(application) => Ok(application),
+      Err(error) => {
+        delete_objects(&context.s3, &bucket, &uploaded_keys).await;
+        Err(error)
+      }
+    }
   }
 
   pub async fn get_applications(

@@ -157,7 +157,12 @@ impl Modify for SecurityAddon {
   info(
     title = "Desk0 Server API",
     version = "0.1.0",
-    description = "Desk0 Relay Server & Device Broker OpenAPI specification"
-  )
+    description = "Desk0 Relay Server & Device Broker OpenAPI specification",
+    license(
+        name = "MIT",
+        identifier = "MIT"
+    )
+  ),
+
 )]
 pub struct ApiDoc;

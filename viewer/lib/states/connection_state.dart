@@ -60,24 +60,36 @@ class Connection {
 }
 
 class ConnectionState extends GetxController {
+  final RxInt activeIndex = 0.obs;
   final RxList<Connection> connections = <Connection>[].obs;
 
   void addConnection(Connection connection) {
-    final exists = connections.any(
+    final existingIndex = connections.indexWhere(
       (value) => value.device.id == connection.device.id,
     );
 
-    if (exists) return;
+    if (existingIndex >= 0) {
+      activeIndex.value = existingIndex;
+      return;
+    }
 
     connections.add(connection);
+    activeIndex.value = connections.length - 1;
   }
 
   int removeConnection(Connection connection) {
-    final index = connections.indexOf(
+    final index = connections.indexWhere(
       (value) => value.device.id == connection.device.id,
     );
 
-    if (index > 0) connections.removeAt(index);
+    if (index >= 0) {
+      connections.removeAt(index);
+      if (activeIndex.value > index) {
+        activeIndex.value--;
+      } else if (activeIndex.value >= connections.length) {
+        activeIndex.value = connections.isNotEmpty ? connections.length - 1 : 0;
+      }
+    }
 
     return index;
   }

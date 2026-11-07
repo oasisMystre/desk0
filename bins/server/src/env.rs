@@ -6,7 +6,6 @@ use strum::Display;
 pub enum Env {
   AuthToken,
   S3Bucket,
-  S3PublicBaseUrl,
   S3Endpoint,
   S3AccessKeyId,
   S3AccessKey,

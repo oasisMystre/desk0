@@ -17,11 +17,11 @@ pub struct AttachmentService;
 impl AttachmentService {
   pub async fn get_attachments(
     context: &Context,
-    org_id: uuid::Uuid,
+    organization: uuid::Uuid,
   ) -> Result<Vec<Attachment>, AttachmentError> {
     let mut connection = context.get_pg().await?;
 
-    AttachmentRepository::find_by_organization(&mut connection, org_id)
+    AttachmentRepository::find_by_organization(&mut connection, organization)
       .await
       .map_err(|error| {
         tracing::error!(?error, "failed to fetch attachments");
@@ -31,11 +31,11 @@ impl AttachmentService {
 
   pub async fn create_attachment(
     context: &Context,
-    org_id: uuid::Uuid,
+    organization: uuid::Uuid,
     body: CreateUploadRequest,
   ) -> Result<CreateUploadResponse, AttachmentError> {
-    let file_id = uuid::Uuid::new_v4();
-    let key = format!("{}/{}/{}", org_id, file_id, body.filename);
+    let id = uuid::Uuid::new_v4();
+    let key = format!("{}/{}/{}", organization, id, body.filename);
 
     let bucket_name = Env::S3Bucket.get().map_err(|error| {
       tracing::error!(?error, "missing S3 bucket configuration");
@@ -63,23 +63,15 @@ impl AttachmentService {
 
     let mut connection = context.get_pg().await?;
 
-    let public_base_url = Env::S3PublicBaseUrl.get().map_err(|error| {
-      tracing::error!(?error, "missing S3 public base url configuration");
-      AttachmentError::ConfigError
-    })?;
-
-    let public_url = format!("{}/{}", public_base_url, key);
-
     let attachment = Attachment {
       key,
-      id: file_id,
+      id,
       uploaded: false,
+      organization,
+      created_at: Utc::now(),
       metadata: body.metadata,
       filename: body.filename,
-      organization: org_id,
-      public_url: public_url.clone(),
       content_type: body.content_type.clone(),
-      created_at: Utc::now(),
     };
 
     AttachmentRepository::create(&mut connection, &[attachment])
@@ -90,16 +82,15 @@ impl AttachmentService {
       })?;
 
     Ok(CreateUploadResponse {
-      file_id,
-      public_url,
-      upload_url: presigned.uri().to_string(),
+      id,
+      url: presigned.uri().to_string(),
     })
   }
 
   pub async fn update_attachment(
     context: &Context,
-    file_id: uuid::Uuid,
-    org_id: uuid::Uuid,
+    attachment: uuid::Uuid,
+    organization: uuid::Uuid,
     body: UpdateAttachmentRequest,
   ) -> Result<Attachment, AttachmentError> {
     let mut connection = context.get_pg().await?;
@@ -110,7 +101,7 @@ impl AttachmentService {
       metadata: body.metadata,
     };
 
-    AttachmentRepository::update(&mut connection, file_id, org_id, &changeset)
+    AttachmentRepository::update(&mut connection, attachment, organization, &changeset)
       .await
       .map_err(|error| match error {
         diesel::result::Error::NotFound => AttachmentError::NotFound,
@@ -123,12 +114,12 @@ impl AttachmentService {
 
   pub async fn delete_attachment(
     context: &Context,
-    file_id: uuid::Uuid,
-    org_id: uuid::Uuid,
+    attachment: uuid::Uuid,
+    organization: uuid::Uuid,
   ) -> Result<Attachment, AttachmentError> {
     let mut connection = context.get_pg().await?;
 
-    AttachmentRepository::delete(&mut connection, file_id, org_id)
+    AttachmentRepository::delete(&mut connection, attachment, organization)
       .await
       .map_err(|error| match error {
         diesel::result::Error::NotFound => AttachmentError::NotFound,

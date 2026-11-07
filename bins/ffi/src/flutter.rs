@@ -29,7 +29,6 @@ pub struct ViewerHandle {
   initialized: AtomicBool,
   inner: Mutex<Option<Desk0Viewer>>,
 
-  // texture
   texture_handle: Arc<TextureHandle>,
 }
 

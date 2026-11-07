@@ -15,24 +15,8 @@ use super::{
 use crate::{
   error::ErrorResponse,
   states::{AppState, AuthenticatedUser},
+  utils::rate_limit::extract_ip,
 };
-
-fn extract_ip(headers: &HeaderMap) -> Option<ipnet::IpNet> {
-  let ip = headers
-    .get("x-forwarded-for")
-    .and_then(|header| header.to_str().ok())
-    .and_then(|value| value.split(',').next())
-    .map(|value| value.trim())
-    .or_else(|| {
-      headers
-        .get("x-real-ip")
-        .and_then(|header| header.to_str().ok())
-        .map(|value| value.trim())
-    });
-
-  ip.and_then(|value| value.parse::<std::net::IpAddr>().ok())
-    .map(|ip| ip.into())
-}
 
 #[utoipa::path(
   post,
@@ -41,6 +25,7 @@ fn extract_ip(headers: &HeaderMap) -> Option<ipnet::IpNet> {
   responses(
     (status = 200, description = "Email signup OTP sent", body = EmailSignUpResponse),
     (status = 400, description = "Bad request", body = ErrorResponse),
+    (status = 429, description = "Too many requests", body = ErrorResponse),
     (status = 500, description = "Internal server error", body = ErrorResponse)
   ),
   tag = "auth"
@@ -164,7 +149,9 @@ pub async fn logout(
   let response = AuthService::logout(
     &context,
     auth.user,
-    auth.session_id().ok_or_else(|| AuthError::SessionNotFound)?,
+    auth
+      .session_id()
+      .ok_or_else(|| AuthError::SessionNotFound)?,
   )
   .await?;
   Ok(Json(response))

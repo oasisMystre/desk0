@@ -5,14 +5,16 @@ import '../theme/app_theme.dart' show AppColors;
 class TabButton extends StatefulWidget {
   final String data;
   final bool selected;
+  final Widget? prefix;
   final VoidCallback onClose;
   final VoidCallback onPressed;
 
   const TabButton({
     super.key,
-    required this.selected,
+    this.prefix,
     required this.data,
     required this.onClose,
+    required this.selected,
     required this.onPressed,
   });
 
@@ -53,19 +55,21 @@ class TabButtonState extends State<TabButton> {
               bottom: BorderSide(
                 width: 1,
                 color: widget.selected
-                    ? AppColors.accentBlue
+                    ? AppColors.accentPrimary
                     : Colors.transparent,
               ),
             ),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
+              ?widget.prefix,
               Text(
                 widget.data,
                 style: TextTheme.of(context).labelMedium?.copyWith(
                   color: widget.selected
-                      ? AppColors.accentBlue
+                      ? AppColors.accentPrimary
                       : hovered
                       ? AppColors.textPrimary
                       : AppColors.textSecondary,
@@ -83,8 +87,8 @@ class TabButtonState extends State<TabButton> {
                       minHeight: 24,
                     ),
                     iconSize: 14,
-                    color: widget.selected ? null : AppColors.textPrimary,
                     icon: const Icon(Icons.close),
+                    color: widget.selected ? null : AppColors.textPrimary,
                     onPressed: hovered ? widget.onClose : null,
                   ),
                 ),

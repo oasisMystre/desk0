@@ -61,7 +61,6 @@ diesel::table! {
         id -> Uuid,
         key -> Text,
         filename -> Text,
-        publicUrl -> Text,
         uploaded -> Bool,
         contentType -> Text,
         organization -> Uuid,

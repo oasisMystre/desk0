@@ -2,13 +2,6 @@ import 'dart:async';
 
 import 'package:app_links/app_links.dart';
 
-extension DeepLinkUri on Uri {
-  String? get route {
-    if (scheme == 'desk0') return host;
-    return pathSegments.firstOrNull;
-  }
-}
-
 class DeepLinkService {
   static AppLinks appLinks = AppLinks();
 
