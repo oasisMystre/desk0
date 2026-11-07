@@ -8,6 +8,7 @@ list(APPEND FLUTTER_PLUGIN_LIST
   irondash_engine_context
   multiview_desktop
   system_tray
+  url_launcher_windows
 )
 
 list(APPEND FLUTTER_FFI_PLUGIN_LIST

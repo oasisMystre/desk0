@@ -13,7 +13,7 @@ import 'l10n/generated/app_localizations.dart' show AppLocalizations;
 
 final DeepLinkService deepLinkService = DeepLinkService();
 
-class ViewerWindowObserver extends WindowObserver {
+class GlobalWindowObserver extends WindowObserver {
   @override
   void onWindowClosed(int viewId) {
     ConnectionWindowManager.instance.onWindowClosed(viewId);
@@ -60,14 +60,14 @@ void main() async {
       );
     },
     config: MultiAppConfig(
-      observers: [ViewerWindowObserver()],
+      observers: [GlobalWindowObserver()],
       generalParams: const MultiPlatformParams(
         enableDynamicAnchor: true,
         closeMode: CloseMode.softCascade,
       ),
       macosParams: MacosPlatformParams(
-        closeAppAfterLastWindowClosed: false,
         saveLastWindowToReopen: false,
+        closeAppAfterLastWindowClosed: false,
         onTaskbarTap: () => ConnectionWindowManager.instance.show(),
         onTerminate: () async {
           await ConnectionWindowManager.instance.close(quit: true);
@@ -116,28 +116,21 @@ class MainApplicationState extends State<MainApplication> {
   void initState() {
     super.initState();
 
-    try {
-      MultiViewDesktop.allWindowIdsNotifier.addListener(_onWindowIdsChanged);
-    } catch (_) {}
-
+    MultiViewDesktop.allWindowIdsNotifier.addListener(onWindowIdsChanged);
     deepLinkService.initialize(handleDeepLink);
   }
 
-  void _onWindowIdsChanged() {
-    try {
-      final openIds = MultiViewDesktop.allWindowIdsNotifier.value;
-      final currentId = ConnectionWindowManager.instance.viewId;
-      if (currentId != null && !openIds.contains(currentId)) {
-        ConnectionWindowManager.instance.onWindowClosed(currentId);
-      }
-    } catch (_) {}
+  void onWindowIdsChanged() {
+    final openIds = MultiViewDesktop.allWindowIdsNotifier.value;
+    final currentId = ConnectionWindowManager.instance.viewId;
+    if (currentId != null && !openIds.contains(currentId)) {
+      ConnectionWindowManager.instance.onWindowClosed(currentId);
+    }
   }
 
   @override
   void dispose() {
-    try {
-      MultiViewDesktop.allWindowIdsNotifier.removeListener(_onWindowIdsChanged);
-    } catch (_) {}
+    MultiViewDesktop.allWindowIdsNotifier.removeListener(onWindowIdsChanged);
     deepLinkService.dispose();
     super.dispose();
   }

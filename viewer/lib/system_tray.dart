@@ -1,9 +1,11 @@
 import 'dart:io';
 
-import 'package:desk0/extensions.dart';
 import 'package:get/get.dart';
 import 'package:system_tray/system_tray.dart';
+import 'package:url_launcher/url_launcher.dart';
 
+import 'env.dart' show Env;
+import 'extensions.dart' show FutureIgnoreError;
 import 'states/connection_state.dart' show ConnectionState;
 import 'window_manager.dart' show ConnectionWindowManager;
 
@@ -77,6 +79,14 @@ Future<void> updateTrayMenu({
       MenuItemLabel(
         label: 'Show Desk0',
         onClicked: (item) => ConnectionWindowManager.instance.show(),
+      ),
+    ] else ...[
+      MenuItemLabel(
+        label: "Open Desk0",
+        onClicked: (item) async {
+          final uri = Uri.parse(Env.consoleUrl);
+          await launchUrl(uri, mode: LaunchMode.externalApplication);
+        },
       ),
     ],
     MenuItemLabel(
