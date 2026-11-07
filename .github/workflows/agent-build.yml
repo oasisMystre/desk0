@@ -70,7 +70,7 @@ jobs:
       - name: Build Agent Windows Shell (.exe) (Unsigned)
         shell: pwsh
         run: |
-          cargo build --release --target ${{ matrix.job.target }} --bin desk0-agent
+          cargo build --release --target ${{ matrix.job.target }} -p desk0-agent --bin desk0-agent --features ipc
           New-Item -ItemType Directory -Force -Path dist
           $exePath = "target/${{ matrix.job.target }}/release/desk0-agent.exe"
           if (Test-Path $exePath) {
@@ -106,7 +106,7 @@ jobs:
             }
           - {
               target: aarch64-apple-darwin,
-              os: macos-14,
+              os: macos-15,
               arch: aarch64,
             }
 
@@ -125,7 +125,7 @@ jobs:
 
       - name: Install build runtime
         run: |
-          brew install llvm create-dmg nasm libpq
+          brew install llvm create-dmg nasm
           if command -v pkg-config &>/dev/null; then
             echo "pkg-config is already installed"
           else
@@ -145,7 +145,7 @@ jobs:
 
       - name: Build Agent macOS Shell (Unsigned)
         run: |
-          cargo build --release --target ${{ matrix.job.target }} --bin desk0-agent
+          cargo build --release --target ${{ matrix.job.target }} -p desk0-agent --bin desk0-agent --features ipc
 
       - name: Package macOS Agent Shell Artifacts (Unsigned)
         run: |

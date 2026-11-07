@@ -149,8 +149,6 @@ impl IpcInboundEventHandler {
     };
     source_sender.send(Source { audio, monitor }).await?;
 
-    drop(media_source);
-
     tasks.spawn({
       let audios = media.audios();
       let monitors = media.monitors();
