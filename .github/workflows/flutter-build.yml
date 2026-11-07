@@ -84,8 +84,19 @@ jobs:
         if: ${{ matrix.job.arch == 'aarch64' }}
         run: |
           $flutterRoot = "${{ steps.flutter.outputs['CACHE-PATH'] }}"
+          if (-not (Test-Path "$flutterRoot\bin\flutter.bat")) {
+            if (Test-Path "$flutterRoot\flutter\bin\flutter.bat") {
+              $flutterRoot = "$flutterRoot\flutter"
+            } else {
+              $flutterBat = (Get-Command flutter.bat -ErrorAction SilentlyContinue).Source
+              if ($flutterBat) {
+                $flutterRoot = Split-Path (Split-Path $flutterBat -Parent) -Parent
+              }
+            }
+          }
           Write-Host "PROCESSOR_ARCHITECTURE=$env:PROCESSOR_ARCHITECTURE"
-          Write-Host "Flutter root: $flutterRoot"
+          Write-Host "Resolved Flutter root: $flutterRoot"
+          echo "$flutterRoot\bin" >> $env:GITHUB_PATH
           Remove-Item -Force "$flutterRoot\bin\cache\engine-dart-sdk.stamp" -ErrorAction SilentlyContinue
           & "$flutterRoot\bin\internal\update_dart_sdk.ps1"
           $dartVer = & "$flutterRoot\bin\dart.bat" --version 2>&1 | Out-String
