@@ -34,10 +34,34 @@ function(apply_cargokit target manifest_dir lib_name any_symbol_name)
     endif()
     set(CARGOKIT_OHOS_SDK_HOME $ENV{OHOS_SDK_HOME})
 
+    set(cargokit_current_source_dir "${CMAKE_CURRENT_SOURCE_DIR}")
+    if(WIN32)
+        execute_process(COMMAND powershell -ExecutionPolicy Bypass -File "${CMAKE_CURRENT_LIST_DIR}/resolve_symlinks.ps1" "${cargokit_current_source_dir}" OUTPUT_VARIABLE resolved_source_dir OUTPUT_STRIP_TRAILING_WHITESPACE)
+        if(resolved_source_dir)
+            set(cargokit_current_source_dir "${resolved_source_dir}")
+        else()
+            get_filename_component(cargokit_current_source_dir "${cargokit_cmake_root}/../windows" ABSOLUTE)
+        endif()
+        string(REGEX REPLACE "^\\\\\\?\\?\\\\" "" cargokit_current_source_dir "${cargokit_current_source_dir}")
+        string(REGEX REPLACE "^//\\?/" "" cargokit_current_source_dir "${cargokit_current_source_dir}")
+    endif()
+    get_filename_component(cargokit_manifest_dir "${cargokit_current_source_dir}/${manifest_dir}" ABSOLUTE)
+    if(NOT EXISTS "${cargokit_manifest_dir}/Cargo.toml")
+        get_filename_component(cargokit_candidate_dir "${cargokit_cmake_root}/../windows/${manifest_dir}" ABSOLUTE)
+        if(EXISTS "${cargokit_candidate_dir}/Cargo.toml")
+            set(cargokit_manifest_dir "${cargokit_candidate_dir}")
+        else()
+            get_filename_component(cargokit_candidate_dir "${cargokit_cmake_root}/../${manifest_dir}" ABSOLUTE)
+            if(EXISTS "${cargokit_candidate_dir}/Cargo.toml")
+                set(cargokit_manifest_dir "${cargokit_candidate_dir}")
+            endif()
+        endif()
+    endif()
+
     set(CARGOKIT_ENV
         "CARGOKIT_CMAKE=${CMAKE_COMMAND}"
         "CARGOKIT_CONFIGURATION=$<CONFIG>"
-        "CARGOKIT_MANIFEST_DIR=${CMAKE_CURRENT_SOURCE_DIR}/${manifest_dir}"
+        "CARGOKIT_MANIFEST_DIR=${cargokit_manifest_dir}"
         "CARGOKIT_LIBRARY_NAME=${lib_name}"
         "CARGOKIT_TARGET_TEMP_DIR=${CARGOKIT_TEMP_DIR}"
         "CARGOKIT_OUTPUT_DIR=${CARGOKIT_OUTPUT_DIR}"

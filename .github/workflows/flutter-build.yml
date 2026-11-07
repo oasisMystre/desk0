@@ -19,7 +19,6 @@ env:
   RUST_VERSION: "1.97.0"
   FLUTTER_VERSION: "3.47.2"
   WINDOWS_LLVM_VERSION: "15.0.6"
-  FLUTTER_WINDOWS_ARM_VERSION: "3.44.9"
   TAG_NAME: "${{ inputs.upload-tag }}"
   CONSOLE_URL: "${{ vars.CONSOLE_URL }}"
   API_BASE_URL: "${{ vars.API_BASE_URL }}"
@@ -47,7 +46,7 @@ jobs:
               target: aarch64-pc-windows-msvc,
               os: windows-11-arm,
               arch: aarch64,
-              flutter-arch: arm64,
+              flutter-arch: x64,
             }
     steps:
       - name: Export Github actions cache environment variables
@@ -79,7 +78,7 @@ jobs:
         with:
           channel: "stable"
           architecture: ${{ matrix.job.flutter-arch }}
-          flutter-version: ${{ matrix.job.arch == 'aarch64' && env.FLUTTER_WINDOWS_ARM_VERSION || env.FLUTTER_VERSION }}
+          flutter-version: ${{ env.FLUTTER_VERSION }}
 
       - name: Force arm64 Dart SDK + engine
         if: ${{ matrix.job.arch == 'aarch64' }}
