@@ -10,9 +10,8 @@ pub struct CreateUploadRequest {
 
 #[derive(Serialize, ToSchema)]
 pub struct CreateUploadResponse {
-  pub upload_url: String,
-  pub file_id: uuid::Uuid,
-  pub public_url: String,
+  pub id: uuid::Uuid,
+  pub url: String,
 }
 
 #[derive(Deserialize, ToSchema)]

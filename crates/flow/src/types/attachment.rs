@@ -15,8 +15,6 @@ pub struct Attachment {
   pub organization: uuid::Uuid,
   #[diesel(column_name = "contentType")]
   pub content_type: String,
-  #[diesel(column_name = "publicUrl")]
-  pub public_url: String,
   pub metadata: Option<serde_json::Value>,
   #[diesel(column_name = "createdAt")]
   pub created_at: DateTime<Utc>,

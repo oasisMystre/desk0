@@ -4,16 +4,15 @@
     "title": "Desk0 Server API",
     "description": "Desk0 Relay Server & Device Broker OpenAPI specification",
     "license": {
-      "name": ""
+      "name": "MIT",
+      "identifier": "MIT"
     },
     "version": "0.1.0"
   },
   "paths": {
     "/agents": {
       "get": {
-        "tags": [
-          "agents"
-        ],
+        "tags": ["agents"],
         "operationId": "get_agents",
         "responses": {
           "200": {
@@ -57,9 +56,7 @@
         ]
       },
       "post": {
-        "tags": [
-          "agents"
-        ],
+        "tags": ["agents"],
         "operationId": "build_agent",
         "requestBody": {
           "content": {
@@ -92,6 +89,16 @@
               }
             }
           },
+          "409": {
+            "description": "Agent version conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "500": {
             "description": "Internal server error",
             "content": {
@@ -112,9 +119,7 @@
     },
     "/agents/status": {
       "get": {
-        "tags": [
-          "agents"
-        ],
+        "tags": ["agents"],
         "operationId": "get_build_agent_status",
         "requestBody": {
           "content": {
@@ -167,9 +172,7 @@
     },
     "/applications": {
       "get": {
-        "tags": [
-          "applications"
-        ],
+        "tags": ["applications"],
         "operationId": "get_applications",
         "responses": {
           "200": {
@@ -213,9 +216,7 @@
         ]
       },
       "post": {
-        "tags": [
-          "applications"
-        ],
+        "tags": ["applications"],
         "operationId": "create_application",
         "responses": {
           "200": {
@@ -258,9 +259,7 @@
     },
     "/applications/device/{device}": {
       "get": {
-        "tags": [
-          "applications"
-        ],
+        "tags": ["applications"],
         "operationId": "get_device_applications",
         "parameters": [
           {
@@ -316,9 +315,7 @@
         ]
       },
       "post": {
-        "tags": [
-          "applications"
-        ],
+        "tags": ["applications"],
         "operationId": "add_device_application",
         "parameters": [
           {
@@ -383,9 +380,7 @@
     },
     "/applications/device/{device}/{application}": {
       "delete": {
-        "tags": [
-          "applications"
-        ],
+        "tags": ["applications"],
         "operationId": "remove_device_application",
         "parameters": [
           {
@@ -450,9 +445,7 @@
     },
     "/applications/{id}": {
       "get": {
-        "tags": [
-          "applications"
-        ],
+        "tags": ["applications"],
         "operationId": "get_application",
         "parameters": [
           {
@@ -505,9 +498,7 @@
         ]
       },
       "delete": {
-        "tags": [
-          "applications"
-        ],
+        "tags": ["applications"],
         "operationId": "delete_application",
         "parameters": [
           {
@@ -562,9 +553,7 @@
     },
     "/attachments": {
       "get": {
-        "tags": [
-          "attachments"
-        ],
+        "tags": ["attachments"],
         "operationId": "get_attachments",
         "responses": {
           "200": {
@@ -608,9 +597,7 @@
         ]
       },
       "post": {
-        "tags": [
-          "attachments"
-        ],
+        "tags": ["attachments"],
         "operationId": "create_attachment",
         "requestBody": {
           "content": {
@@ -663,9 +650,7 @@
     },
     "/attachments/{file_id}": {
       "delete": {
-        "tags": [
-          "attachments"
-        ],
+        "tags": ["attachments"],
         "operationId": "delete_attachment",
         "parameters": [
           {
@@ -718,9 +703,7 @@
         ]
       },
       "patch": {
-        "tags": [
-          "attachments"
-        ],
+        "tags": ["attachments"],
         "operationId": "update_attachment",
         "parameters": [
           {
@@ -785,9 +768,7 @@
     },
     "/auth/email-signup": {
       "post": {
-        "tags": [
-          "auth"
-        ],
+        "tags": ["auth"],
         "operationId": "email_signup",
         "requestBody": {
           "content": {
@@ -820,6 +801,16 @@
               }
             }
           },
+          "429": {
+            "description": "Too many requests",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "500": {
             "description": "Internal server error",
             "content": {
@@ -835,9 +826,7 @@
     },
     "/auth/logout": {
       "post": {
-        "tags": [
-          "auth"
-        ],
+        "tags": ["auth"],
         "operationId": "logout",
         "responses": {
           "200": {
@@ -880,9 +869,7 @@
     },
     "/auth/refresh": {
       "post": {
-        "tags": [
-          "auth"
-        ],
+        "tags": ["auth"],
         "operationId": "refresh_token",
         "requestBody": {
           "content": {
@@ -930,9 +917,7 @@
     },
     "/auth/sessions": {
       "get": {
-        "tags": [
-          "auth"
-        ],
+        "tags": ["auth"],
         "operationId": "get_sessions",
         "responses": {
           "200": {
@@ -978,9 +963,7 @@
     },
     "/auth/sessions/{session_id}": {
       "delete": {
-        "tags": [
-          "auth"
-        ],
+        "tags": ["auth"],
         "operationId": "revoke_session",
         "parameters": [
           {
@@ -1035,9 +1018,7 @@
     },
     "/auth/verify-otp": {
       "post": {
-        "tags": [
-          "auth"
-        ],
+        "tags": ["auth"],
         "operationId": "verify_otp",
         "requestBody": {
           "content": {
@@ -1085,9 +1066,7 @@
     },
     "/devices": {
       "get": {
-        "tags": [
-          "devices"
-        ],
+        "tags": ["devices"],
         "operationId": "get_devices",
         "responses": {
           "200": {
@@ -1131,9 +1110,7 @@
         ]
       },
       "post": {
-        "tags": [
-          "devices"
-        ],
+        "tags": ["devices"],
         "operationId": "create_device",
         "requestBody": {
           "content": {
@@ -1181,9 +1158,7 @@
     },
     "/devices/challenge/{device}": {
       "post": {
-        "tags": [
-          "devices"
-        ],
+        "tags": ["devices"],
         "operationId": "create_challenge",
         "parameters": [
           {
@@ -1233,9 +1208,7 @@
     },
     "/devices/token/{device}": {
       "post": {
-        "tags": [
-          "devices"
-        ],
+        "tags": ["devices"],
         "operationId": "create_device_connection_token",
         "parameters": [
           {
@@ -1295,9 +1268,7 @@
     },
     "/devices/{device}": {
       "delete": {
-        "tags": [
-          "devices"
-        ],
+        "tags": ["devices"],
         "operationId": "delete_device",
         "parameters": [
           {
@@ -1350,9 +1321,7 @@
         ]
       },
       "patch": {
-        "tags": [
-          "devices"
-        ],
+        "tags": ["devices"],
         "operationId": "update_device",
         "parameters": [
           {
@@ -1412,9 +1381,7 @@
     },
     "/organizations": {
       "get": {
-        "tags": [
-          "organizations"
-        ],
+        "tags": ["organizations"],
         "operationId": "get_organizations",
         "responses": {
           "200": {
@@ -1458,9 +1425,7 @@
         ]
       },
       "post": {
-        "tags": [
-          "organizations"
-        ],
+        "tags": ["organizations"],
         "operationId": "create_organization",
         "requestBody": {
           "content": {
@@ -1513,9 +1478,7 @@
     },
     "/organizations/token/{device_id}": {
       "post": {
-        "tags": [
-          "organizations"
-        ],
+        "tags": ["organizations"],
         "operationId": "create_organization_connection_token",
         "parameters": [
           {
@@ -1570,9 +1533,7 @@
     },
     "/user": {
       "delete": {
-        "tags": [
-          "users"
-        ],
+        "tags": ["users"],
         "operationId": "delete_user",
         "responses": {
           "200": {
@@ -1618,9 +1579,7 @@
     "schemas": {
       "AddDeviceApplicationRequest": {
         "type": "object",
-        "required": [
-          "application"
-        ],
+        "required": ["application"],
         "properties": {
           "application": {
             "type": "string",
@@ -1630,12 +1589,7 @@
       },
       "Agent": {
         "type": "object",
-        "required": [
-          "id",
-          "organization",
-          "version",
-          "created_at"
-        ],
+        "required": ["id", "organization", "version", "created_at"],
         "properties": {
           "created_at": {
             "type": "string",
@@ -1657,13 +1611,7 @@
       },
       "AgentAsset": {
         "type": "object",
-        "required": [
-          "agent",
-          "os",
-          "arch",
-          "version",
-          "attachment"
-        ],
+        "required": ["agent", "os", "arch", "version", "attachment"],
         "properties": {
           "agent": {
             "type": "string",
@@ -1687,20 +1635,11 @@
       },
       "AgentOs": {
         "type": "string",
-        "enum": [
-          "windows",
-          "macos",
-          "linux",
-          "android",
-          "ios"
-        ]
+        "enum": ["windows", "macos", "linux", "android", "ios"]
       },
       "Agents": {
         "type": "object",
-        "required": [
-          "agent",
-          "assets"
-        ],
+        "required": ["agent", "assets"],
         "properties": {
           "agent": {
             "$ref": "#/components/schemas/Agent"
@@ -1744,10 +1683,7 @@
             "format": "uuid"
           },
           "image": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": ["string", "null"],
             "format": "uuid"
           },
           "name": {
@@ -1772,7 +1708,6 @@
           "uploaded",
           "organization",
           "content_type",
-          "public_url",
           "created_at"
         ],
         "properties": {
@@ -1798,9 +1733,6 @@
             "type": "string",
             "format": "uuid"
           },
-          "public_url": {
-            "type": "string"
-          },
           "uploaded": {
             "type": "boolean"
           }
@@ -1808,12 +1740,7 @@
       },
       "BuildAgentPayload": {
         "type": "object",
-        "required": [
-          "version",
-          "os",
-          "agent",
-          "organization"
-        ],
+        "required": ["version", "os", "agent", "organization"],
         "properties": {
           "agent": {
             "type": "string",
@@ -1837,9 +1764,7 @@
       },
       "BuildAgentRequest": {
         "type": "object",
-        "required": [
-          "os"
-        ],
+        "required": ["os"],
         "properties": {
           "os": {
             "type": "array",
@@ -1851,10 +1776,7 @@
       },
       "BuildAgentResponse": {
         "type": "object",
-        "required": [
-          "job",
-          "agent"
-        ],
+        "required": ["job", "agent"],
         "properties": {
           "agent": {
             "$ref": "#/components/schemas/Agent"
@@ -1866,10 +1788,7 @@
       },
       "BuildAgentStatusRequest": {
         "type": "object",
-        "required": [
-          "job",
-          "asset"
-        ],
+        "required": ["job", "asset"],
         "properties": {
           "asset": {
             "type": "string",
@@ -1882,24 +1801,16 @@
       },
       "BuildAgentStatusResponse": {
         "type": "object",
-        "required": [
-          "state"
-        ],
+        "required": ["state"],
         "properties": {
           "assets": {
-            "type": [
-              "array",
-              "null"
-            ],
+            "type": ["array", "null"],
             "items": {
               "$ref": "#/components/schemas/AgentAsset"
             }
           },
           "error": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           },
           "state": {
             "type": "string",
@@ -1909,11 +1820,7 @@
       },
       "ChallengeResponse": {
         "type": "object",
-        "required": [
-          "id",
-          "challenge",
-          "expires_in"
-        ],
+        "required": ["id", "challenge", "expires_in"],
         "properties": {
           "challenge": {
             "type": "string"
@@ -1931,10 +1838,7 @@
       },
       "CreateConnectionTokenRequest": {
         "type": "object",
-        "required": [
-          "challenge",
-          "signature"
-        ],
+        "required": ["challenge", "signature"],
         "properties": {
           "challenge": {
             "type": "string"
@@ -1946,10 +1850,7 @@
       },
       "CreateDevice": {
         "type": "object",
-        "required": [
-          "pubkey",
-          "device"
-        ],
+        "required": ["pubkey", "device"],
         "properties": {
           "device": {
             "$ref": "#/components/schemas/PartialDevice"
@@ -1968,19 +1869,13 @@
         "type": "object",
         "properties": {
           "name": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           }
         }
       },
       "CreateUploadRequest": {
         "type": "object",
-        "required": [
-          "filename",
-          "content_type"
-        ],
+        "required": ["filename", "content_type"],
         "properties": {
           "content_type": {
             "type": "string"
@@ -1993,20 +1888,13 @@
       },
       "CreateUploadResponse": {
         "type": "object",
-        "required": [
-          "upload_url",
-          "file_id",
-          "public_url"
-        ],
+        "required": ["id", "url"],
         "properties": {
-          "file_id": {
+          "id": {
             "type": "string",
             "format": "uuid"
           },
-          "public_url": {
-            "type": "string"
-          },
-          "upload_url": {
+          "url": {
             "type": "string"
           }
         }
@@ -2026,10 +1914,7 @@
             "format": "date-time"
           },
           "hostname": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           },
           "id": {
             "type": "string",
@@ -2045,10 +1930,7 @@
             "format": "uuid"
           },
           "os": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           },
           "pubkey": {
             "type": "array",
@@ -2059,16 +1941,10 @@
             }
           },
           "username": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           },
           "version": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           }
         }
       },
@@ -2106,9 +1982,7 @@
       },
       "DeviceConnectionTokenResponse": {
         "type": "object",
-        "required": [
-          "token"
-        ],
+        "required": ["token"],
         "properties": {
           "token": {
             "type": "string"
@@ -2117,9 +1991,7 @@
       },
       "EmailSignUpRequest": {
         "type": "object",
-        "required": [
-          "email"
-        ],
+        "required": ["email"],
         "properties": {
           "email": {
             "type": "string"
@@ -2128,9 +2000,7 @@
       },
       "EmailSignUpResponse": {
         "type": "object",
-        "required": [
-          "message"
-        ],
+        "required": ["message"],
         "properties": {
           "message": {
             "type": "string"
@@ -2139,19 +2009,13 @@
       },
       "ErrorResponse": {
         "type": "object",
-        "required": [
-          "code",
-          "message"
-        ],
+        "required": ["code", "message"],
         "properties": {
           "code": {
             "type": "string"
           },
           "error": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           },
           "message": {
             "type": "string"
@@ -2160,11 +2024,7 @@
       },
       "Organization": {
         "type": "object",
-        "required": [
-          "id",
-          "user",
-          "created_at"
-        ],
+        "required": ["id", "user", "created_at"],
         "properties": {
           "created_at": {
             "type": "string",
@@ -2175,10 +2035,7 @@
             "format": "uuid"
           },
           "name": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           },
           "user": {
             "type": "string",
@@ -2188,9 +2045,7 @@
       },
       "OrganizationConnectionTokenResponse": {
         "type": "object",
-        "required": [
-          "token"
-        ],
+        "required": ["token"],
         "properties": {
           "token": {
             "type": "string"
@@ -2199,15 +2054,10 @@
       },
       "PartialDevice": {
         "type": "object",
-        "required": [
-          "organization"
-        ],
+        "required": ["organization"],
         "properties": {
           "hostname": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           },
           "metadata": {},
           "organization": {
@@ -2215,30 +2065,19 @@
             "format": "uuid"
           },
           "os": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           },
           "username": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           },
           "version": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           }
         }
       },
       "RefreshTokenRequest": {
         "type": "object",
-        "required": [
-          "refresh_token"
-        ],
+        "required": ["refresh_token"],
         "properties": {
           "refresh_token": {
             "type": "string"
@@ -2247,10 +2086,7 @@
       },
       "RefreshTokenResponse": {
         "type": "object",
-        "required": [
-          "token",
-          "refresh_token"
-        ],
+        "required": ["token", "refresh_token"],
         "properties": {
           "refresh_token": {
             "type": "string"
@@ -2310,12 +2146,7 @@
       },
       "ResolvedDeviceApplication": {
         "type": "object",
-        "required": [
-          "id",
-          "device",
-          "application",
-          "created_at"
-        ],
+        "required": ["id", "device", "application", "created_at"],
         "properties": {
           "application": {
             "$ref": "#/components/schemas/ResolvedApplication"
@@ -2336,9 +2167,7 @@
       },
       "RevokeSessionResponse": {
         "type": "object",
-        "required": [
-          "message"
-        ],
+        "required": ["message"],
         "properties": {
           "message": {
             "type": "string"
@@ -2347,9 +2176,7 @@
       },
       "ScriptArgs": {
         "type": "object",
-        "required": [
-          "args"
-        ],
+        "required": ["args"],
         "properties": {
           "args": {
             "type": "array",
@@ -2363,10 +2190,7 @@
         "type": "object",
         "properties": {
           "_version": {
-            "type": [
-              "integer",
-              "null"
-            ],
+            "type": ["integer", "null"],
             "format": "int64",
             "minimum": 0
           },
@@ -2404,12 +2228,7 @@
       },
       "Session": {
         "type": "object",
-        "required": [
-          "id",
-          "user",
-          "created_at",
-          "expires_at"
-        ],
+        "required": ["id", "user", "created_at", "expires_at"],
         "properties": {
           "created_at": {
             "type": "string",
@@ -2424,23 +2243,14 @@
             "format": "uuid"
           },
           "ip_address": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           },
           "last_used_at": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": ["string", "null"],
             "format": "date-time"
           },
           "revoked_at": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": ["string", "null"],
             "format": "date-time"
           },
           "user": {
@@ -2448,21 +2258,13 @@
             "format": "uuid"
           },
           "user_agent": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           }
         }
       },
       "SessionResponse": {
         "type": "object",
-        "required": [
-          "id",
-          "created_at",
-          "expires_at",
-          "is_current"
-        ],
+        "required": ["id", "created_at", "expires_at", "is_current"],
         "properties": {
           "created_at": {
             "type": "string",
@@ -2477,26 +2279,61 @@
             "format": "uuid"
           },
           "ip_address": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           },
           "is_current": {
             "type": "boolean"
           },
           "last_used_at": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": ["string", "null"],
             "format": "date-time"
           },
           "user_agent": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
+          }
+        }
+      },
+      "SharedErrorCode": {
+        "type": "string",
+        "enum": [
+          "DATABASE_CONNECTION_ERROR",
+          "DATABASE_OPERATION_ERROR",
+          "REDIS_CONNECTION_ERROR",
+          "REDIS_OPERATION_ERROR",
+          "INTERNAL_ERROR",
+          "BAD_REQUEST",
+          "UNAUTHORIZED",
+          "FORBIDDEN",
+          "NOT_FOUND",
+          "MISSING_AUTH_HEADER",
+          "INVALID_AUTH_HEADER",
+          "INVALID_TOKEN",
+          "MISSING_ROLE_CLAIM",
+          "MISSING_ORG_CLAIM",
+          "MISSING_USER_CLAIM",
+          "MISSING_SUBJECT_CLAIM",
+          "INVALID_CLAIM_ID",
+          "INVALID_ORG_HEADER",
+          "ORG_MEMBERSHIP_REQUIRED",
+          "ORG_MEMBERSHIP_FORBIDDEN",
+          "UNSUPPORTED_ROLE",
+          "WS_AUTH_FAILED",
+          "WS_INVALID_ROLE",
+          "ENDPOINT_NOT_FOUND"
+        ]
+      },
+      "SharedErrorResponse": {
+        "type": "object",
+        "required": ["code", "message"],
+        "properties": {
+          "code": {
+            "$ref": "#/components/schemas/SharedErrorCode"
+          },
+          "error": {
+            "type": ["string", "null"]
+          },
+          "message": {
+            "type": "string"
           }
         }
       },
@@ -2504,27 +2341,17 @@
         "type": "object",
         "properties": {
           "filename": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           },
           "metadata": {},
           "uploaded": {
-            "type": [
-              "boolean",
-              "null"
-            ]
+            "type": ["boolean", "null"]
           }
         }
       },
       "User": {
         "type": "object",
-        "required": [
-          "id",
-          "last_logged_in",
-          "created_at"
-        ],
+        "required": ["id", "last_logged_in", "created_at"],
         "properties": {
           "created_at": {
             "type": "string",
@@ -2539,19 +2366,13 @@
             "format": "date-time"
           },
           "uid": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           }
         }
       },
       "VerifyOtpRequest": {
         "type": "object",
-        "required": [
-          "otp",
-          "email"
-        ],
+        "required": ["otp", "email"],
         "properties": {
           "email": {
             "type": "string"
@@ -2563,12 +2384,7 @@
       },
       "VerifyOtpResponse": {
         "type": "object",
-        "required": [
-          "user",
-          "token",
-          "refresh_token",
-          "session_id"
-        ],
+        "required": ["user", "token", "refresh_token", "session_id"],
         "properties": {
           "refresh_token": {
             "type": "string"

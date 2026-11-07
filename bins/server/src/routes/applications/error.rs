@@ -81,6 +81,13 @@ impl From<diesel::result::Error> for ApplicationError {
   }
 }
 
+impl From<crate::utils::s3::S3UploadError> for ApplicationError {
+  fn from(error: crate::utils::s3::S3UploadError) -> Self {
+    tracing::error!(?error, "s3 operation failed");
+    Self::UploadFailed
+  }
+}
+
 impl IntoResponse for ApplicationError {
   fn into_response(self) -> Response {
     let status = self.status();

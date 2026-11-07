@@ -3,7 +3,6 @@ pub use flow::{
   attachment::Attachment,
   device_application::DeviceApplication,
   os::AgentOs,
-  raw_file_from_request::RawFileFromRequest,
 };
 
 #[derive(serde::Deserialize, serde::Serialize, Clone, Debug, utoipa::ToSchema)]
@@ -35,7 +34,6 @@ macro_rules! attachment_fields {
       $alias.field(attachments::uploaded),
       $alias.field(attachments::organization),
       $alias.field(attachments::contentType),
-      $alias.field(attachments::publicUrl),
       $alias.field(attachments::metadata),
       $alias.field(attachments::createdAt),
     )

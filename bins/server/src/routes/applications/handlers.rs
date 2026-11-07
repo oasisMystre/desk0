@@ -5,7 +5,7 @@ use axum::{
 use uuid::Uuid;
 
 use super::{
-  dto::{AddDeviceApplicationRequest, CreateApplicationRequest},
+  dto::AddDeviceApplicationRequest,
   error::ApplicationError,
   models::{Application, DeviceApplication, ResolvedApplication, ResolvedDeviceApplication},
   service::{ApplicationService, DeviceApplicationService},
@@ -36,12 +36,7 @@ pub async fn create_application(
   user.require_role(&[AuthRole::User])?;
 
   Ok(Json(
-    ApplicationService::create_application(
-      &context,
-      user.org_id()?,
-      CreateApplicationRequest::try_from_multipart(multipart).await?,
-    )
-    .await?,
+    ApplicationService::create_application(&context, user.org_id()?, multipart).await?,
   ))
 }
 

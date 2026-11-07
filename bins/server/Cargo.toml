@@ -5,6 +5,7 @@ edition = "2024"
 
 [features]
 otel = []
+export = []
 opentelemetry = ["shared/opentelemetry"]
 default = ["otel"]
 
@@ -17,6 +18,7 @@ jwt.workspace = true
 rand.workspace = true
 sha2.workspace = true
 hmac.workspace = true
+bytes.workspace = true
 base64.workspace = true
 anyhow.workspace = true
 futures.workspace = true
@@ -37,16 +39,19 @@ diesel-async = { workspace = true, features = ["postgres", "bb8"] }
 utoipa = { workspace = true, features = ["axum_extras", "uuid", "chrono"] }
 utoipa-swagger-ui = { workspace = true, features = ["axum"] }
 
+tower = "0.5.3"
 rcgen = "0.14.10"
 dashmap = "6.2.1"
 subtle = "2.6.1"
 diesel = "2.3.12"
 chrono = "0.4.45"
+governor = "0.10.4"
 rmp-serde = "1.3.1"
 aws-config = "1.11.0"
 resend-rs = "0.35.0"
 aws-sdk-s3 = "1.144.0"
 futures-util = "0.3.34"
+tower_governor = "0.8.0"
 bullmq-official = "1.3.5"
 tower-http = { version = "0.7.1", features = ["trace"] }
 ipnet = { version = "2.12.2", features = ["serde"] }
